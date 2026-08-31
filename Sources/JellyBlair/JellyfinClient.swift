@@ -3,9 +3,7 @@ import Foundation
 
 /// Talks to the Jellyfin server: authentication, library queries, and playback reports.
 final class JellyfinClient {
-    static let serverURL = URL(string: "https://jellyfin.example.com")!
-    static let username = "Hamish"
-    static let password = ""
+    let serverURL: URL
 
     private static let clientName = "JellyBlair"
     private static let deviceName = "Mac"
@@ -15,9 +13,21 @@ final class JellyfinClient {
     private var accessToken: String?
     private var userID: String?
 
+    /// Called when the server rejects the stored token mid-session.
+    var onUnauthorized: (() -> Void)?
+
     /// The last playback position whose report failed to send.
     /// Kept until a later report for the same book succeeds, then flushed on reconnect.
     private var unsentProgress: (bookID: String, positionSeconds: Double)?
+
+    init(serverURL: URL, accessToken: String? = nil, userID: String? = nil) {
+        self.serverURL = serverURL
+        self.accessToken = accessToken
+        self.userID = userID
+    }
+
+    var sessionToken: String? { accessToken }
+    var sessionUserID: String? { userID }
 
     private var authorizationHeader: String {
         var fields = [
@@ -35,7 +45,7 @@ final class JellyfinClient {
     // MARK: - Requests
 
     private func makeRequest(path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil) -> URLRequest {
-        var components = URLComponents(url: Self.serverURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: serverURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty {
             components.queryItems = query
         }
@@ -51,9 +61,17 @@ final class JellyfinClient {
 
     private func send(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-            throw JellyfinError.badStatus(status)
+        guard let http = response as? HTTPURLResponse else {
+            throw JellyfinError.badStatus(-1)
+        }
+        if http.statusCode == 401 {
+            if accessToken != nil {
+                onUnauthorized?()
+            }
+            throw JellyfinError.unauthorized
+        }
+        guard (200...299).contains(http.statusCode) else {
+            throw JellyfinError.badStatus(http.statusCode)
         }
         return data
     }
@@ -73,13 +91,37 @@ final class JellyfinClient {
 
     // MARK: - Authentication
 
-    func authenticate() async throws {
-        let body = try JSONEncoder().encode(["Username": Self.username, "Pw": Self.password])
+    func authenticate(username: String, password: String) async throws {
+        let body = try JSONEncoder().encode(["Username": username, "Pw": password])
         let request = makeRequest(path: "Users/AuthenticateByName", method: "POST", body: body)
         let data = try await send(request)
         let auth = try decode(AuthResponse.self, from: data)
         accessToken = auth.accessToken
         userID = auth.user.id
+    }
+
+    enum TokenCheck {
+        case valid
+        case invalid
+        case unreachable
+    }
+
+    /// Checks the stored token against the server and refreshes the user ID.
+    func verifyStoredToken() async -> TokenCheck {
+        let request = makeRequest(path: "Users/Me")
+        do {
+            let data = try await send(request)
+            if let user = try? decode(AuthUser.self, from: data) {
+                userID = user.id
+            }
+            return .valid
+        } catch JellyfinError.unauthorized {
+            return .invalid
+        } catch JellyfinError.badStatus(let code) where (400..<500).contains(code) {
+            return .invalid
+        } catch {
+            return .unreachable
+        }
     }
 
     // MARK: - Library
@@ -99,7 +141,7 @@ final class JellyfinClient {
     // MARK: - URLs
 
     func imageURL(for book: Book) -> URL {
-        var components = URLComponents(url: Self.serverURL.appendingPathComponent("Items/\(book.id)/Images/Primary"), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: serverURL.appendingPathComponent("Items/\(book.id)/Images/Primary"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "maxWidth", value: "600")]
         return components.url!
     }
@@ -107,7 +149,7 @@ final class JellyfinClient {
     /// Builds the asset for a book's audio stream. The token travels in an
     /// Authorization header instead of the URL, so it stays out of server logs.
     func streamAsset(for book: Book) -> AVURLAsset {
-        var components = URLComponents(url: Self.serverURL.appendingPathComponent("Audio/\(book.id)/stream"), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: serverURL.appendingPathComponent("Audio/\(book.id)/stream"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "static", value: "true")]
         let headers = ["Authorization": authorizationHeader]
         return AVURLAsset(url: components.url!, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
@@ -127,6 +169,12 @@ final class JellyfinClient {
         await sendPlaybackReport(path: "Sessions/Playing/Stopped", bookID: bookID, positionSeconds: positionSeconds, isPaused: true)
     }
 
+    /// Re-sends the last failed position report, if any.
+    func flushUnsentProgressReport() async {
+        guard let unsent = unsentProgress else { return }
+        await sendPlaybackReport(path: "Sessions/Playing/Progress", bookID: unsent.bookID, positionSeconds: unsent.positionSeconds, isPaused: true)
+    }
+
     /// Sends a stop report and blocks up to one second for it to leave.
     /// Used only during app termination, when async work cannot finish.
     func reportPlaybackStoppedBlocking(bookID: String, positionSeconds: Double) {
@@ -136,12 +184,6 @@ final class JellyfinClient {
             semaphore.signal()
         }.resume()
         _ = semaphore.wait(timeout: .now() + 1)
-    }
-
-    /// Re-sends the last failed position report, if any.
-    func flushUnsentProgressReport() async {
-        guard let unsent = unsentProgress else { return }
-        await sendPlaybackReport(path: "Sessions/Playing/Progress", bookID: unsent.bookID, positionSeconds: unsent.positionSeconds, isPaused: true)
     }
 
     private func sendPlaybackReport(path: String, bookID: String, positionSeconds: Double, isPaused: Bool) async {
@@ -170,10 +212,13 @@ final class JellyfinClient {
 }
 
 enum JellyfinError: Error, LocalizedError {
+    case unauthorized
     case badStatus(Int)
 
     var errorDescription: String? {
         switch self {
+        case .unauthorized:
+            return "The server rejected the credentials."
         case .badStatus(let code):
             return "The server returned status \(code)."
         }

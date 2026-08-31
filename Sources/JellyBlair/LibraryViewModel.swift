@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Signs in on launch and holds the audiobook list.
+/// Holds the audiobook list.
 @MainActor
 @Observable
 final class LibraryViewModel {
@@ -19,7 +19,6 @@ final class LibraryViewModel {
         isLoading = true
         errorMessage = nil
         do {
-            try await client.authenticate()
             books = try await client.fetchAudiobooks()
         } catch {
             errorMessage = error.localizedDescription

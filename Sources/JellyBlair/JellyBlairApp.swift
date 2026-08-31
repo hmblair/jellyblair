@@ -4,11 +4,42 @@ import SwiftUI
 @main
 struct JellyBlairApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @State private var session = AppSession()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView(session: session)
                 .frame(minWidth: 760, minHeight: 480)
+        }
+        .commands {
+            CommandGroup(after: .appSettings) {
+                Button("Sign Out") {
+                    session.signOut()
+                }
+                .disabled(!session.isSignedIn)
+            }
+        }
+    }
+}
+
+/// Switches between the login form and the main window based on session state.
+struct RootView: View {
+    let session: AppSession
+
+    var body: some View {
+        Group {
+            switch session.state {
+            case .verifying:
+                ProgressView()
+            case .needsLogin:
+                LoginView(session: session)
+            case .signedIn(let client):
+                ContentView(client: client)
+                    .id(ObjectIdentifier(client))
+            }
+        }
+        .task {
+            await session.start()
         }
     }
 }
@@ -31,8 +62,7 @@ struct ContentView: View {
     @State private var connection: ConnectionMonitor
     @State private var selectedBook: Book?
 
-    init() {
-        let client = JellyfinClient()
+    init(client: JellyfinClient) {
         _library = State(initialValue: LibraryViewModel(client: client))
         _player = State(initialValue: PlayerController(client: client))
         _connection = State(initialValue: ConnectionMonitor(client: client))

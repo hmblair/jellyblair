@@ -126,9 +126,6 @@ final class PlayerController {
             await seek(to: newBook.resumePositionSeconds)
             guard generation == openGeneration else { return }
         }
-        play()
-        hasActiveSession = true
-        startProgressReports(for: newBook)
         await loadArtwork(for: newBook, generation: generation)
         await loadChaptersIfNeeded(for: newBook, from: asset, generation: generation)
     }
@@ -223,9 +220,13 @@ final class PlayerController {
     // MARK: - Transport
 
     func play() {
-        guard isReady else { return }
+        guard isReady, let book else { return }
         player?.rate = Float(playbackSpeed)
         isPlaying = true
+        if !hasActiveSession {
+            hasActiveSession = true
+            startProgressReports(for: book)
+        }
         syncNowPlaying()
     }
 
@@ -389,7 +390,7 @@ final class PlayerController {
     }
 
     private func reportProgressNow() {
-        guard let book else { return }
+        guard let book, hasActiveSession else { return }
         let position = currentTime
         let paused = !isPlaying
         Task {
