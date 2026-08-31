@@ -196,6 +196,17 @@ final class PlayerController {
 
     // MARK: - Chapters
 
+    /// Discards the cached chapters and reads them again from the file.
+    func refreshChapters() async {
+        guard let book else { return }
+        let generation = openGeneration
+        chapterCache.removeValue(forKey: book.id)
+        chapterStore.save(chapterCache)
+        setChapters([])
+        let asset = client.streamAsset(for: book)
+        await loadChaptersIfNeeded(for: book, from: asset, generation: generation)
+    }
+
     private func loadChaptersIfNeeded(for book: Book, from asset: AVURLAsset, generation: Int) async {
         guard chapterCache[book.id] == nil else { return }
         let loaded = await loadChapters(from: asset, bookDuration: book.runTimeSeconds)

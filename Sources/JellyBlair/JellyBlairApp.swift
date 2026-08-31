@@ -18,6 +18,7 @@ struct JellyBlairApp: App {
                 }
                 .disabled(!session.isSignedIn)
             }
+            RefreshCommands()
         }
 
         Settings {
@@ -102,6 +103,10 @@ struct ContentView: View {
             guard reachable, library.errorMessage != nil else { return }
             Task { await library.load() }
         }
+        .focusedSceneValue(\.refreshActions, RefreshActions(
+            refreshLibrary: { Task { await library.load() } },
+            refreshChapters: player.book == nil ? nil : { Task { await player.refreshChapters() } }
+        ))
     }
 }
 
