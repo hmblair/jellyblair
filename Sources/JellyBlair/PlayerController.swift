@@ -269,6 +269,30 @@ final class PlayerController {
         await seek(to: chapter.startSeconds)
     }
 
+    /// Seconds into a chapter beyond which the previous button restarts it
+    /// instead of going to the previous chapter, like a music app.
+    private static let chapterRestartThreshold: Double = 3
+
+    func nextChapter() async {
+        guard let index = currentChapterIndex, index + 1 < chapters.count else { return }
+        await seek(to: chapters[index + 1].startSeconds)
+    }
+
+    func previousChapter() async {
+        guard let chapter = currentChapter else {
+            if currentTime > Self.chapterRestartThreshold {
+                await seek(to: 0)
+            }
+            return
+        }
+        let elapsedInChapter = currentTime - chapter.startSeconds
+        if elapsedInChapter > Self.chapterRestartThreshold || chapter.index == 0 {
+            await seek(to: chapter.startSeconds)
+        } else {
+            await seek(to: chapters[chapter.index - 1].startSeconds)
+        }
+    }
+
     // MARK: - Time and chapter tracking
 
     private func setCurrentTime(_ seconds: Double) {

@@ -148,6 +148,12 @@ struct TransportControlsView: View {
         ZStack {
             HStack(spacing: 24) {
                 Button {
+                    Task { await player.previousChapter() }
+                } label: {
+                    Image(systemName: "backward.fill").font(.title3)
+                }
+
+                Button {
                     Task { await player.skip(by: -30) }
                 } label: {
                     Image(systemName: "gobackward.30").font(.title2)
@@ -164,6 +170,12 @@ struct TransportControlsView: View {
                     Task { await player.skip(by: 30) }
                 } label: {
                     Image(systemName: "goforward.30").font(.title2)
+                }
+
+                Button {
+                    Task { await player.nextChapter() }
+                } label: {
+                    Image(systemName: "forward.fill").font(.title3)
                 }
             }
 

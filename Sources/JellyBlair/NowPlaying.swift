@@ -60,6 +60,12 @@ final class NowPlayingCenter {
         center.skipBackwardCommand.addTarget { [weak self] _ in
             self?.dispatch { player in Task { await player.skip(by: -Self.skipInterval) } } ?? .commandFailed
         }
+        center.nextTrackCommand.addTarget { [weak self] _ in
+            self?.dispatch { player in Task { await player.nextChapter() } } ?? .commandFailed
+        }
+        center.previousTrackCommand.addTarget { [weak self] _ in
+            self?.dispatch { player in Task { await player.previousChapter() } } ?? .commandFailed
+        }
         center.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             let position = event.positionTime
