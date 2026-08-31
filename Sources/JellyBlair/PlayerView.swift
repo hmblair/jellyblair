@@ -39,6 +39,7 @@ struct PlayerView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                RemainingTimeView(player: player)
             }
             Spacer()
         }
@@ -60,7 +61,9 @@ struct PlayerView: View {
         List(player.chapters) { chapter in
             ChapterRow(
                 chapter: chapter,
-                isCurrent: chapter.index == player.currentChapterIndex
+                state: rowState(for: chapter),
+                isPlaying: player.isPlaying,
+                meter: player.audioMeter
             )
             .contentShape(Rectangle())
             .onTapGesture {
@@ -74,6 +77,38 @@ struct PlayerView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// Played and upcoming are positional: everything before the current
+    /// chapter reads as played, so the list mirrors the book's progress.
+    private func rowState(for chapter: Chapter) -> ChapterRowState {
+        guard let current = player.currentChapterIndex else { return .upcoming }
+        if chapter.index < current { return .played }
+        if chapter.index == current { return .current }
+        return .upcoming
+    }
+}
+
+/// Shows the listening time left in the book at the current speed.
+/// Minute granularity keeps the label stable between time ticks, and keeping
+/// it in its own view spares the header from 30 Hz re-renders.
+struct RemainingTimeView: View {
+    let player: PlayerController
+
+    var body: some View {
+        Text(text)
+            .font(.callout.monospacedDigit())
+            .foregroundStyle(.secondary)
+    }
+
+    private var text: String {
+        let remaining = max(0, player.duration - player.currentTime) / player.playbackSpeed
+        let minutes = Int((remaining / 60).rounded())
+        let label = minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+        guard player.playbackSpeed != 1 else {
+            return "\(label) remaining"
+        }
+        return "\(label) remaining at \(String(format: "%g×", player.playbackSpeed))"
     }
 }
 
@@ -214,23 +249,67 @@ struct TransportControlsView: View {
     }
 }
 
+enum ChapterRowState {
+    case played
+    case current
+    case upcoming
+}
+
 struct ChapterRow: View {
     let chapter: Chapter
-    let isCurrent: Bool
+    let state: ChapterRowState
+    let isPlaying: Bool
+    let meter: AudioLevelMeter
 
     var body: some View {
         HStack {
-            Image(systemName: isCurrent ? "play.fill" : "circle")
-                .font(.caption)
-                .foregroundStyle(isCurrent ? Color.accentColor : .secondary)
+            icon
                 .frame(width: 16)
             Text(chapter.title)
-                .fontWeight(isCurrent ? .semibold : .regular)
+                .fontWeight(state == .current ? .semibold : .regular)
+                .foregroundStyle(state == .played ? .secondary : .primary)
             Spacer()
             Text(formatTime(chapter.durationSeconds))
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        switch state {
+        case .played:
+            Image(systemName: "checkmark")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        case .current:
+            AudioBarsView(meter: meter, isPlaying: isPlaying)
+        case .upcoming:
+            Color.clear
+        }
+    }
+}
+
+/// Bars driven by the live band levels of the playing audio.
+struct AudioBarsView: View {
+    let meter: AudioLevelMeter
+    let isPlaying: Bool
+
+    private static let barMaxHeight: CGFloat = 11
+    private static let barMinHeight: CGFloat = 2
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { _ in
+            let bands = meter.currentBands()
+            HStack(alignment: .bottom, spacing: 1.5) {
+                ForEach(0..<AudioLevelMeter.bandCount, id: \.self) { index in
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(width: 2, height: Self.barMinHeight + CGFloat(bands[index]) * (Self.barMaxHeight - Self.barMinHeight))
+                }
+            }
+            .frame(height: Self.barMaxHeight, alignment: .bottom)
+        }
     }
 }

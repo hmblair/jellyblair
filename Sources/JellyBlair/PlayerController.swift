@@ -60,6 +60,9 @@ final class PlayerController {
     private let nowPlaying = NowPlayingCenter()
     private var currentArtwork: NSImage?
 
+    /// Live band levels of the playing audio, for the now-playing bars.
+    let audioMeter = AudioLevelMeter()
+
     init(client: JellyfinClient) {
         self.client = client
         chapterCache = chapterStore.load()
@@ -129,6 +132,12 @@ final class PlayerController {
         }
         isReady = true
 
+        if let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first,
+           let audioMix = audioMeter.makeAudioMix(for: audioTrack) {
+            guard generation == openGeneration else { return }
+            item.audioMix = audioMix
+        }
+
         if startPosition > 0 {
             await seek(to: startPosition)
             guard generation == openGeneration else { return }
@@ -188,6 +197,7 @@ final class PlayerController {
         hasActiveSession = false
         playbackErrorMessage = nil
         currentArtwork = nil
+        audioMeter.reset()
         syncNowPlaying()
         if hadSession {
             await client.reportPlaybackStopped(bookID: book.id, positionSeconds: position)
@@ -264,6 +274,7 @@ final class PlayerController {
     func pause() {
         player?.pause()
         isPlaying = false
+        audioMeter.reset()
         reportProgressNow()
         syncNowPlaying()
     }
@@ -296,8 +307,10 @@ final class PlayerController {
         await seek(to: currentTime + seconds)
     }
 
+    /// Jumps to a chapter and plays it, like clicking a song in a music app.
     func jump(to chapter: Chapter) async {
         await seek(to: chapter.startSeconds)
+        play()
     }
 
     /// Seconds into a chapter beyond which the previous button restarts it
