@@ -295,6 +295,7 @@ final class PlayerController {
     private func syncNowPlaying() {
         nowPlaying.update(
             bookTitle: book?.name,
+            author: book?.author,
             chapterTitle: currentChapter?.title,
             elapsed: currentTime,
             duration: duration,

@@ -37,17 +37,47 @@ struct BookUserData: Decodable, Hashable {
     }
 }
 
+struct Person: Decodable, Hashable {
+    let name: String
+    let type: String
+
+    enum CodingKeys: String, CodingKey {
+        case name = "Name"
+        case type = "Type"
+    }
+}
+
 struct Book: Decodable, Identifiable, Hashable {
     let id: String
     let name: String
     let runTimeTicks: Int64?
     let userData: BookUserData?
+    let albumArtist: String?
+    let artists: [String]?
+    let people: [Person]?
 
     enum CodingKeys: String, CodingKey {
         case id = "Id"
         case name = "Name"
         case runTimeTicks = "RunTimeTicks"
         case userData = "UserData"
+        case albumArtist = "AlbumArtist"
+        case artists = "Artists"
+        case people = "People"
+    }
+
+    var author: String? {
+        if let albumArtist, !albumArtist.isEmpty {
+            return albumArtist
+        }
+        let joined = (artists ?? []).joined(separator: ", ")
+        return joined.isEmpty ? nil : joined
+    }
+
+    /// Jellyfin stores audiobook narrators as people with the Composer type.
+    var narrator: String? {
+        let names = (people ?? []).filter { $0.type == "Composer" }.map(\.name)
+        return names.isEmpty ? nil : names.joined(separator: ", ")
     }
 
     var runTimeSeconds: Double {

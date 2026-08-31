@@ -15,7 +15,7 @@ final class NowPlayingCenter {
         configureCommands()
     }
 
-    func update(bookTitle: String?, chapterTitle: String?, elapsed: Double, duration: Double, rate: Double, isPlaying: Bool, artwork: NSImage?) {
+    func update(bookTitle: String?, author: String?, chapterTitle: String?, elapsed: Double, duration: Double, rate: Double, isPlaying: Bool, artwork: NSImage?) {
         let center = MPNowPlayingInfoCenter.default()
         guard let bookTitle else {
             center.nowPlayingInfo = nil
@@ -31,6 +31,9 @@ final class NowPlayingCenter {
             MPNowPlayingInfoPropertyDefaultPlaybackRate: rate,
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
         ]
+        if let author {
+            info[MPMediaItemPropertyArtist] = author
+        }
         if let artwork {
             info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: artwork.size) { _ in artwork }
         }

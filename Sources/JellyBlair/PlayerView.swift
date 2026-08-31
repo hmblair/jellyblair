@@ -30,8 +30,12 @@ struct PlayerView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(player.book?.name ?? "")
                     .font(.title2.bold())
-                if let chapter = player.currentChapter {
-                    Text(chapter.title)
+                if let author = player.book?.author {
+                    Text(author)
+                }
+                if let narrator = player.book?.narrator {
+                    Text("Narrated by \(narrator)")
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -85,10 +89,17 @@ struct SeekBarView: View {
         VStack(spacing: 4) {
             slider
                 .disabled(!player.isReady)
-            Text(timeText)
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            HStack {
+                if let chapter = player.currentChapter {
+                    Text(chapter.title)
+                        .font(.callout.weight(.medium))
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text(timeText)
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
