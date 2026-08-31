@@ -7,7 +7,7 @@ struct JellyBlairApp: App {
     @State private var session = AppSession()
 
     var body: some Scene {
-        WindowGroup {
+        Window("JellyBlair", id: "main") {
             RootView(session: session)
                 .frame(minWidth: 760, minHeight: 480)
         }
@@ -18,6 +18,10 @@ struct JellyBlairApp: App {
                 }
                 .disabled(!session.isSignedIn)
             }
+        }
+
+        Settings {
+            SettingsView(session: session)
         }
     }
 }
@@ -49,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        NSWindow.allowsAutomaticWindowTabbing = false
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
