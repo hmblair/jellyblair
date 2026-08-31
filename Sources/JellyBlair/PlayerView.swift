@@ -7,6 +7,8 @@ struct PlayerView: View {
     let player: PlayerController
     let imageURL: URL
 
+    @State private var isAutoScrollWindowOpen = true
+
     var body: some View {
         VStack(spacing: 16) {
             header
@@ -58,25 +60,49 @@ struct PlayerView: View {
     }
 
     private var chapterList: some View {
-        List(player.chapters) { chapter in
-            ChapterRow(
-                chapter: chapter,
-                state: rowState(for: chapter),
-                isPlaying: player.isPlaying,
-                meter: player.audioMeter
-            )
-            .contentShape(Rectangle())
-            .onTapGesture {
-                Task { await player.jump(to: chapter) }
+        ScrollViewReader { proxy in
+            List(player.chapters) { chapter in
+                ChapterRow(
+                    chapter: chapter,
+                    state: rowState(for: chapter),
+                    isPlaying: player.isPlaying,
+                    meter: player.audioMeter
+                )
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    Task { await player.jump(to: chapter) }
+                }
+            }
+            .listStyle(.inset)
+            .overlay {
+                if player.chapters.isEmpty {
+                    Text("No chapters in this file")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .onAppear {
+                scrollToCurrentChapter(proxy)
+            }
+            .onChange(of: player.chapters) {
+                scrollToCurrentChapter(proxy)
+            }
+            .onChange(of: player.currentChapterIndex) {
+                guard isAutoScrollWindowOpen else { return }
+                scrollToCurrentChapter(proxy)
+            }
+            .task {
+                try? await Task.sleep(for: .seconds(3))
+                isAutoScrollWindowOpen = false
             }
         }
-        .listStyle(.inset)
-        .overlay {
-            if player.chapters.isEmpty {
-                Text("No chapters in this file")
-                    .foregroundStyle(.secondary)
-            }
-        }
+    }
+
+    /// Centers the list on the current chapter. Chapters and the resume seek can
+    /// land shortly after the view appears, so this runs again on those changes,
+    /// but only within a brief window so the list is not yanked mid-browse.
+    private func scrollToCurrentChapter(_ proxy: ScrollViewProxy) {
+        guard let index = player.currentChapterIndex else { return }
+        proxy.scrollTo(index, anchor: .center)
     }
 
     /// Played and upcoming are positional: everything before the current
