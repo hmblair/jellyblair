@@ -139,6 +139,14 @@ final class JellyfinClient {
         return try decode(ItemsResponse.self, from: data).items
     }
 
+    /// Fetches a single book with fresh user data, such as the resume position.
+    func fetchBook(id: String) async -> Book? {
+        guard let userID else { return nil }
+        let request = makeRequest(path: "Users/\(userID)/Items/\(id)")
+        guard let data = try? await send(request) else { return nil }
+        return try? decode(Book.self, from: data)
+    }
+
     // MARK: - URLs
 
     func imageURL(for book: Book) -> URL {

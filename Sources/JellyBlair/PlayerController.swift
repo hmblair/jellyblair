@@ -45,6 +45,10 @@ final class PlayerController {
     /// True after a start report was sent, so stop reports only follow real sessions.
     private var hasActiveSession = false
 
+    /// Positions at which books were last closed in this run.
+    /// Fallback for reopening while the server is unreachable.
+    private var lastKnownPositions: [String: Double] = [:]
+
     /// Seconds between progress reports to the server.
     private static let progressReportInterval: TimeInterval = 10
 
@@ -99,12 +103,15 @@ final class PlayerController {
         await closeCurrentBook()
         guard generation == openGeneration else { return }
 
+        let startPosition = await resolveResumePosition(for: newBook)
+        guard generation == openGeneration else { return }
+
         book = newBook
         playbackErrorMessage = nil
         isReady = false
         duration = newBook.runTimeSeconds
         setChapters(chapterCache[newBook.id] ?? [])
-        setCurrentTime(newBook.resumePositionSeconds)
+        setCurrentTime(startPosition)
 
         let asset = client.streamAsset(for: newBook)
         let item = AVPlayerItem(asset: asset)
@@ -122,8 +129,8 @@ final class PlayerController {
         }
         isReady = true
 
-        if newBook.resumePositionSeconds > 0 {
-            await seek(to: newBook.resumePositionSeconds)
+        if startPosition > 0 {
+            await seek(to: startPosition)
             guard generation == openGeneration else { return }
         }
         await loadArtwork(for: newBook, generation: generation)
@@ -154,12 +161,25 @@ final class PlayerController {
         return false
     }
 
+    /// Prefers the server's current position, since the library list is a stale
+    /// snapshot from launch. Falls back to a locally recorded position offline.
+    private func resolveResumePosition(for book: Book) async -> Double {
+        if let fresh = await client.fetchBook(id: book.id) {
+            return fresh.resumePositionSeconds
+        }
+        if let local = lastKnownPositions[book.id] {
+            return local
+        }
+        return book.resumePositionSeconds
+    }
+
     private func closeCurrentBook() async {
         guard let book else { return }
         player?.pause()
         removeObservers()
         stopProgressReports()
         let position = currentTime
+        lastKnownPositions[book.id] = position
         let hadSession = hasActiveSession
         self.book = nil
         player = nil
