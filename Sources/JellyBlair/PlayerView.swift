@@ -127,34 +127,67 @@ struct SeekBarView: View {
     }
 }
 
-/// Play/pause and skip buttons. Reads only the playing flag.
+/// Play/pause, skip buttons, and the playback speed menu.
 struct TransportControlsView: View {
     let player: PlayerController
 
+    private static let speeds: [Double] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+
     var body: some View {
-        HStack(spacing: 24) {
-            Button {
-                Task { await player.skip(by: -30) }
-            } label: {
-                Image(systemName: "gobackward.30").font(.title2)
+        ZStack {
+            HStack(spacing: 24) {
+                Button {
+                    Task { await player.skip(by: -30) }
+                } label: {
+                    Image(systemName: "gobackward.30").font(.title2)
+                }
+
+                Button {
+                    player.togglePlayback()
+                } label: {
+                    Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 44))
+                }
+
+                Button {
+                    Task { await player.skip(by: 30) }
+                } label: {
+                    Image(systemName: "goforward.30").font(.title2)
+                }
             }
 
-            Button {
-                player.togglePlayback()
-            } label: {
-                Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 44))
-            }
-
-            Button {
-                Task { await player.skip(by: 30) }
-            } label: {
-                Image(systemName: "goforward.30").font(.title2)
+            HStack {
+                Spacer()
+                speedMenu
             }
         }
         .buttonStyle(.plain)
         .disabled(!player.isReady)
         .opacity(player.isReady ? 1 : 0.4)
+    }
+
+    private var speedMenu: some View {
+        Menu {
+            Picker("Speed", selection: Binding(
+                get: { player.playbackSpeed },
+                set: { player.setPlaybackSpeed($0) }
+            )) {
+                ForEach(Self.speeds, id: \.self) { speed in
+                    Text(speedLabel(speed)).tag(speed)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Text(speedLabel(player.playbackSpeed))
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private func speedLabel(_ speed: Double) -> String {
+        String(format: "%g×", speed)
     }
 }
 

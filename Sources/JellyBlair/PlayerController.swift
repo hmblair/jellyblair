@@ -21,6 +21,8 @@ final class PlayerController {
     /// seeking stay disabled until then.
     private(set) var isReady = false
 
+    private(set) var playbackSpeed: Double
+
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var statusObservation: NSKeyValueObservation?
@@ -49,10 +51,18 @@ final class PlayerController {
     /// Seconds to wait for a new player item before declaring the open failed.
     private static let readyTimeout: TimeInterval = 8
 
+    private static let playbackSpeedDefaultsKey = "playbackSpeed"
+
+    private let nowPlaying = NowPlayingCenter()
+    private var currentArtwork: NSImage?
+
     init(client: JellyfinClient) {
         self.client = client
         chapterCache = chapterStore.load()
+        let storedSpeed = UserDefaults.standard.double(forKey: Self.playbackSpeedDefaultsKey)
+        playbackSpeed = storedSpeed > 0 ? storedSpeed : 1.0
         observeAppTermination()
+        nowPlaying.attach(to: self)
     }
 
     var currentChapter: Chapter? {
@@ -119,7 +129,15 @@ final class PlayerController {
         play()
         hasActiveSession = true
         startProgressReports(for: newBook)
+        await loadArtwork(for: newBook, generation: generation)
         await loadChaptersIfNeeded(for: newBook, from: asset, generation: generation)
+    }
+
+    private func loadArtwork(for book: Book, generation: Int) async {
+        let image = await CoverImageLoader.shared.image(for: book.id, from: client.imageURL(for: book))
+        guard generation == openGeneration else { return }
+        currentArtwork = image
+        syncNowPlaying()
     }
 
     /// Waits for the player item to become playable, with the app's own timeout.
@@ -152,6 +170,8 @@ final class PlayerController {
         isReady = false
         hasActiveSession = false
         playbackErrorMessage = nil
+        currentArtwork = nil
+        syncNowPlaying()
         if hadSession {
             await client.reportPlaybackStopped(bookID: book.id, positionSeconds: position)
         }
@@ -204,14 +224,25 @@ final class PlayerController {
 
     func play() {
         guard isReady else { return }
-        player?.play()
+        player?.rate = Float(playbackSpeed)
         isPlaying = true
+        syncNowPlaying()
     }
 
     func pause() {
         player?.pause()
         isPlaying = false
         reportProgressNow()
+        syncNowPlaying()
+    }
+
+    func setPlaybackSpeed(_ speed: Double) {
+        playbackSpeed = speed
+        UserDefaults.standard.set(speed, forKey: Self.playbackSpeedDefaultsKey)
+        if isPlaying {
+            player?.rate = Float(speed)
+        }
+        syncNowPlaying()
     }
 
     func togglePlayback() {
@@ -226,6 +257,7 @@ final class PlayerController {
         let time = CMTime(seconds: target, preferredTimescale: Int32(ticksPerSecond))
         await player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         pendingSeekCount -= 1
+        syncNowPlaying()
     }
 
     func skip(by seconds: Double) async {
@@ -254,7 +286,21 @@ final class PlayerController {
         let index = chapters.last(where: { $0.startSeconds <= currentTime + 0.5 })?.index
         if index != currentChapterIndex {
             currentChapterIndex = index
+            syncNowPlaying()
         }
+    }
+
+    /// Pushes the current state to the system Now Playing center.
+    private func syncNowPlaying() {
+        nowPlaying.update(
+            bookTitle: book?.name,
+            chapterTitle: currentChapter?.title,
+            elapsed: currentTime,
+            duration: duration,
+            rate: playbackSpeed,
+            isPlaying: isPlaying,
+            artwork: currentArtwork
+        )
     }
 
     // MARK: - Player observation
@@ -311,12 +357,14 @@ final class PlayerController {
         removeObservers()
         player = nil
         stopProgressReports()
+        syncNowPlaying()
     }
 
     private func handlePlaybackEnded() {
         guard let book else { return }
         isPlaying = false
         stopProgressReports()
+        syncNowPlaying()
         Task {
             await client.reportPlaybackStopped(bookID: book.id, positionSeconds: duration)
         }
