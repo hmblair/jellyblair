@@ -316,7 +316,7 @@ public struct BookView: View {
 
     /// The download control with the file's size beside it.
     private var downloadRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 5) {
             downloadControl
             if let bytes = book.fileSizeBytes {
                 Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
@@ -367,9 +367,9 @@ public struct BookView: View {
             Button {
                 model.removeDownload()
             } label: {
-                Image(systemName: "arrow.down.circle.badge.xmark.fill")
+                Image(systemName: "checkmark.circle.fill")
                     .font(.title)
-                    .symbolRenderingMode(.multicolor)
+                    .foregroundStyle(Color.green)
                     .opacity(isHoveringDownload ? 0.6 : 1)
                     .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
             }
