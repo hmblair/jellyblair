@@ -33,6 +33,8 @@ public struct ChapterRow: View {
         return false
     }
 
+    @State private var isHovering = false
+
     public var body: some View {
         HStack {
             icon
@@ -45,7 +47,21 @@ public struct ChapterRow: View {
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        // The highlight bounds to the visible content: it skips the icon
+        // column when the row has no mark, and cannot overhang the list edges
+        // the way a full row background does.
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.primary.opacity(0.06))
+                .opacity(isHovering ? 1 : 0)
+                .animation(.easeOut(duration: 0.1), value: isHovering)
+                .padding(.leading, state == .upcoming ? 24 : 0)
+                .padding(.trailing, -9)
+        )
+        .onHover { isHovering = $0 }
+        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
     }
 
     @ViewBuilder
