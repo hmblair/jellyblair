@@ -44,6 +44,8 @@ public struct MiniPlayerBar: View {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                         .font(.title2)
                         .frame(width: 32)
+                        .contentTransition(.identity)
+                        .animation(nil, value: player.isPlaying)
                 }
             }
             .buttonStyle(.plain)

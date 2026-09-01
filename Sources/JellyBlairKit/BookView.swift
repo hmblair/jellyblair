@@ -398,6 +398,8 @@ public struct BookView: View {
                 Image(systemName: isConfirmingRemoval ? "questionmark.circle.fill" : "checkmark.circle.fill")
                     .font(.title)
                     .foregroundStyle(isConfirmingRemoval ? Color.red : Color.green)
+                    .contentTransition(.identity)
+                    .animation(nil, value: isConfirmingRemoval)
                     .opacity(isHoveringDownload ? 0.6 : 1)
                     .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
             }

@@ -121,6 +121,8 @@ public struct TransportControlsView: View {
                 } label: {
                     Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(size: 44))
+                        .contentTransition(.identity)
+                        .animation(nil, value: player.isPlaying)
                 }
                 .buttonStyle(HoverScaleButtonStyle())
 
