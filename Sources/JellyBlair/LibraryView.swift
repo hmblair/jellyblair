@@ -96,10 +96,15 @@ struct LibraryView: View {
         Button {
             showDownloadedOnly.toggle()
         } label: {
-            Image(systemName: showDownloadedOnly ? "arrow.down.circle.fill" : "arrow.down.circle")
-                .font(.title2)
-                .foregroundStyle(showDownloadedOnly ? Color.green : Color.secondary)
-                .opacity(isHoveringFilter ? 0.6 : 1)
+            // Unselected, the icon wears the search capsule's own tone,
+            // with the arrow in the capsule's placeholder gray.
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 24))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(
+                    showDownloadedOnly ? Color.white : Color.secondary,
+                    showDownloadedOnly ? Color.green : Color.primary.opacity(isHoveringFilter ? 0.12 : 0.06)
+                )
                 .animation(.easeOut(duration: 0.1), value: isHoveringFilter)
         }
         .buttonStyle(.plain)

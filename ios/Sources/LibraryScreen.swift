@@ -94,9 +94,15 @@ struct LibraryScreen: View {
         Button {
             showDownloadedOnly.toggle()
         } label: {
-            Image(systemName: showDownloadedOnly ? "arrow.down.circle.fill" : "arrow.down.circle")
-                .font(.title2)
-                .foregroundStyle(showDownloadedOnly ? Color.green : Color.secondary)
+            // Unselected, the icon wears the search capsule's own tone,
+            // with the arrow in the capsule's placeholder gray.
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 27))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(
+                    showDownloadedOnly ? Color.white : Color.secondary,
+                    showDownloadedOnly ? Color.green : Color.primary.opacity(0.06)
+                )
         }
         .buttonStyle(.plain)
     }
