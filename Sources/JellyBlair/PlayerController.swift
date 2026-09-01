@@ -120,14 +120,17 @@ final class PlayerController {
         await closeCurrentBook()
         guard generation == openGeneration else { return }
 
-        let startPosition = await resolveResumePosition(for: newBook)
-        guard generation == openGeneration else { return }
-
+        // The new book's metadata shows immediately with the snapshot position;
+        // the fresh server position corrects it when the fetch returns.
         book = newBook
         playbackErrorMessage = nil
         isReady = false
         duration = newBook.runTimeSeconds
         setChapters(chapterCache[newBook.id] ?? [])
+        setCurrentTime(newBook.resumePositionSeconds)
+
+        let startPosition = await resolveResumePosition(for: newBook)
+        guard generation == openGeneration else { return }
         setCurrentTime(startPosition)
 
         let asset = client.streamAsset(for: newBook)

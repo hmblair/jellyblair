@@ -14,6 +14,7 @@ final class CoverImageLoader {
     }
 
     func image(for bookID: String, from url: URL) async -> NSImage? {
+        guard !bookID.isEmpty else { return nil }
         if let cached = memory[bookID] {
             return cached
         }
