@@ -493,7 +493,21 @@ public struct OpenBookGroupAction {
     }
 }
 
+/// Navigates to a book's screen; injected per shell.
+public struct OpenBookAction {
+    private let handler: (Book) -> Void
+
+    public init(_ handler: @escaping (Book) -> Void) {
+        self.handler = handler
+    }
+
+    public func callAsFunction(_ book: Book) {
+        handler(book)
+    }
+}
+
 public extension EnvironmentValues {
     @Entry var openAuthor: OpenBookGroupAction?
     @Entry var openNarrator: OpenBookGroupAction?
+    @Entry var openBook: OpenBookAction?
 }

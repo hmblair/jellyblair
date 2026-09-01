@@ -16,9 +16,7 @@ struct BookGroupScreen: View {
 
     var body: some View {
         List(visibleBooks) { book in
-            NavigationLink(value: LibraryRoute.book(book)) {
-                BookRow(book: book, isLoaded: book.id == player.book?.id)
-            }
+            BookRowLink(book: book)
         }
         .navigationTitle("\(group.name) (\(group.roleLabel))")
         .navigationBarTitleDisplayMode(.inline)

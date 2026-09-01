@@ -90,6 +90,9 @@ struct MainScreen: View {
             guard reachable, scope.library.errorMessage != nil else { return }
             Task { await scope.library.load() }
         }
+        .environment(\.openBook, OpenBookAction { book in
+            path.append(.book(book))
+        })
         .environment(\.openAuthor, OpenBookGroupAction { [library = scope.library] name in
             guard let group = library.authorGroups.first(where: { $0.name == name }) else { return }
             path.append(.group(group))

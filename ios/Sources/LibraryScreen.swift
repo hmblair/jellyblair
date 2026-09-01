@@ -21,9 +21,7 @@ struct LibraryScreen: View {
             ForEach(visibleGroups) { group in
                 Section {
                     ForEach(group.books) { book in
-                        NavigationLink(value: LibraryRoute.book(book)) {
-                            BookRow(book: book, isLoaded: book.id == player.book?.id)
-                        }
+                        BookRowLink(book: book)
                     }
                 } header: {
                     AuthorHeading(name: group.name) {
@@ -58,5 +56,28 @@ struct LibraryScreen: View {
         .sheet(isPresented: $isShowingSettings) {
             SettingsScreen(session: session)
         }
+    }
+}
+
+/// A book row navigating through the explicit action rather than a value
+/// link, whose rows stay highlighted while their value is in the path.
+struct BookRowLink: View {
+    let book: Book
+
+    @Environment(PlayerController.self) private var player
+    @Environment(\.openBook) private var openBook
+
+    var body: some View {
+        Button {
+            openBook?(book)
+        } label: {
+            HStack {
+                BookRow(book: book, isLoaded: book.id == player.book?.id)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
