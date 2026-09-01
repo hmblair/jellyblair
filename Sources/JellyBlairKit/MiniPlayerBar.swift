@@ -94,7 +94,7 @@ public struct BookRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(book.name)
                     .lineLimit(1)
-                Text(formatTime(book.runTimeSeconds))
+                Text(formatHoursMinutes(book.runTimeSeconds))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

@@ -121,7 +121,7 @@ public struct BookView: View {
     /// when the book is partway through.
     private var lengthLine: some View {
         HStack(spacing: 5) {
-            Text(formatTime(book.runTimeSeconds))
+            Text(formatHoursMinutes(book.runTimeSeconds))
             if isLoaded {
                 Text("·")
                     .foregroundStyle(.secondary)
