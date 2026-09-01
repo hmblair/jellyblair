@@ -5,6 +5,10 @@ BUNDLE := $(DIST_DIR)/$(APP_NAME).app
 
 INSTALL_DIR := /Applications
 
+# Development certificate: a stable Apple-issued identity for local use.
+# Set to "Developer ID Application" for notarized distribution builds.
+CODESIGN_IDENTITY := Apple Development
+
 .PHONY: all dist run install iphone clean
 
 all:
@@ -15,7 +19,7 @@ dist: all
 	mkdir -p $(BUNDLE)/Contents/MacOS $(BUNDLE)/Contents/Resources
 	cp $(BUILD_DIR)/$(APP_NAME) $(BUNDLE)/Contents/MacOS/
 	cp Packaging/Info.plist $(BUNDLE)/Contents/
-	codesign --force -s - $(BUNDLE)
+	codesign --force -s "$(CODESIGN_IDENTITY)" $(BUNDLE)
 	@echo "Built $(BUNDLE)"
 
 run: dist
