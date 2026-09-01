@@ -1,0 +1,29 @@
+name: JellyBlairiOS
+options:
+  bundleIdPrefix: com.hmblair
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  JellyBlair:
+    path: ..
+targets:
+  JellyBlairiOS:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: JellyBlair
+        product: JellyBlairKit
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: JellyBlair
+        UILaunchScreen: {}
+        UIBackgroundModes: [audio]
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hmblair.jellyblair.ios
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
