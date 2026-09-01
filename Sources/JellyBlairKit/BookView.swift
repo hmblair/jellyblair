@@ -107,6 +107,9 @@ public struct BookView: View {
             lengthLine
         }
         .frame(maxWidth: .infinity)
+        // The chapter list below competes for vertical space; without this the
+        // stack compresses the text into truncation instead of wrapping it.
+        .fixedSize(horizontal: false, vertical: true)
     }
     #endif
 
