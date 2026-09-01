@@ -70,8 +70,8 @@ struct ContentView: View {
     /// replace the Book values.
     @State private var selectedBookID: String?
 
-    /// The sidebar's author scope, owned here so the book screen can set it.
-    @State private var authorScope: AuthorGroup?
+    /// The sidebar's group scope, owned here so the book screen can set it.
+    @State private var sidebarScope: BookGroup?
 
     init(client: JellyfinClient) {
         _scope = State(initialValue: SessionScope(client: client))
@@ -84,7 +84,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             NavigationSplitView {
-                LibraryView(selection: $selectedBookID, authorScope: $authorScope)
+                LibraryView(selection: $selectedBookID, scope: $sidebarScope)
                     .navigationSplitViewColumnWidth(min: 220, ideal: 260)
             } detail: {
                 if let selectedBook {
@@ -120,8 +120,11 @@ struct ContentView: View {
             refreshLibrary: { [library = scope.library] in Task { await library.load() } },
             refreshChapters: scope.player.book == nil ? nil : { [player = scope.player] in Task { await player.refreshChapters() } }
         ))
-        .environment(\.openAuthor, OpenAuthorAction { [library = scope.library] name in
-            authorScope = library.authorGroups.first { $0.name == name }
+        .environment(\.openAuthor, OpenBookGroupAction { [library = scope.library] name in
+            sidebarScope = library.authorGroups.first { $0.name == name }
+        })
+        .environment(\.openNarrator, OpenBookGroupAction { [library = scope.library] name in
+            sidebarScope = library.narratorGroups.first { $0.name == name }
         })
         .environment(scope.library)
         .environment(scope.player)

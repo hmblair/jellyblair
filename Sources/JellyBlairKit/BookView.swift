@@ -12,11 +12,13 @@ public struct BookView: View {
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openAuthor) private var openAuthor
+    @Environment(\.openNarrator) private var openNarrator
 
     @State private var isAutoScrollWindowOpen = true
     @State private var chapterQuery = ""
     @State private var isHoveringJumpButton = false
     @State private var isHoveringAuthor = false
+    @State private var hoveredNameWords = 0
 
     public init(book: Book) {
         self.book = book
@@ -178,7 +180,7 @@ public struct BookView: View {
                     authorLine(author)
                 }
                 if let narrator = book.narrator {
-                    Text("Narrated by \(narrator)")
+                    narratorLine(narrator)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -210,7 +212,7 @@ public struct BookView: View {
                     .multilineTextAlignment(.center)
             }
             if let narrator = book.narrator {
-                Text("Narrated by \(narrator)")
+                narratorLine(narrator)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -240,6 +242,44 @@ public struct BookView: View {
             .onHover { isHoveringAuthor = $0 }
         } else {
             Text(author)
+        }
+    }
+
+    #if os(macOS)
+    private static let narratorAlignment = FlowLayout.Alignment.leading
+    #else
+    private static let narratorAlignment = FlowLayout.Alignment.center
+    #endif
+
+    /// The narrator credit, wrapping word by word like text, with the name's
+    /// words forming one hover-and-click group that brightens together.
+    private func narratorLine(_ narrator: String) -> some View {
+        let nameWords = narrator.split(separator: " ").map(String.init)
+        return FlowLayout(alignment: Self.narratorAlignment) {
+            Text("Narrated")
+            Text("by")
+            ForEach(Array(nameWords.enumerated()), id: \.offset) { _, word in
+                nameWord(word, narrator: narrator)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func nameWord(_ word: String, narrator: String) -> some View {
+        if let openNarrator {
+            Text(word)
+                .foregroundStyle(hoveredNameWords > 0 ? .primary : .secondary)
+                .animation(.easeOut(duration: 0.1), value: hoveredNameWords > 0)
+                .onTapGesture {
+                    openNarrator(narrator)
+                }
+                .onHover { hovering in
+                    // Counted, since entering the next word can fire before
+                    // leaving the previous one.
+                    hoveredNameWords = max(0, hoveredNameWords + (hovering ? 1 : -1))
+                }
+        } else {
+            Text(word)
         }
     }
 
@@ -439,9 +479,9 @@ private extension BookView {
     }
 }
 
-/// Navigates to an author's books; injected per shell, since the sidebar
+/// Navigates to a group's books; injected per shell, since the sidebar
 /// scopes on the Mac and the stack pushes on the phone.
-public struct OpenAuthorAction {
+public struct OpenBookGroupAction {
     private let handler: (String) -> Void
 
     public init(_ handler: @escaping (String) -> Void) {
@@ -454,5 +494,6 @@ public struct OpenAuthorAction {
 }
 
 public extension EnvironmentValues {
-    @Entry var openAuthor: OpenAuthorAction?
+    @Entry var openAuthor: OpenBookGroupAction?
+    @Entry var openNarrator: OpenBookGroupAction?
 }

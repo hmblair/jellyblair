@@ -1,9 +1,9 @@
 import JellyBlairKit
 import SwiftUI
 
-/// One author's books, with a search field scoped to them.
-struct AuthorScreen: View {
-    let group: AuthorGroup
+/// One group's books, with a search field scoped to them.
+struct BookGroupScreen: View {
+    let group: BookGroup
 
     @Environment(LibraryViewModel.self) private var library
     @Environment(PlayerController.self) private var player
@@ -20,7 +20,7 @@ struct AuthorScreen: View {
                 BookRow(book: book, isLoaded: book.id == player.book?.id)
             }
         }
-        .navigationTitle(group.name)
+        .navigationTitle("\(group.name) (\(group.roleLabel))")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search")
         .overlay {

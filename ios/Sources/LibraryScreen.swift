@@ -12,7 +12,7 @@ struct LibraryScreen: View {
     @State private var isShowingSettings = false
     @State private var searchQuery = ""
 
-    private var visibleGroups: [AuthorGroup] {
+    private var visibleGroups: [BookGroup] {
         library.authorGroups(matching: searchQuery)
     }
 

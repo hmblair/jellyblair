@@ -63,8 +63,8 @@ struct MainScreen: View {
                     case .book(let book):
                         BookView(book: book)
                             .navigationBarTitleDisplayMode(.inline)
-                    case .author(let group):
-                        AuthorScreen(group: group)
+                    case .group(let group):
+                        BookGroupScreen(group: group)
                     }
                 }
         }
@@ -90,9 +90,13 @@ struct MainScreen: View {
             guard reachable, scope.library.errorMessage != nil else { return }
             Task { await scope.library.load() }
         }
-        .environment(\.openAuthor, OpenAuthorAction { [library = scope.library] name in
+        .environment(\.openAuthor, OpenBookGroupAction { [library = scope.library] name in
             guard let group = library.authorGroups.first(where: { $0.name == name }) else { return }
-            path.append(.author(group))
+            path.append(.group(group))
+        })
+        .environment(\.openNarrator, OpenBookGroupAction { [library = scope.library] name in
+            guard let group = library.narratorGroups.first(where: { $0.name == name }) else { return }
+            path.append(.group(group))
         })
         .environment(scope.library)
         .environment(scope.player)
@@ -115,5 +119,5 @@ struct ConnectionBanner: View {
 /// A destination the library can navigate to.
 enum LibraryRoute: Hashable {
     case book(Book)
-    case author(AuthorGroup)
+    case group(BookGroup)
 }

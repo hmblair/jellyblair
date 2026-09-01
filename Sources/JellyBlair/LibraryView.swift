@@ -5,22 +5,22 @@ import SwiftUI
 /// one author's books after their heading is clicked, with a back row.
 struct LibraryView: View {
     @Binding var selection: String?
-    @Binding var authorScope: AuthorGroup?
+    @Binding var scope: BookGroup?
 
     @Environment(LibraryViewModel.self) private var library
     @Environment(PlayerController.self) private var player
 
     @State private var searchQuery = ""
 
-    private var visibleGroups: [AuthorGroup] {
+    private var visibleGroups: [BookGroup] {
         library.authorGroups(matching: searchQuery)
     }
 
     var body: some View {
         List(selection: $selection) {
-            if let authorScope {
-                backRow(to: authorScope)
-                ForEach(library.books(in: authorScope, matching: searchQuery)) { book in
+            if let scope {
+                backRow(to: scope)
+                ForEach(library.books(in: scope, matching: searchQuery)) { book in
                     row(for: book)
                 }
             } else {
@@ -48,7 +48,7 @@ struct LibraryView: View {
                 } else if let message = library.errorMessage {
                     ContentUnavailableView("Cannot load the library", systemImage: "exclamationmark.triangle", description: Text(message))
                 }
-            } else if authorScope == nil, visibleGroups.isEmpty {
+            } else if scope == nil, visibleGroups.isEmpty {
                 ContentUnavailableView.search(text: searchQuery)
             }
         }
@@ -61,7 +61,7 @@ struct LibraryView: View {
 
 
 
-    private func backRow(to scope: AuthorGroup) -> some View {
+    private func backRow(to scope: BookGroup) -> some View {
         Button {
             exitScope()
         } label: {
@@ -70,6 +70,8 @@ struct LibraryView: View {
                     .font(.caption)
                 Text(scope.name)
                     .fontWeight(.semibold)
+                Text("(\(scope.roleLabel))")
+                    .foregroundStyle(.secondary)
                 Spacer()
             }
             .contentShape(Rectangle())
@@ -77,14 +79,14 @@ struct LibraryView: View {
         .buttonStyle(.plain)
     }
 
-    private func enterScope(_ group: AuthorGroup) {
+    private func enterScope(_ group: BookGroup) {
         searchQuery = ""
         // The clicked group can be a filtered subset; scope to the full one.
-        authorScope = library.authorGroups.first { $0.name == group.name } ?? group
+        scope = library.authorGroups.first { $0.name == group.name } ?? group
     }
 
     private func exitScope() {
         searchQuery = ""
-        authorScope = nil
+        scope = nil
     }
 }
