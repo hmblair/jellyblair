@@ -346,23 +346,31 @@ public struct BookView: View {
             .disabled(!connection.isServerReachable)
             .opacity(connection.isServerReachable ? 1 : 0.4)
         case .downloading(let progress):
-            HStack(spacing: 8) {
-                if let progress {
-                    ProgressView(value: progress)
-                        .frame(width: 100)
-                } else {
-                    ProgressView()
-                        .controlSize(.small)
+            // The icon is the gauge: a faint vessel under a full-color copy
+            // masked to the completed fraction. Tapping cancels.
+            Button {
+                model.cancelDownload()
+            } label: {
+                ZStack {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .foregroundStyle(.quaternary)
+                    Image(systemName: "arrow.down.circle.fill")
+                        .foregroundStyle(.primary)
+                        .mask {
+                            GeometryReader { geometry in
+                                Rectangle()
+                                    .frame(height: geometry.size.height * (progress ?? 0))
+                                    .frame(maxHeight: .infinity, alignment: .bottom)
+                            }
+                        }
                 }
-                Button {
-                    model.cancelDownload()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
+                .font(.title)
+                .animation(.linear(duration: 0.3), value: progress)
+                .opacity(isHoveringDownload ? 0.6 : 1)
+                .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
             }
-            .font(.body)
+            .buttonStyle(.plain)
+            .onHover { isHoveringDownload = $0 }
         case .downloaded:
             Button {
                 model.removeDownload()
