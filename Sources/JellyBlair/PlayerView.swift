@@ -1,3 +1,4 @@
+import JellyBlairKit
 import SwiftUI
 
 /// Detail view: cover, transport controls, seek bar, and the chapter list.

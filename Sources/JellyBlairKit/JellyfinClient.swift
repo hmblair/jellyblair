@@ -2,8 +2,8 @@ import AVFoundation
 import Foundation
 
 /// Talks to the Jellyfin server: authentication, library queries, and playback reports.
-final class JellyfinClient {
-    let serverURL: URL
+public final class JellyfinClient {
+    public let serverURL: URL
 
     private static let clientName = "JellyBlair"
     private static let deviceName = "Mac"
@@ -149,7 +149,7 @@ final class JellyfinClient {
 
     // MARK: - URLs
 
-    func imageURL(for book: Book) -> URL {
+    public func imageURL(for book: Book) -> URL {
         var components = URLComponents(url: serverURL.appendingPathComponent("Items/\(book.id)/Images/Primary"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "maxWidth", value: "600")]
         return components.url!

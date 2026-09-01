@@ -1,4 +1,5 @@
 import AppKit
+import JellyBlairKit
 import SwiftUI
 
 @main

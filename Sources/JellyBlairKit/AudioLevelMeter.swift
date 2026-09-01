@@ -5,8 +5,8 @@ import MediaToolbox
 
 /// Measures per-band levels of the playing audio through an MTAudioProcessingTap.
 /// The tap writes on the audio render thread; the UI reads at frame rate.
-final class AudioLevelMeter {
-    static let bandCount = 3
+public final class AudioLevelMeter {
+    public static let bandCount = 3
 
     private static let fftSize = 512
     private static let fftSizeLog2: vDSP_Length = 9
@@ -31,7 +31,7 @@ final class AudioLevelMeter {
         vDSP_destroy_fftsetup(fftSetup)
     }
 
-    func currentBands() -> [Float] {
+    public func currentBands() -> [Float] {
         lock.lock()
         defer { lock.unlock() }
         return bands

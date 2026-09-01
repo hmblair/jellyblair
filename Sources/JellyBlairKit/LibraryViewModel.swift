@@ -2,29 +2,29 @@ import Foundation
 import Observation
 
 /// A sidebar section: one author and their books.
-struct AuthorGroup: Identifiable {
-    let name: String
-    let books: [Book]
+public struct AuthorGroup: Identifiable {
+    public let name: String
+    public let books: [Book]
 
-    var id: String { name }
+    public var id: String { name }
 }
 
 /// Holds the audiobook list and its sidebar grouping by author.
 @MainActor
 @Observable
-final class LibraryViewModel {
-    let client: JellyfinClient
+public final class LibraryViewModel {
+    public let client: JellyfinClient
 
-    private(set) var books: [Book] = []
-    private(set) var authorGroups: [AuthorGroup] = []
-    private(set) var isLoading = true
-    private(set) var errorMessage: String?
+    public private(set) var books: [Book] = []
+    public private(set) var authorGroups: [AuthorGroup] = []
+    public private(set) var isLoading = true
+    public private(set) var errorMessage: String?
 
-    init(client: JellyfinClient) {
+    public init(client: JellyfinClient) {
         self.client = client
     }
 
-    func load() async {
+    public func load() async {
         isLoading = true
         errorMessage = nil
         do {

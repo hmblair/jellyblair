@@ -1,4 +1,8 @@
+#if canImport(AppKit)
 import AppKit
+#else
+import UIKit
+#endif
 import AVFoundation
 import Foundation
 import Observation
@@ -6,22 +10,22 @@ import Observation
 /// Owns the AVPlayer, the chapter list, and playback progress reports for one book at a time.
 @MainActor
 @Observable
-final class PlayerController {
+public final class PlayerController {
     private let client: JellyfinClient
 
-    private(set) var book: Book?
-    private(set) var chapters: [Chapter] = []
-    private(set) var currentChapterIndex: Int?
-    private(set) var isPlaying = false
-    private(set) var currentTime: Double = 0
-    private(set) var duration: Double = 0
-    private(set) var playbackErrorMessage: String?
+    public private(set) var book: Book?
+    public private(set) var chapters: [Chapter] = []
+    public private(set) var currentChapterIndex: Int?
+    public private(set) var isPlaying = false
+    public private(set) var currentTime: Double = 0
+    public private(set) var duration: Double = 0
+    public private(set) var playbackErrorMessage: String?
 
     /// True once the player item can actually play. Transport controls and
     /// seeking stay disabled until then.
-    private(set) var isReady = false
+    public private(set) var isReady = false
 
-    private(set) var playbackSpeed: Double
+    public private(set) var playbackSpeed: Double
 
     private var player: AVPlayer?
     private var timeObserver: Any?
@@ -59,12 +63,12 @@ final class PlayerController {
     private static let playbackSpeedDefaultsKey = "playbackSpeed"
 
     private let nowPlaying = NowPlayingCenter()
-    private var currentArtwork: NSImage?
+    private var currentArtwork: PlatformImage?
 
     /// Live band levels of the playing audio, for the now-playing bars.
-    let audioMeter = AudioLevelMeter()
+    public let audioMeter = AudioLevelMeter()
 
-    init(client: JellyfinClient) {
+    public init(client: JellyfinClient) {
         self.client = client
         chapterCache = chapterStore.load()
         let storedSpeed = UserDefaults.standard.double(forKey: Self.playbackSpeedDefaultsKey)
@@ -86,13 +90,13 @@ final class PlayerController {
         }
     }
 
-    var currentChapter: Chapter? {
+    public var currentChapter: Chapter? {
         guard let index = currentChapterIndex, chapters.indices.contains(index) else { return nil }
         return chapters[index]
     }
 
     /// The range the seek bar covers: the current chapter, or the whole book when there are no chapters.
-    var seekRange: ClosedRange<Double> {
+    public var seekRange: ClosedRange<Double> {
         guard let chapter = currentChapter else {
             return 0...max(duration, 1)
         }
@@ -101,7 +105,7 @@ final class PlayerController {
 
     // MARK: - Opening and closing books
 
-    func open(_ newBook: Book) {
+    public func open(_ newBook: Book) {
         openTask?.cancel()
         openGeneration += 1
         let generation = openGeneration
@@ -111,7 +115,7 @@ final class PlayerController {
     }
 
     /// Re-opens the current book after a failed open, once the server is back.
-    func retryCurrentBook() {
+    public func retryCurrentBook() {
         guard let book else { return }
         open(book)
     }
@@ -224,7 +228,7 @@ final class PlayerController {
     // MARK: - Chapters
 
     /// Discards the cached chapters and reads them again from the file.
-    func refreshChapters() async {
+    public func refreshChapters() async {
         guard let book else { return }
         let generation = openGeneration
         chapterCache.removeValue(forKey: book.id)
@@ -277,7 +281,7 @@ final class PlayerController {
 
     // MARK: - Transport
 
-    func play() {
+    public func play() {
         guard isReady, book != nil else { return }
         // At the end of the book the player cannot advance, so play restarts it.
         if currentTime >= duration - 0.5 {
@@ -301,7 +305,7 @@ final class PlayerController {
         syncNowPlaying()
     }
 
-    func pause() {
+    public func pause() {
         player?.pause()
         isPlaying = false
         audioMeter.reset()
@@ -309,7 +313,7 @@ final class PlayerController {
         syncNowPlaying()
     }
 
-    func setPlaybackSpeed(_ speed: Double) {
+    public func setPlaybackSpeed(_ speed: Double) {
         playbackSpeed = speed
         UserDefaults.standard.set(speed, forKey: Self.playbackSpeedDefaultsKey)
         if isPlaying {
@@ -318,11 +322,11 @@ final class PlayerController {
         syncNowPlaying()
     }
 
-    func togglePlayback() {
+    public func togglePlayback() {
         isPlaying ? pause() : play()
     }
 
-    func seek(to seconds: Double) async {
+    public func seek(to seconds: Double) async {
         guard isReady, player != nil else { return }
         let target = max(0, min(seconds, duration))
         setCurrentTime(target)
@@ -338,12 +342,12 @@ final class PlayerController {
         syncNowPlaying()
     }
 
-    func skip(by seconds: Double) async {
+    public func skip(by seconds: Double) async {
         await seek(to: currentTime + seconds)
     }
 
     /// Jumps to a chapter and plays it, like clicking a song in a music app.
-    func jump(to chapter: Chapter) async {
+    public func jump(to chapter: Chapter) async {
         await seek(to: chapter.startSeconds)
         play()
     }
@@ -352,12 +356,12 @@ final class PlayerController {
     /// instead of going to the previous chapter, like a music app.
     private static let chapterRestartThreshold: Double = 3
 
-    func nextChapter() async {
+    public func nextChapter() async {
         guard let index = currentChapterIndex, index + 1 < chapters.count else { return }
         await seek(to: chapters[index + 1].startSeconds)
     }
 
-    func previousChapter() async {
+    public func previousChapter() async {
         guard let chapter = currentChapter else {
             if currentTime > Self.chapterRestartThreshold {
                 await seek(to: 0)
@@ -509,7 +513,7 @@ final class PlayerController {
     /// request has a chance to leave. Async reporting cannot finish during termination.
     private func observeAppTermination() {
         terminationObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification,
+            forName: Self.terminationNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -519,4 +523,10 @@ final class PlayerController {
             }
         }
     }
+
+    #if canImport(AppKit)
+    private static let terminationNotification = NSApplication.willTerminateNotification
+    #else
+    private static let terminationNotification = UIApplication.willTerminateNotification
+    #endif
 }

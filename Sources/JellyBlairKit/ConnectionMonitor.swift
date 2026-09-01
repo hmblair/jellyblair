@@ -5,10 +5,10 @@ import Observation
 /// When the server comes back, flushes any progress report that failed to send.
 @MainActor
 @Observable
-final class ConnectionMonitor {
+public final class ConnectionMonitor {
     private let client: JellyfinClient
 
-    private(set) var isServerReachable = true
+    public private(set) var isServerReachable = true
 
     private var pollTask: Task<Void, Never>?
 
@@ -16,7 +16,7 @@ final class ConnectionMonitor {
     private static let reachablePollInterval: TimeInterval = 15
     private static let unreachablePollInterval: TimeInterval = 5
 
-    init(client: JellyfinClient) {
+    public init(client: JellyfinClient) {
         self.client = client
     }
 
@@ -27,7 +27,7 @@ final class ConnectionMonitor {
         }
     }
 
-    func start() {
+    public func start() {
         guard pollTask == nil else { return }
         // The task holds the monitor weakly and only for the duration of each
         // poll, so a discarded monitor stops polling instead of leaking.

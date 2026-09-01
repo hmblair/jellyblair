@@ -5,28 +5,30 @@ import Observation
 /// performs logins, and signs out when the server rejects the session.
 @MainActor
 @Observable
-final class AppSession {
-    enum State {
+public final class AppSession {
+    public enum State {
         case verifying
         case needsLogin
         case signedIn(JellyfinClient)
     }
 
-    private(set) var state: State = .verifying
-    private(set) var loginErrorMessage: String?
-    private(set) var isAuthenticating = false
+    public private(set) var state: State = .verifying
+    public private(set) var loginErrorMessage: String?
+    public private(set) var isAuthenticating = false
 
     private let store = SessionStore()
 
-    var isSignedIn: Bool {
+    public init() {}
+
+    public var isSignedIn: Bool {
         if case .signedIn = state { return true }
         return false
     }
 
-    var storedServerURLString: String { store.serverURLString ?? "" }
-    var storedUsername: String { store.username ?? "" }
+    public var storedServerURLString: String { store.serverURLString ?? "" }
+    public var storedUsername: String { store.username ?? "" }
 
-    func start() async {
+    public func start() async {
         guard let stored = store.loadStoredSession() else {
             state = .needsLogin
             return
@@ -42,7 +44,7 @@ final class AppSession {
         }
     }
 
-    func login(serverURLString: String, username: String, password: String) async {
+    public func login(serverURLString: String, username: String, password: String) async {
         guard let url = Self.normalizeServerURL(serverURLString) else {
             loginErrorMessage = "Enter a valid server URL."
             return
@@ -64,7 +66,7 @@ final class AppSession {
         }
     }
 
-    func signOut() {
+    public func signOut() {
         store.clearCredentials()
         loginErrorMessage = nil
         state = .needsLogin

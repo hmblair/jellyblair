@@ -1,4 +1,6 @@
+#if canImport(AppKit)
 import AppKit
+#endif
 import Foundation
 import MediaPlayer
 
@@ -15,11 +17,11 @@ final class NowPlayingCenter {
         configureCommands()
     }
 
-    func update(bookTitle: String?, author: String?, chapterTitle: String?, elapsed: Double, duration: Double, rate: Double, isPlaying: Bool, artwork: NSImage?) {
+    func update(bookTitle: String?, author: String?, chapterTitle: String?, elapsed: Double, duration: Double, rate: Double, isPlaying: Bool, artwork: PlatformImage?) {
         let center = MPNowPlayingInfoCenter.default()
         guard let bookTitle else {
             center.nowPlayingInfo = nil
-            center.playbackState = .stopped
+            setPlaybackState(on: center, playing: false, stopped: true)
             return
         }
         var info: [String: Any] = [
@@ -38,7 +40,14 @@ final class NowPlayingCenter {
             info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: artwork.size) { _ in artwork }
         }
         center.nowPlayingInfo = info
-        center.playbackState = isPlaying ? .playing : .paused
+        setPlaybackState(on: center, playing: isPlaying, stopped: false)
+    }
+
+    /// The explicit playback state only exists on macOS; iOS infers it.
+    private func setPlaybackState(on center: MPNowPlayingInfoCenter, playing: Bool, stopped: Bool) {
+        #if os(macOS)
+        center.playbackState = stopped ? .stopped : (playing ? .playing : .paused)
+        #endif
     }
 
     private func configureCommands() {

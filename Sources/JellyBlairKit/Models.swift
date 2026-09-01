@@ -1,7 +1,7 @@
 import Foundation
 
 /// Number of Jellyfin ticks in one second.
-let ticksPerSecond: Double = 10_000_000
+public let ticksPerSecond: Double = 10_000_000
 
 struct AuthResponse: Decodable {
     let accessToken: String
@@ -29,17 +29,17 @@ struct ItemsResponse: Decodable {
     }
 }
 
-struct BookUserData: Decodable, Hashable {
-    let playbackPositionTicks: Int64
+public struct BookUserData: Decodable, Hashable {
+    public let playbackPositionTicks: Int64
 
     enum CodingKeys: String, CodingKey {
         case playbackPositionTicks = "PlaybackPositionTicks"
     }
 }
 
-struct Person: Decodable, Hashable {
-    let name: String
-    let type: String
+public struct Person: Decodable, Hashable {
+    public let name: String
+    public let type: String
 
     enum CodingKeys: String, CodingKey {
         case name = "Name"
@@ -47,14 +47,14 @@ struct Person: Decodable, Hashable {
     }
 }
 
-struct Book: Decodable, Identifiable, Hashable {
-    let id: String
-    let name: String
-    let runTimeTicks: Int64?
-    let userData: BookUserData?
-    let albumArtist: String?
-    let artists: [String]?
-    let people: [Person]?
+public struct Book: Decodable, Identifiable, Hashable {
+    public let id: String
+    public let name: String
+    public let runTimeTicks: Int64?
+    public let userData: BookUserData?
+    public let albumArtist: String?
+    public let artists: [String]?
+    public let people: [Person]?
 
     enum CodingKeys: String, CodingKey {
         case id = "Id"
@@ -66,7 +66,7 @@ struct Book: Decodable, Identifiable, Hashable {
         case people = "People"
     }
 
-    var author: String? {
+    public var author: String? {
         if let albumArtist, !albumArtist.isEmpty {
             return albumArtist
         }
@@ -75,37 +75,37 @@ struct Book: Decodable, Identifiable, Hashable {
     }
 
     /// "Author · H:MM:SS", or just the runtime when the author is unknown.
-    var authorAndRuntimeText: String {
+    public var authorAndRuntimeText: String {
         let time = formatTime(runTimeSeconds)
         guard let author else { return time }
         return "\(author) · \(time)"
     }
 
     /// Jellyfin stores audiobook narrators as people with the Composer type.
-    var narrator: String? {
+    public var narrator: String? {
         let names = (people ?? []).filter { $0.type == "Composer" }.map(\.name)
         return names.isEmpty ? nil : names.joined(separator: ", ")
     }
 
-    var runTimeSeconds: Double {
+    public var runTimeSeconds: Double {
         Double(runTimeTicks ?? 0) / ticksPerSecond
     }
 
-    var resumePositionSeconds: Double {
+    public var resumePositionSeconds: Double {
         Double(userData?.playbackPositionTicks ?? 0) / ticksPerSecond
     }
 }
 
 /// A chapter marker read from the audio file itself.
-struct Chapter: Identifiable, Hashable, Codable {
-    let index: Int
-    let title: String
-    let startSeconds: Double
-    let endSeconds: Double
+public struct Chapter: Identifiable, Hashable, Codable {
+    public let index: Int
+    public let title: String
+    public let startSeconds: Double
+    public let endSeconds: Double
 
-    var id: Int { index }
+    public var id: Int { index }
 
-    var durationSeconds: Double {
+    public var durationSeconds: Double {
         max(0, endSeconds - startSeconds)
     }
 }

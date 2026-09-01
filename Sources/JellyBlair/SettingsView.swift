@@ -1,3 +1,4 @@
+import JellyBlairKit
 import SwiftUI
 
 /// Settings pane showing the current server and account, with sign-out.
