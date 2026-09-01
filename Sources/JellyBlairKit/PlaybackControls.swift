@@ -95,6 +95,8 @@ public struct TransportControlsView: View {
 
     public init() {}
 
+    @State private var isHoveringSpeed = false
+
     public var body: some View {
         ZStack {
             HStack(spacing: 24) {
@@ -103,12 +105,14 @@ public struct TransportControlsView: View {
                 } label: {
                     Image(systemName: "backward.fill").font(.title3)
                 }
+                .buttonStyle(HoverScaleButtonStyle())
 
                 Button {
                     Task { await player.skip(by: -30) }
                 } label: {
                     Image(systemName: "gobackward.30").font(.title2)
                 }
+                .buttonStyle(HoverScaleButtonStyle())
 
                 Button {
                     player.togglePlayback()
@@ -116,26 +120,37 @@ public struct TransportControlsView: View {
                     Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(size: 44))
                 }
+                .buttonStyle(HoverScaleButtonStyle())
 
                 Button {
                     Task { await player.skip(by: 30) }
                 } label: {
                     Image(systemName: "goforward.30").font(.title2)
                 }
+                .buttonStyle(HoverScaleButtonStyle())
 
                 Button {
                     Task { await player.nextChapter() }
                 } label: {
                     Image(systemName: "forward.fill").font(.title3)
                 }
+                .buttonStyle(HoverScaleButtonStyle())
             }
 
             HStack {
                 Spacer()
                 speedMenu
+                    .buttonStyle(.plain)
+                    .menuStyle(.borderlessButton)
+                    .padding(4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.primary.opacity(isHoveringSpeed ? 0.1 : 0))
+                    )
+                    .onHover { isHoveringSpeed = $0 }
+                    .animation(.easeOut(duration: 0.1), value: isHoveringSpeed)
             }
         }
-        .buttonStyle(.plain)
         .disabled(!player.isReady)
         .opacity(player.isReady ? 1 : 0.4)
     }
@@ -157,5 +172,25 @@ public struct TransportControlsView: View {
                 .foregroundStyle(.secondary)
         }
         .fixedSize()
+    }
+}
+
+/// Plain button that grows slightly while the pointer hovers.
+private struct HoverScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HoverScaleBody(configuration: configuration)
+    }
+
+    private struct HoverScaleBody: View {
+        let configuration: Configuration
+
+        @State private var isHovering = false
+
+        var body: some View {
+            configuration.label
+                .scaleEffect(isHovering ? 1.08 : 1)
+                .onHover { isHovering = $0 }
+                .animation(.easeOut(duration: 0.12), value: isHovering)
+        }
     }
 }
