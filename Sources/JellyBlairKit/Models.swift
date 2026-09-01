@@ -49,9 +49,11 @@ public struct Person: Codable, Hashable {
 
 public struct MediaSource: Codable, Hashable {
     public let container: String?
+    public let size: Int64?
 
     enum CodingKeys: String, CodingKey {
         case container = "Container"
+        case size = "Size"
     }
 }
 
@@ -79,6 +81,11 @@ public struct Book: Codable, Identifiable, Hashable {
     /// The audio container format, for naming downloaded files.
     public var container: String? {
         mediaSources?.first?.container
+    }
+
+    /// The audio file's size in bytes, when the server reports it.
+    public var fileSizeBytes: Int64? {
+        mediaSources?.first?.size
     }
 
     public var author: String? {

@@ -193,7 +193,7 @@ public struct BookView: View {
                         .foregroundStyle(.secondary)
                 }
                 lengthLine
-                downloadControl
+                downloadRow
                 Spacer()
             }
             Spacer()
@@ -227,7 +227,7 @@ public struct BookView: View {
                     .multilineTextAlignment(.center)
             }
             lengthLine
-            downloadControl
+            downloadRow
         }
         .frame(maxWidth: .infinity)
         // The chapter list below competes for vertical space; without this the
@@ -312,6 +312,18 @@ public struct BookView: View {
             }
         }
         .font(.body.monospacedDigit())
+    }
+
+    /// The download control with the file's size beside it.
+    private var downloadRow: some View {
+        HStack(spacing: 8) {
+            downloadControl
+            if let bytes = book.fileSizeBytes {
+                Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     /// Download the book, cancel a download in progress, or show that the
