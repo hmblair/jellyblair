@@ -62,6 +62,9 @@ public final class BookCatalog {
     /// Tracks which books were used most recently and releases the parsed
     /// stream assets of the rest, since each can hold megabytes of index data.
     private func noteUse(of bookID: String) {
+        // Reads during view passes hit the same book repeatedly; the front
+        // check keeps them free of list churn.
+        guard assetUseOrder.first != bookID else { return }
         assetUseOrder.removeAll { $0 == bookID }
         assetUseOrder.insert(bookID, at: 0)
         for staleID in assetUseOrder.dropFirst(Self.retainedAssetCount) {

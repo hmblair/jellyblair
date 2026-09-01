@@ -428,10 +428,13 @@ public struct BookView: View {
     // MARK: - Chapters
 
     private func chapterList(_ proxy: ScrollViewProxy) -> some View {
-        List(visibleChapters) { chapter in
+        // Computed once per pass: a long book realizes over a thousand rows,
+        // so per-row work must stay constant-time.
+        let marked = markedChapterIndex
+        return List(visibleChapters) { chapter in
                 ChapterRow(
                     chapter: chapter,
-                    state: rowState(for: chapter),
+                    state: rowState(for: chapter, marked: marked),
                     meter: player.audioMeter
                 )
                 .contentShape(Rectangle())
@@ -463,18 +466,12 @@ public struct BookView: View {
                     ContentUnavailableView.search(text: chapterQuery)
                 }
             }
-            .onAppear {
-                scrollToMarkedChapter(proxy)
-            }
-            .onChange(of: chapters) {
-                scrollToMarkedChapter(proxy)
-            }
-            .onChange(of: model.resumePositionSeconds) {
-                guard !isLoaded else { return }
-                scrollToMarkedChapter(proxy)
-            }
-            .onChange(of: player.currentChapterIndex) {
-                guard isLoaded, isAutoScrollWindowOpen else { return }
+            // One trigger for centering: fires on appear and whenever the
+            // marked chapter itself moves, instead of on every upstream
+            // data change. Each scroll walks the whole row list, so extra
+            // firings are expensive on long books.
+            .onChange(of: markedChapterIndex, initial: true) {
+                guard !isLoaded || isAutoScrollWindowOpen else { return }
                 scrollToMarkedChapter(proxy)
             }
             .task {
@@ -525,8 +522,8 @@ public struct BookView: View {
 
     /// Played and upcoming are positional relative to the marked chapter,
     /// so the list mirrors the book's progress.
-    private func rowState(for chapter: Chapter) -> ChapterRowState {
-        guard let marked = markedChapterIndex else { return .upcoming }
+    private func rowState(for chapter: Chapter, marked: Int?) -> ChapterRowState {
+        guard let marked else { return .upcoming }
         if chapter.index < marked { return .played }
         if chapter.index > marked { return .upcoming }
         guard isLoaded else { return .current(.bookmark) }
