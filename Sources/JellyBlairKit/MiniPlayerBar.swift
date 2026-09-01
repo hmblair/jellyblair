@@ -85,6 +85,8 @@ public struct BookRow: View {
         self.isLoaded = isLoaded
     }
 
+    @State private var isHovering = false
+
     public var body: some View {
         HStack(spacing: 10) {
             BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fill)
@@ -108,5 +110,20 @@ public struct BookRow: View {
             }
         }
         .padding(.vertical, 2)
+        // The row stretches to the full cell width, so hover responds
+        // anywhere the click does.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        // The hover pill mimics the system selection pill. Its geometry is
+        // not exposed by SwiftUI, so these insets mirror it by observation
+        // and may need retuning after a macOS update.
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.primary.opacity(0.06))
+                .opacity(isHovering ? 1 : 0)
+                .animation(.easeOut(duration: 0.1), value: isHovering)
+                .padding(.horizontal, 10)
+        )
+        .onHover { isHovering = $0 }
     }
 }
