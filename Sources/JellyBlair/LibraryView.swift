@@ -6,9 +6,15 @@ struct LibraryView: View {
     @Binding var selection: String?
 
     var body: some View {
-        List(library.books, selection: $selection) { book in
-            BookRow(book: book, imageURL: library.client.imageURL(for: book))
-                .tag(book.id)
+        List(selection: $selection) {
+            ForEach(library.authorGroups) { group in
+                Section(group.name) {
+                    ForEach(group.books) { book in
+                        BookRow(book: book, imageURL: library.client.imageURL(for: book))
+                            .tag(book.id)
+                    }
+                }
+            }
         }
         .listStyle(.sidebar)
         .navigationTitle("Audiobooks")
@@ -38,7 +44,7 @@ struct BookRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(book.name)
                     .lineLimit(1)
-                Text(book.authorAndRuntimeText)
+                Text(formatTime(book.runTimeSeconds))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
