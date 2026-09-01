@@ -105,12 +105,12 @@ public final class PlayerController {
 
     // MARK: - Opening and closing books
 
-    public func open(_ newBook: Book) {
+    public func open(_ newBook: Book, playWhenReady: Bool = false, startAtSeconds: Double? = nil) {
         openTask?.cancel()
         openGeneration += 1
         let generation = openGeneration
         openTask = Task {
-            await performOpen(newBook, generation: generation)
+            await performOpen(newBook, generation: generation, playWhenReady: playWhenReady, startAtSeconds: startAtSeconds)
         }
     }
 
@@ -120,7 +120,7 @@ public final class PlayerController {
         open(book)
     }
 
-    private func performOpen(_ newBook: Book, generation: Int) async {
+    private func performOpen(_ newBook: Book, generation: Int, playWhenReady: Bool, startAtSeconds: Double?) async {
         await closeCurrentBook()
         guard generation == openGeneration else { return }
 
@@ -131,11 +131,16 @@ public final class PlayerController {
         isReady = false
         duration = newBook.runTimeSeconds
         setChapters(chapterCache[newBook.id] ?? [])
-        setCurrentTime(newBook.resumePositionSeconds)
+        setCurrentTime(startAtSeconds ?? newBook.resumePositionSeconds)
 
-        let startPosition = await resolveResumePosition(for: newBook)
-        guard generation == openGeneration else { return }
-        setCurrentTime(startPosition)
+        let startPosition: Double
+        if let startAtSeconds {
+            startPosition = startAtSeconds
+        } else {
+            startPosition = await resolveResumePosition(for: newBook)
+            guard generation == openGeneration else { return }
+            setCurrentTime(startPosition)
+        }
 
         let asset = client.streamAsset(for: newBook)
         let item = AVPlayerItem(asset: asset)
@@ -162,6 +167,9 @@ public final class PlayerController {
         if startPosition > 0 {
             await seek(to: startPosition)
             guard generation == openGeneration else { return }
+        }
+        if playWhenReady {
+            play()
         }
         await loadArtwork(for: newBook, generation: generation)
         await loadChaptersIfNeeded(for: newBook, from: asset, generation: generation)
@@ -226,6 +234,30 @@ public final class PlayerController {
     }
 
     // MARK: - Chapters
+
+    /// Returns the chapters already known for a book that is not loaded.
+    public func cachedChapters(for book: Book) -> [Chapter] {
+        chapterCache[book.id] ?? []
+    }
+
+    /// Book IDs whose chapters are being read for a preview.
+    private var chapterFetchesInFlight: Set<String> = []
+
+    public func isFetchingChapters(for book: Book) -> Bool {
+        chapterFetchesInFlight.contains(book.id)
+    }
+
+    /// Reads and caches a book's chapters without loading it into the player.
+    public func fetchChapters(for book: Book) async {
+        guard chapterCache[book.id] == nil, !chapterFetchesInFlight.contains(book.id) else { return }
+        chapterFetchesInFlight.insert(book.id)
+        defer { chapterFetchesInFlight.remove(book.id) }
+        let asset = client.streamAsset(for: book)
+        let loaded = await loadChapters(from: asset, bookDuration: book.runTimeSeconds)
+        guard !loaded.isEmpty else { return }
+        chapterCache[book.id] = loaded
+        chapterStore.save(chapterCache)
+    }
 
     /// Discards the cached chapters and reads them again from the file.
     public func refreshChapters() async {

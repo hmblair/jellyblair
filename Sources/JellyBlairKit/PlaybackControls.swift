@@ -1,14 +1,18 @@
-import JellyBlairKit
 import SwiftUI
 
 /// Shows the listening time left in the book at the current speed.
-/// Minute granularity keeps the label stable between time ticks.
-struct RemainingTimeView: View {
+/// Minute granularity keeps the label stable between time ticks, and keeping
+/// it in its own view spares the header from frequent re-renders.
+public struct RemainingTimeView: View {
     let player: PlayerController
 
-    var body: some View {
+    public init(player: PlayerController) {
+        self.player = player
+    }
+
+    public var body: some View {
         Text(text)
-            .font(.footnote.monospacedDigit())
+            .font(.callout.monospacedDigit())
             .foregroundStyle(.secondary)
     }
 
@@ -25,13 +29,17 @@ struct RemainingTimeView: View {
 
 /// The seek slider and time readout. This is the only view that reads
 /// the playback time, so frequent updates re-render just this subtree.
-struct SeekBarView: View {
+public struct SeekBarView: View {
     let player: PlayerController
 
     @State private var sliderPosition: Double = 0
     @State private var isDraggingSlider = false
 
-    var body: some View {
+    public init(player: PlayerController) {
+        self.player = player
+    }
+
+    public var body: some View {
         VStack(spacing: 4) {
             slider
                 .disabled(!player.isReady)
@@ -85,14 +93,18 @@ struct SeekBarView: View {
 }
 
 /// Play/pause, skip buttons, chapter navigation, and the playback speed menu.
-struct TransportControlsView: View {
+public struct TransportControlsView: View {
     let player: PlayerController
 
     private static let speeds: [Double] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
 
-    var body: some View {
+    public init(player: PlayerController) {
+        self.player = player
+    }
+
+    public var body: some View {
         ZStack {
-            HStack(spacing: 22) {
+            HStack(spacing: 24) {
                 Button {
                     Task { await player.previousChapter() }
                 } label: {
@@ -152,70 +164,5 @@ struct TransportControlsView: View {
                 .foregroundStyle(.secondary)
         }
         .fixedSize()
-    }
-}
-
-enum ChapterRowState {
-    case played
-    case current
-    case upcoming
-}
-
-struct ChapterRow: View {
-    let chapter: Chapter
-    let state: ChapterRowState
-    let isPlaying: Bool
-    let meter: AudioLevelMeter
-
-    var body: some View {
-        HStack {
-            icon
-                .frame(width: 16)
-            Text(chapter.title)
-                .fontWeight(state == .current ? .semibold : .regular)
-                .foregroundStyle(state == .played ? .secondary : .primary)
-            Spacer()
-            Text(formatTime(chapter.durationSeconds))
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 2)
-    }
-
-    @ViewBuilder
-    private var icon: some View {
-        switch state {
-        case .played:
-            Image(systemName: "checkmark")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        case .current:
-            AudioBarsView(meter: meter, isPlaying: isPlaying)
-        case .upcoming:
-            Color.clear
-        }
-    }
-}
-
-/// Bars driven by the live band levels of the playing audio.
-struct AudioBarsView: View {
-    let meter: AudioLevelMeter
-    let isPlaying: Bool
-
-    private static let barMaxHeight: CGFloat = 11
-    private static let barMinHeight: CGFloat = 2
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { _ in
-            let bands = meter.currentBands()
-            HStack(alignment: .bottom, spacing: 1.5) {
-                ForEach(0..<AudioLevelMeter.bandCount, id: \.self) { index in
-                    Capsule()
-                        .fill(Color.accentColor)
-                        .frame(width: 2, height: Self.barMinHeight + CGFloat(bands[index]) * (Self.barMaxHeight - Self.barMinHeight))
-                }
-            }
-            .frame(height: Self.barMaxHeight, alignment: .bottom)
-        }
     }
 }

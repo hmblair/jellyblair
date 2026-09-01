@@ -146,7 +146,7 @@ public final class JellyfinClient {
     }
 
     /// Fetches a single book with fresh user data, such as the resume position.
-    func fetchBook(id: String) async -> Book? {
+    public func fetchBook(id: String) async -> Book? {
         guard let userID else { return nil }
         let request = makeRequest(path: "Users/\(userID)/Items/\(id)")
         guard let data = try? await send(request) else { return nil }

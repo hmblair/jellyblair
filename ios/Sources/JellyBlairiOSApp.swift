@@ -50,6 +50,7 @@ struct MainScreen: View {
     @State private var library: LibraryViewModel
     @State private var player: PlayerController
     @State private var connection: ConnectionMonitor
+    @State private var path: [Book] = []
 
     init(session: AppSession, client: JellyfinClient) {
         self.session = session
@@ -59,8 +60,21 @@ struct MainScreen: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             LibraryScreen(session: session, library: library, player: player)
+                .navigationDestination(for: Book.self) { book in
+                    BookView(book: book, player: player, client: library.client)
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // The bar shows everywhere except the loaded book's own screen,
+            // which already carries the full controls.
+            if let loadedBook = player.book, path.last?.id != loadedBook.id {
+                MiniPlayerBar(player: player, client: library.client) {
+                    path = [loadedBook]
+                }
+            }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if !connection.isServerReachable {

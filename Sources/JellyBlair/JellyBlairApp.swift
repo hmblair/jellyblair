@@ -83,15 +83,23 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            LibraryView(library: library, selection: $selectedBookID)
-                .navigationSplitViewColumnWidth(min: 220, ideal: 260)
-        } detail: {
-            if let selectedBook {
-                PlayerView(player: player, imageURL: library.client.imageURL(for: selectedBook))
-                    .id(selectedBook.id)
-            } else {
-                ContentUnavailableView("Select an audiobook", systemImage: "headphones")
+        VStack(spacing: 0) {
+            NavigationSplitView {
+                LibraryView(library: library, selection: $selectedBookID, loadedBookID: player.book?.id)
+                    .navigationSplitViewColumnWidth(min: 220, ideal: 260)
+            } detail: {
+                if let selectedBook {
+                    BookView(book: selectedBook, player: player, client: library.client)
+                        .id(selectedBook.id)
+                } else {
+                    ContentUnavailableView("Select an audiobook", systemImage: "headphones")
+                }
+            }
+
+            if let loadedBook = player.book, loadedBook.id != selectedBookID {
+                MiniPlayerBar(player: player, client: library.client) {
+                    selectedBookID = loadedBook.id
+                }
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -102,10 +110,6 @@ struct ContentView: View {
         .task {
             connection.start()
             await library.load()
-        }
-        .onChange(of: selectedBookID) { _, newID in
-            guard let newBook = library.books.first(where: { $0.id == newID }) else { return }
-            player.open(newBook)
         }
         .onChange(of: connection.isServerReachable) { _, reachable in
             guard reachable, library.errorMessage != nil else { return }

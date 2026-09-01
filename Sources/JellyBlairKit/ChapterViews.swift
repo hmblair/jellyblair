@@ -1,0 +1,90 @@
+import SwiftUI
+
+public enum ChapterRowState {
+    case played
+    case current
+    case upcoming
+}
+
+public struct ChapterRow: View {
+    let chapter: Chapter
+    let state: ChapterRowState
+    let isLoadedBook: Bool
+    let isPlaying: Bool
+    let meter: AudioLevelMeter
+
+    public init(chapter: Chapter, state: ChapterRowState, isLoadedBook: Bool, isPlaying: Bool, meter: AudioLevelMeter) {
+        self.chapter = chapter
+        self.state = state
+        self.isLoadedBook = isLoadedBook
+        self.isPlaying = isPlaying
+        self.meter = meter
+    }
+
+    public var body: some View {
+        HStack {
+            icon
+                .frame(width: 16)
+            Text(chapter.title)
+                .fontWeight(state == .current ? .semibold : .regular)
+                .foregroundStyle(state == .played ? .secondary : .primary)
+            Spacer()
+            Text(formatTime(chapter.durationSeconds))
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        switch state {
+        case .played:
+            Image(systemName: "checkmark")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        case .current:
+            // The loaded book shows the bars: live while playing, flat while
+            // paused (the meter resets to zero on pause). A preview of another
+            // book gets a bookmark, so the bars never freeze on another
+            // book's levels.
+            if isLoadedBook {
+                AudioBarsView(meter: meter, isPlaying: isPlaying)
+            } else {
+                Image(systemName: "bookmark.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+            }
+        case .upcoming:
+            Color.clear
+        }
+    }
+}
+
+/// Bars driven by the live band levels of the playing audio.
+public struct AudioBarsView: View {
+    let meter: AudioLevelMeter
+    let isPlaying: Bool
+
+    private static let barMaxHeight: CGFloat = 11
+    private static let barMinHeight: CGFloat = 2
+
+    public init(meter: AudioLevelMeter, isPlaying: Bool) {
+        self.meter = meter
+        self.isPlaying = isPlaying
+    }
+
+    public var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { _ in
+            let bands = meter.currentBands()
+            HStack(alignment: .bottom, spacing: 1.5) {
+                ForEach(0..<AudioLevelMeter.bandCount, id: \.self) { index in
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(width: 2, height: Self.barMinHeight + CGFloat(bands[index]) * (Self.barMaxHeight - Self.barMinHeight))
+                }
+            }
+            .frame(height: Self.barMaxHeight, alignment: .bottom)
+        }
+    }
+}
