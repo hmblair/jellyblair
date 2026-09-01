@@ -5,7 +5,7 @@ BUNDLE := $(DIST_DIR)/$(APP_NAME).app
 
 INSTALL_DIR := /Applications
 
-.PHONY: all dist run install clean
+.PHONY: all dist run install iphone clean
 
 all:
 	swift build -c release
@@ -25,6 +25,16 @@ install: dist
 	rm -rf $(INSTALL_DIR)/$(APP_NAME).app
 	cp -R $(BUNDLE) $(INSTALL_DIR)/
 	@echo "Installed $(INSTALL_DIR)/$(APP_NAME).app"
+
+IOS_DIR := ios
+IOS_APP := $(IOS_DIR)/build/Build/Products/Debug-iphoneos/JellyBlairiOS.app
+IPHONE := Hamish’s iPhone
+
+iphone:
+	cd $(IOS_DIR) && xcodegen generate
+	cd $(IOS_DIR) && xcodebuild -project JellyBlairiOS.xcodeproj -scheme JellyBlairiOS -destination generic/platform=iOS -derivedDataPath build -allowProvisioningUpdates -quiet build
+	xcrun devicectl device install app --device "$(IPHONE)" $(IOS_APP)
+	@echo "Installed on $(IPHONE)"
 
 clean:
 	swift package clean
