@@ -36,6 +36,22 @@ public final class LibraryViewModel {
         isLoading = false
     }
 
+    /// Groups filtered to books whose title, author, or narrator contains
+    /// the query, keeping their author headings. An empty query passes all.
+    public func authorGroups(matching query: String) -> [AuthorGroup] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return authorGroups }
+        return authorGroups.compactMap { group in
+            let matches = group.books.filter { book in
+                book.name.localizedCaseInsensitiveContains(trimmed)
+                    || (book.author?.localizedCaseInsensitiveContains(trimmed) ?? false)
+                    || (book.narrator?.localizedCaseInsensitiveContains(trimmed) ?? false)
+            }
+            guard !matches.isEmpty else { return nil }
+            return AuthorGroup(name: group.name, books: matches)
+        }
+    }
+
     /// Groups books under their authors. Books keep the server's title order
     /// within each group, and authors sort ignoring a leading article.
     private static func groupByAuthor(_ books: [Book]) -> [AuthorGroup] {

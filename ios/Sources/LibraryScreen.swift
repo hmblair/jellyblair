@@ -9,10 +9,15 @@ struct LibraryScreen: View {
     @Environment(PlayerController.self) private var player
 
     @State private var isShowingSettings = false
+    @State private var searchQuery = ""
+
+    private var visibleGroups: [AuthorGroup] {
+        library.authorGroups(matching: searchQuery)
+    }
 
     var body: some View {
         List {
-            ForEach(library.authorGroups) { group in
+            ForEach(visibleGroups) { group in
                 Section(group.name) {
                     ForEach(group.books) { book in
                         NavigationLink(value: book) {
@@ -22,7 +27,8 @@ struct LibraryScreen: View {
                 }
             }
         }
-        .navigationTitle("Audiobooks")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search")
         .refreshable {
             await library.load()
         }
@@ -33,6 +39,8 @@ struct LibraryScreen: View {
                 } else if let message = library.errorMessage {
                     ContentUnavailableView("Cannot load the library", systemImage: "exclamationmark.triangle", description: Text(message))
                 }
+            } else if visibleGroups.isEmpty {
+                ContentUnavailableView.search(text: searchQuery)
             }
         }
         .toolbar {

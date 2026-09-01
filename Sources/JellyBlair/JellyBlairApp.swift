@@ -98,6 +98,8 @@ struct ContentView: View {
                 }
             }
         }
+        // Blank, so the window shows no title text over the book screen.
+        .navigationTitle("")
         .safeAreaInset(edge: .top, spacing: 0) {
             if !scope.connection.isServerReachable {
                 ConnectionBanner()
