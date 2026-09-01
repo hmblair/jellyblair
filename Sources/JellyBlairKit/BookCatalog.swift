@@ -42,6 +42,10 @@ public final class BookCatalog {
         return model
     }
 
+    public func isDownloaded(_ book: Book) -> Bool {
+        model(for: book).downloadState == .downloaded
+    }
+
     public func coverURL(for book: Book) -> URL {
         client.imageURL(for: book)
     }

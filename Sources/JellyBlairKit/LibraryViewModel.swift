@@ -14,6 +14,13 @@ public struct BookGroup: Identifiable, Hashable {
 
     public var id: String { "\(kind):\(name)" }
 
+    /// The group narrowed to books passing the predicate, or nil when none do.
+    public func keeping(_ isIncluded: (Book) -> Bool) -> BookGroup? {
+        let kept = books.filter(isIncluded)
+        guard !kept.isEmpty else { return nil }
+        return BookGroup(name: name, kind: kind, books: kept)
+    }
+
     public var roleLabel: String {
         switch kind {
         case .author:

@@ -2,21 +2,62 @@ import JellyBlairKit
 import SwiftUI
 
 /// The book list, grouped by author, with navigation to each book's screen.
+/// A floating bar holds the search field and the downloaded-only filter;
+/// rows fade out beneath it as they scroll up.
 struct LibraryScreen: View {
     let session: AppSession
 
     @Environment(LibraryViewModel.self) private var library
-    @Environment(\.openAuthor) private var openAuthor
     @Environment(PlayerController.self) private var player
+    @Environment(BookCatalog.self) private var catalog
+    @Environment(\.openAuthor) private var openAuthor
 
     @State private var isShowingSettings = false
     @State private var searchQuery = ""
+    @State private var showDownloadedOnly = false
+
+    /// Height of the region the floating bar occupies over the list.
+    private static let barZoneHeight: CGFloat = 34
 
     private var visibleGroups: [BookGroup] {
-        library.authorGroups(matching: searchQuery)
+        library.authorGroups(matching: searchQuery).compactMap { group in
+            showDownloadedOnly ? group.keeping { catalog.isDownloaded($0) } : group
+        }
     }
 
     var body: some View {
+        ZStack(alignment: .top) {
+            bookList
+                .mask(
+                    VStack(spacing: 0) {
+                        Color.clear
+                            .frame(height: Self.barZoneHeight)
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 22)
+                        Rectangle()
+                    }
+                )
+
+            HStack(spacing: 8) {
+                CapsuleSearchField("Search", text: $searchQuery)
+                filterToggle
+            }
+            .padding(.horizontal, 20)
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            Button {
+                isShowingSettings = true
+            } label: {
+                Image(systemName: "gearshape")
+            }
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsScreen(session: session)
+        }
+    }
+
+    private var bookList: some View {
         List {
             ForEach(visibleGroups) { group in
                 Section {
@@ -30,8 +71,9 @@ struct LibraryScreen: View {
                 }
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search")
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Color.clear.frame(height: Self.barZoneHeight + 6)
+        }
         .refreshable {
             await library.load()
         }
@@ -46,16 +88,17 @@ struct LibraryScreen: View {
                 ContentUnavailableView.search(text: searchQuery)
             }
         }
-        .toolbar {
-            Button {
-                isShowingSettings = true
-            } label: {
-                Image(systemName: "gearshape")
-            }
+    }
+
+    private var filterToggle: some View {
+        Button {
+            showDownloadedOnly.toggle()
+        } label: {
+            Image(systemName: showDownloadedOnly ? "arrow.down.circle.fill" : "arrow.down.circle")
+                .font(.title2)
+                .foregroundStyle(showDownloadedOnly ? Color.green : Color.secondary)
         }
-        .sheet(isPresented: $isShowingSettings) {
-            SettingsScreen(session: session)
-        }
+        .buttonStyle(.plain)
     }
 }
 

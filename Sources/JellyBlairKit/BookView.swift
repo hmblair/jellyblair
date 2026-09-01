@@ -146,31 +146,8 @@ public struct BookView: View {
     /// Height of the region the floating filter bar occupies over the list.
     private static let filterBarZoneHeight: CGFloat = 34
 
-    /// A slim filter row attached to the top of the chapter list.
     private var chapterFilterField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            TextField("Search Chapters", text: $chapterQuery)
-                .textFieldStyle(.plain)
-                .autocorrectionDisabled()
-            if !chapterQuery.isEmpty {
-                Button {
-                    chapterQuery = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 8)
-        .background(
-            Capsule()
-                .fill(Color.primary.opacity(0.06))
-        )
+        CapsuleSearchField("Search Chapters", text: $chapterQuery)
     }
 
     // MARK: - Header

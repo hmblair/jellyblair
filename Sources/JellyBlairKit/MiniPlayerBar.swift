@@ -106,8 +106,14 @@ public struct BookRow: View {
                     .lineLimit(1)
             }
 
+            Spacer()
+
+            if catalog.model(for: book).downloadState == .downloaded {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.green)
+            }
             if isLoaded {
-                Spacer()
                 AudioBarsView(meter: player.audioMeter, isPlaying: player.isPlaying)
             }
         }
