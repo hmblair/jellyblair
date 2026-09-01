@@ -90,6 +90,10 @@ public struct AudioBarsView: View {
     let meter: AudioLevelMeter
     let isPlaying: Bool
 
+    /// Increased inside a selected list row, in sync with the accent pill,
+    /// so the bars whiten exactly when the system whitens the row's text.
+    @Environment(\.backgroundProminence) private var backgroundProminence
+
     private static let barMaxHeight: CGFloat = 11
     private static let barMinHeight: CGFloat = 2
 
@@ -104,7 +108,7 @@ public struct AudioBarsView: View {
             HStack(alignment: .bottom, spacing: 1.5) {
                 ForEach(0..<AudioLevelMeter.bandCount, id: \.self) { index in
                     Capsule()
-                        .fill(Color.accentColor)
+                        .fill(backgroundProminence == .increased ? Color.white : Color.accentColor)
                         .frame(width: 2, height: Self.barMinHeight + CGFloat(bands[index]) * (Self.barMaxHeight - Self.barMinHeight))
                 }
             }

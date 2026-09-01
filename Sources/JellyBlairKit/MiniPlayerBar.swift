@@ -73,12 +73,13 @@ public struct MiniPlayerBar: View {
     }
 }
 
-/// A sidebar or list row for one book, with a speaker mark on the loaded one.
+/// A sidebar or list row for one book, with level bars on the loaded one.
 public struct BookRow: View {
     let book: Book
     let isLoaded: Bool
 
     @Environment(BookCatalog.self) private var catalog
+    @Environment(PlayerController.self) private var player
 
     public init(book: Book, isLoaded: Bool) {
         self.book = book
@@ -104,9 +105,7 @@ public struct BookRow: View {
 
             if isLoaded {
                 Spacer()
-                Image(systemName: "speaker.wave.2.fill")
-                    .font(.caption)
-                    .foregroundStyle(Color.accentColor)
+                AudioBarsView(meter: player.audioMeter, isPlaying: player.isPlaying)
             }
         }
         .padding(.vertical, 2)
