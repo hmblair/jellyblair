@@ -6,8 +6,9 @@ import SwiftUI
 /// whatever is playing.
 public struct BookView: View {
     let book: Book
-    let player: PlayerController
-    let client: JellyfinClient
+
+    @Environment(PlayerController.self) private var player
+    @Environment(BookCatalog.self) private var catalog
 
     @State private var isAutoScrollWindowOpen = true
 
@@ -16,10 +17,8 @@ public struct BookView: View {
     /// and misplace the progress marks.
     @State private var refreshedBook: Book?
 
-    public init(book: Book, player: PlayerController, client: JellyfinClient) {
+    public init(book: Book) {
         self.book = book
-        self.player = player
-        self.client = client
     }
 
     private var isLoaded: Bool {
@@ -31,7 +30,7 @@ public struct BookView: View {
     }
 
     private var chapters: [Chapter] {
-        isLoaded ? player.chapters : player.cachedChapters(for: book)
+        isLoaded ? player.chapters : catalog.cachedChapters(for: book)
     }
 
     public var body: some View {
@@ -41,8 +40,8 @@ public struct BookView: View {
                 if let message = player.playbackErrorMessage {
                     errorBanner(message)
                 }
-                SeekBarView(player: player)
-                TransportControlsView(player: player)
+                SeekBarView()
+                TransportControlsView()
             } else {
                 playButton
             }
@@ -111,13 +110,13 @@ public struct BookView: View {
     #endif
 
     private var cover: some View {
-        BookCoverImage(bookID: book.id, url: client.imageURL(for: book), contentMode: .fit)
+        BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fit)
     }
 
     @ViewBuilder
     private var positionLine: some View {
         if isLoaded {
-            RemainingTimeView(player: player)
+            RemainingTimeView()
         } else if displayBook.resumePositionSeconds > 0 {
             Text("\(formatTime(displayBook.resumePositionSeconds)) in")
                 .font(.callout.monospacedDigit())
@@ -154,8 +153,6 @@ public struct BookView: View {
                 ChapterRow(
                     chapter: chapter,
                     state: rowState(for: chapter),
-                    isLoadedBook: isLoaded,
-                    isPlaying: isLoaded && player.isPlaying,
                     meter: player.audioMeter
                 )
                 .contentShape(Rectangle())
@@ -170,7 +167,7 @@ public struct BookView: View {
             .listStyle(.inset)
             .overlay {
                 if chapters.isEmpty {
-                    if player.isFetchingChapters(for: book) {
+                    if catalog.isFetchingChapters(for: book) {
                         ProgressView()
                     } else {
                         Text("No chapters in this file")
@@ -197,8 +194,8 @@ public struct BookView: View {
             }
             .task(id: book.id) {
                 guard !isLoaded else { return }
-                async let freshFetch = client.fetchBook(id: book.id)
-                await player.fetchChapters(for: book)
+                async let freshFetch = catalog.freshBook(book)
+                await catalog.fetchChapters(for: book)
                 if let fresh = await freshFetch {
                     refreshedBook = fresh
                 }
@@ -228,7 +225,8 @@ public struct BookView: View {
     private func rowState(for chapter: Chapter) -> ChapterRowState {
         guard let marked = markedChapterIndex else { return .upcoming }
         if chapter.index < marked { return .played }
-        if chapter.index == marked { return .current }
-        return .upcoming
+        if chapter.index > marked { return .upcoming }
+        guard isLoaded else { return .current(.bookmark) }
+        return .current(player.isPlaying ? .playing : .paused)
     }
 }

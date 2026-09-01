@@ -1,23 +1,20 @@
 import JellyBlairKit
 import SwiftUI
 
-/// Sidebar list of audiobooks with cover art and runtime.
+/// Sidebar list of audiobooks, grouped by author.
 struct LibraryView: View {
-    let library: LibraryViewModel
     @Binding var selection: String?
-    let loadedBookID: String?
+
+    @Environment(LibraryViewModel.self) private var library
+    @Environment(PlayerController.self) private var player
 
     var body: some View {
         List(selection: $selection) {
             ForEach(library.authorGroups) { group in
                 Section(group.name) {
                     ForEach(group.books) { book in
-                        BookRow(
-                            book: book,
-                            imageURL: library.client.imageURL(for: book),
-                            isLoaded: book.id == loadedBookID
-                        )
-                        .tag(book.id)
+                        BookRow(book: book, isLoaded: book.id == player.book?.id)
+                            .tag(book.id)
                     }
                 }
             }
@@ -36,4 +33,3 @@ struct LibraryView: View {
         }
     }
 }
-

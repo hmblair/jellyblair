@@ -1,24 +1,36 @@
 import SwiftUI
 
-public enum ChapterRowState {
+/// A chapter row's relationship to the listener's position.
+public enum ChapterRowState: Equatable {
+    /// How to mark the current chapter.
+    public enum CurrentMarker: Equatable {
+        /// The loaded book is audibly playing here: live level bars.
+        case playing
+        /// The loaded book is paused here: flat level bars.
+        case paused
+        /// A preview of another book resumes here: a bookmark.
+        case bookmark
+    }
+
     case played
-    case current
+    case current(CurrentMarker)
     case upcoming
 }
 
 public struct ChapterRow: View {
     let chapter: Chapter
     let state: ChapterRowState
-    let isLoadedBook: Bool
-    let isPlaying: Bool
     let meter: AudioLevelMeter
 
-    public init(chapter: Chapter, state: ChapterRowState, isLoadedBook: Bool, isPlaying: Bool, meter: AudioLevelMeter) {
+    public init(chapter: Chapter, state: ChapterRowState, meter: AudioLevelMeter) {
         self.chapter = chapter
         self.state = state
-        self.isLoadedBook = isLoadedBook
-        self.isPlaying = isPlaying
         self.meter = meter
+    }
+
+    private var isCurrent: Bool {
+        if case .current = state { return true }
+        return false
     }
 
     public var body: some View {
@@ -26,7 +38,7 @@ public struct ChapterRow: View {
             icon
                 .frame(width: 16)
             Text(chapter.title)
-                .fontWeight(state == .current ? .semibold : .regular)
+                .fontWeight(isCurrent ? .semibold : .regular)
                 .foregroundStyle(state == .played ? .secondary : .primary)
             Spacer()
             Text(formatTime(chapter.durationSeconds))
@@ -43,18 +55,14 @@ public struct ChapterRow: View {
             Image(systemName: "checkmark")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
-        case .current:
-            // The loaded book shows the bars: live while playing, flat while
-            // paused (the meter resets to zero on pause). A preview of another
-            // book gets a bookmark, so the bars never freeze on another
-            // book's levels.
-            if isLoadedBook {
-                AudioBarsView(meter: meter, isPlaying: isPlaying)
-            } else {
-                Image(systemName: "bookmark.fill")
-                    .font(.caption)
-                    .foregroundStyle(Color.accentColor)
-            }
+        case .current(.playing):
+            AudioBarsView(meter: meter, isPlaying: true)
+        case .current(.paused):
+            AudioBarsView(meter: meter, isPlaying: false)
+        case .current(.bookmark):
+            Image(systemName: "bookmark.fill")
+                .font(.caption)
+                .foregroundStyle(Color.accentColor)
         case .upcoming:
             Color.clear
         }

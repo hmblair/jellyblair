@@ -4,11 +4,9 @@ import SwiftUI
 /// Minute granularity keeps the label stable between time ticks, and keeping
 /// it in its own view spares the header from frequent re-renders.
 public struct RemainingTimeView: View {
-    let player: PlayerController
+    @Environment(PlayerController.self) private var player
 
-    public init(player: PlayerController) {
-        self.player = player
-    }
+    public init() {}
 
     public var body: some View {
         Text(text)
@@ -30,14 +28,12 @@ public struct RemainingTimeView: View {
 /// The seek slider and time readout. This is the only view that reads
 /// the playback time, so frequent updates re-render just this subtree.
 public struct SeekBarView: View {
-    let player: PlayerController
+    @Environment(PlayerController.self) private var player
 
     @State private var sliderPosition: Double = 0
     @State private var isDraggingSlider = false
 
-    public init(player: PlayerController) {
-        self.player = player
-    }
+    public init() {}
 
     public var body: some View {
         VStack(spacing: 4) {
@@ -94,13 +90,11 @@ public struct SeekBarView: View {
 
 /// Play/pause, skip buttons, chapter navigation, and the playback speed menu.
 public struct TransportControlsView: View {
-    let player: PlayerController
+    @Environment(PlayerController.self) private var player
 
     private static let speeds: [Double] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
 
-    public init(player: PlayerController) {
-        self.player = player
-    }
+    public init() {}
 
     public var body: some View {
         ZStack {

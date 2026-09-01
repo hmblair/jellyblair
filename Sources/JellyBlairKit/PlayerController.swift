@@ -43,9 +43,7 @@ public final class PlayerController {
     private var openGeneration = 0
     private var openTask: Task<Void, Never>?
 
-    /// Chapters already read from each book's file, keyed by book ID.
-    private var chapterCache: [String: [Chapter]]
-    private let chapterStore = ChapterStore()
+    private let catalog: BookCatalog
 
     /// True after a start report was sent, so stop reports only follow real sessions.
     private var hasActiveSession = false
@@ -68,9 +66,9 @@ public final class PlayerController {
     /// Live band levels of the playing audio, for the now-playing bars.
     public let audioMeter = AudioLevelMeter()
 
-    public init(client: JellyfinClient) {
+    public init(client: JellyfinClient, catalog: BookCatalog) {
         self.client = client
-        chapterCache = chapterStore.load()
+        self.catalog = catalog
         let storedSpeed = UserDefaults.standard.double(forKey: Self.playbackSpeedDefaultsKey)
         playbackSpeed = storedSpeed > 0 ? storedSpeed : 1.0
         observeAppTermination()
@@ -130,7 +128,7 @@ public final class PlayerController {
         playbackErrorMessage = nil
         isReady = false
         duration = newBook.runTimeSeconds
-        setChapters(chapterCache[newBook.id] ?? [])
+        setChapters(catalog.cachedChapters(for: newBook))
         setCurrentTime(startAtSeconds ?? newBook.resumePositionSeconds)
 
         let startPosition: Double
@@ -172,11 +170,13 @@ public final class PlayerController {
             play()
         }
         await loadArtwork(for: newBook, generation: generation)
-        await loadChaptersIfNeeded(for: newBook, from: asset, generation: generation)
+        await catalog.fetchChapters(for: newBook)
+        guard generation == openGeneration else { return }
+        setChapters(catalog.cachedChapters(for: newBook))
     }
 
     private func loadArtwork(for book: Book, generation: Int) async {
-        let image = await CoverImageLoader.shared.image(for: book.id, from: client.imageURL(for: book))
+        let image = await CoverImageLoader.shared.image(for: book.id, from: catalog.coverURL(for: book))
         guard generation == openGeneration else { return }
         currentArtwork = image
         syncNowPlaying()
@@ -202,7 +202,7 @@ public final class PlayerController {
     /// Prefers the server's current position, since the library list is a stale
     /// snapshot from launch. Falls back to a locally recorded position offline.
     private func resolveResumePosition(for book: Book) async -> Double {
-        if let fresh = await client.fetchBook(id: book.id) {
+        if let fresh = await catalog.freshBook(book) {
             return fresh.resumePositionSeconds
         }
         if let local = lastKnownPositions[book.id] {
@@ -235,80 +235,14 @@ public final class PlayerController {
 
     // MARK: - Chapters
 
-    /// Returns the chapters already known for a book that is not loaded.
-    public func cachedChapters(for book: Book) -> [Chapter] {
-        chapterCache[book.id] ?? []
-    }
-
-    /// Book IDs whose chapters are being read for a preview.
-    private var chapterFetchesInFlight: Set<String> = []
-
-    public func isFetchingChapters(for book: Book) -> Bool {
-        chapterFetchesInFlight.contains(book.id)
-    }
-
-    /// Reads and caches a book's chapters without loading it into the player.
-    public func fetchChapters(for book: Book) async {
-        guard chapterCache[book.id] == nil, !chapterFetchesInFlight.contains(book.id) else { return }
-        chapterFetchesInFlight.insert(book.id)
-        defer { chapterFetchesInFlight.remove(book.id) }
-        let asset = client.streamAsset(for: book)
-        let loaded = await loadChapters(from: asset, bookDuration: book.runTimeSeconds)
-        guard !loaded.isEmpty else { return }
-        chapterCache[book.id] = loaded
-        chapterStore.save(chapterCache)
-    }
-
-    /// Discards the cached chapters and reads them again from the file.
+    /// Discards the loaded book's cached chapters and reads them again.
     public func refreshChapters() async {
         guard let book else { return }
-        let generation = openGeneration
-        chapterCache.removeValue(forKey: book.id)
-        chapterStore.save(chapterCache)
+        catalog.invalidateChapters(for: book)
         setChapters([])
-        let asset = client.streamAsset(for: book)
-        await loadChaptersIfNeeded(for: book, from: asset, generation: generation)
-    }
-
-    private func loadChaptersIfNeeded(for book: Book, from asset: AVURLAsset, generation: Int) async {
-        guard chapterCache[book.id] == nil else { return }
-        let loaded = await loadChapters(from: asset, bookDuration: book.runTimeSeconds)
-        // An empty result can mean a failed read, so only cache real chapters.
-        guard !loaded.isEmpty else { return }
-        chapterCache[book.id] = loaded
-        chapterStore.save(chapterCache)
-        guard generation == openGeneration else { return }
-        setChapters(loaded)
-    }
-
-    private func loadChapters(from asset: AVURLAsset, bookDuration: Double) async -> [Chapter] {
-        let groups = await loadChapterGroups(from: asset)
-        var loaded: [Chapter] = []
-        for (index, group) in groups.enumerated() {
-            let title = await chapterTitle(of: group) ?? "Chapter \(index + 1)"
-            let start = group.timeRange.start.seconds
-            let end = index + 1 < groups.count ? groups[index + 1].timeRange.start.seconds : bookDuration
-            loaded.append(Chapter(index: index, title: title, startSeconds: start, endSeconds: end))
-        }
-        return loaded
-    }
-
-    /// Reads chapter groups for the preferred language, then falls back to
-    /// whatever chapter locale the file declares (often undefined).
-    private func loadChapterGroups(from asset: AVURLAsset) async -> [AVTimedMetadataGroup] {
-        let preferred = (try? await asset.loadChapterMetadataGroups(bestMatchingPreferredLanguages: ["en"])) ?? []
-        if !preferred.isEmpty {
-            return preferred
-        }
-        let locales = (try? await asset.load(.availableChapterLocales)) ?? []
-        guard let locale = locales.first else { return [] }
-        return (try? await asset.loadChapterMetadataGroups(withTitleLocale: locale, containingItemsWithCommonKeys: [])) ?? []
-    }
-
-    private func chapterTitle(of group: AVTimedMetadataGroup) async -> String? {
-        let titleItems = AVMetadataItem.metadataItems(from: group.items, filteredByIdentifier: .commonIdentifierTitle)
-        guard let item = titleItems.first else { return nil }
-        return try? await item.load(.stringValue)
+        await catalog.fetchChapters(for: book)
+        guard self.book?.id == book.id else { return }
+        setChapters(catalog.cachedChapters(for: book))
     }
 
     // MARK: - Transport

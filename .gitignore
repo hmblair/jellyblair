@@ -4,3 +4,4 @@ ios/JellyBlairiOS.xcodeproj/
 ios/build/
 ios/Info.plist
 .DS_Store
+.swiftpm/

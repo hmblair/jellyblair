@@ -3,13 +3,12 @@ import SwiftUI
 /// Compact playback bar shown while a book is loaded and its screen is not
 /// visible. Tapping the info area navigates back to the book's screen.
 public struct MiniPlayerBar: View {
-    let player: PlayerController
-    let client: JellyfinClient
     let onTap: () -> Void
 
-    public init(player: PlayerController, client: JellyfinClient, onTap: @escaping () -> Void) {
-        self.player = player
-        self.client = client
+    @Environment(PlayerController.self) private var player
+    @Environment(BookCatalog.self) private var catalog
+
+    public init(onTap: @escaping () -> Void) {
         self.onTap = onTap
     }
 
@@ -17,7 +16,7 @@ public struct MiniPlayerBar: View {
         if let book = player.book {
             HStack(spacing: 12) {
                 HStack(spacing: 12) {
-                    BookCoverImage(bookID: book.id, url: client.imageURL(for: book), contentMode: .fill)
+                    BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fill)
                         .frame(width: 40, height: 40)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
 
@@ -77,18 +76,18 @@ public struct MiniPlayerBar: View {
 /// A sidebar or list row for one book, with a speaker mark on the loaded one.
 public struct BookRow: View {
     let book: Book
-    let imageURL: URL
     let isLoaded: Bool
 
-    public init(book: Book, imageURL: URL, isLoaded: Bool) {
+    @Environment(BookCatalog.self) private var catalog
+
+    public init(book: Book, isLoaded: Bool) {
         self.book = book
-        self.imageURL = imageURL
         self.isLoaded = isLoaded
     }
 
     public var body: some View {
         HStack(spacing: 10) {
-            BookCoverImage(bookID: book.id, url: imageURL, contentMode: .fill)
+            BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fill)
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
 

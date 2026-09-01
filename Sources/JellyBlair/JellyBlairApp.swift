@@ -64,61 +64,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 struct ContentView: View {
-    @State private var library: LibraryViewModel
-    @State private var player: PlayerController
-    @State private var connection: ConnectionMonitor
+    @State private var scope: SessionScope
 
     /// Selection is tracked by ID, so it survives library refreshes that
     /// replace the Book values.
     @State private var selectedBookID: String?
 
     init(client: JellyfinClient) {
-        _library = State(initialValue: LibraryViewModel(client: client))
-        _player = State(initialValue: PlayerController(client: client))
-        _connection = State(initialValue: ConnectionMonitor(client: client))
+        _scope = State(initialValue: SessionScope(client: client))
     }
 
     private var selectedBook: Book? {
-        library.books.first { $0.id == selectedBookID }
+        scope.library.books.first { $0.id == selectedBookID }
     }
 
     var body: some View {
         VStack(spacing: 0) {
             NavigationSplitView {
-                LibraryView(library: library, selection: $selectedBookID, loadedBookID: player.book?.id)
+                LibraryView(selection: $selectedBookID)
                     .navigationSplitViewColumnWidth(min: 220, ideal: 260)
             } detail: {
                 if let selectedBook {
-                    BookView(book: selectedBook, player: player, client: library.client)
+                    BookView(book: selectedBook)
                         .id(selectedBook.id)
                 } else {
                     ContentUnavailableView("Select an audiobook", systemImage: "headphones")
                 }
             }
 
-            if let loadedBook = player.book, loadedBook.id != selectedBookID {
-                MiniPlayerBar(player: player, client: library.client) {
+            if let loadedBook = scope.player.book, loadedBook.id != selectedBookID {
+                MiniPlayerBar {
                     selectedBookID = loadedBook.id
                 }
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            if !connection.isServerReachable {
+            if !scope.connection.isServerReachable {
                 ConnectionBanner()
             }
         }
         .task {
-            connection.start()
-            await library.load()
+            scope.connection.start()
+            await scope.library.load()
         }
-        .onChange(of: connection.isServerReachable) { _, reachable in
-            guard reachable, library.errorMessage != nil else { return }
-            Task { await library.load() }
+        .onChange(of: scope.connection.isServerReachable) { _, reachable in
+            guard reachable, scope.library.errorMessage != nil else { return }
+            Task { await scope.library.load() }
         }
         .focusedSceneValue(\.refreshActions, RefreshActions(
-            refreshLibrary: { Task { await library.load() } },
-            refreshChapters: player.book == nil ? nil : { Task { await player.refreshChapters() } }
+            refreshLibrary: { [library = scope.library] in Task { await library.load() } },
+            refreshChapters: scope.player.book == nil ? nil : { [player = scope.player] in Task { await player.refreshChapters() } }
         ))
+        .environment(scope.library)
+        .environment(scope.player)
+        .environment(scope.connection)
+        .environment(scope.catalog)
     }
 }
 

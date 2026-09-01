@@ -47,48 +47,48 @@ struct RootScreen: View {
 
 struct MainScreen: View {
     let session: AppSession
-    @State private var library: LibraryViewModel
-    @State private var player: PlayerController
-    @State private var connection: ConnectionMonitor
+    @State private var scope: SessionScope
     @State private var path: [Book] = []
 
     init(session: AppSession, client: JellyfinClient) {
         self.session = session
-        _library = State(initialValue: LibraryViewModel(client: client))
-        _player = State(initialValue: PlayerController(client: client))
-        _connection = State(initialValue: ConnectionMonitor(client: client))
+        _scope = State(initialValue: SessionScope(client: client))
     }
 
     var body: some View {
         NavigationStack(path: $path) {
-            LibraryScreen(session: session, library: library, player: player)
+            LibraryScreen(session: session)
                 .navigationDestination(for: Book.self) { book in
-                    BookView(book: book, player: player, client: library.client)
+                    BookView(book: book)
                         .navigationBarTitleDisplayMode(.inline)
                 }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // The bar shows everywhere except the loaded book's own screen,
             // which already carries the full controls.
-            if let loadedBook = player.book, path.last?.id != loadedBook.id {
-                MiniPlayerBar(player: player, client: library.client) {
+            if let loadedBook = scope.player.book, path.last?.id != loadedBook.id {
+                MiniPlayerBar {
                     path = [loadedBook]
                 }
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            if !connection.isServerReachable {
+            if !scope.connection.isServerReachable {
                 ConnectionBanner()
             }
         }
         .task {
-            connection.start()
-            await library.load()
+            scope.connection.start()
+            await scope.library.load()
         }
-        .onChange(of: connection.isServerReachable) { _, reachable in
-            guard reachable, library.errorMessage != nil else { return }
-            Task { await library.load() }
+        .onChange(of: scope.connection.isServerReachable) { _, reachable in
+            guard reachable, scope.library.errorMessage != nil else { return }
+            Task { await scope.library.load() }
         }
+        .environment(scope.library)
+        .environment(scope.player)
+        .environment(scope.connection)
+        .environment(scope.catalog)
     }
 }
 

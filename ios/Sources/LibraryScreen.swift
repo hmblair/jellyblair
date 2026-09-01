@@ -4,8 +4,9 @@ import SwiftUI
 /// The book list, grouped by author, with navigation to each book's screen.
 struct LibraryScreen: View {
     let session: AppSession
-    let library: LibraryViewModel
-    let player: PlayerController
+
+    @Environment(LibraryViewModel.self) private var library
+    @Environment(PlayerController.self) private var player
 
     @State private var isShowingSettings = false
 
@@ -15,11 +16,7 @@ struct LibraryScreen: View {
                 Section(group.name) {
                     ForEach(group.books) { book in
                         NavigationLink(value: book) {
-                            BookRow(
-                                book: book,
-                                imageURL: library.client.imageURL(for: book),
-                                isLoaded: book.id == player.book?.id
-                            )
+                            BookRow(book: book, isLoaded: book.id == player.book?.id)
                         }
                     }
                 }
