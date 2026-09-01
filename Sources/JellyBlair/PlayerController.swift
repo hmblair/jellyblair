@@ -275,6 +275,19 @@ final class PlayerController {
     // MARK: - Transport
 
     func play() {
+        guard isReady, book != nil else { return }
+        // At the end of the book the player cannot advance, so play restarts it.
+        if currentTime >= duration - 0.5 {
+            Task {
+                await seek(to: 0)
+                startPlayback()
+            }
+            return
+        }
+        startPlayback()
+    }
+
+    private func startPlayback() {
         guard isReady, let book else { return }
         player?.rate = Float(playbackSpeed)
         isPlaying = true
@@ -314,6 +327,11 @@ final class PlayerController {
         let time = CMTime(seconds: target, preferredTimescale: Int32(ticksPerSecond))
         await player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         pendingSeekCount -= 1
+        // Playing to the end zeroes the player's rate, so a seek away from the
+        // end must re-assert it to keep the playing state truthful.
+        if isPlaying {
+            player?.rate = Float(playbackSpeed)
+        }
         syncNowPlaying()
     }
 
