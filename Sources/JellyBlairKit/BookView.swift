@@ -175,13 +175,14 @@ public struct BookView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(book.name)
-                    .font(.title2.bold())
+                    .font(.title.bold())
                 if let author = book.author {
                     authorLine(author)
+                        .font(.title3)
                 }
                 if let narrator = book.narrator {
                     narratorLine(narrator)
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
                 lengthLine
@@ -204,16 +205,16 @@ public struct BookView: View {
                 .padding(.bottom, 6)
 
             Text(book.name)
-                .font(.title3.bold())
+                .font(.title2.bold())
                 .multilineTextAlignment(.center)
             if let author = book.author {
                 authorLine(author)
-                    .font(.subheadline)
+                    .font(.callout)
                     .multilineTextAlignment(.center)
             }
             if let narrator = book.narrator {
                 narratorLine(narrator)
-                    .font(.footnote)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -301,7 +302,7 @@ public struct BookView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .font(.callout.monospacedDigit())
+        .font(.body.monospacedDigit())
     }
 
     private func errorBanner(_ message: String) -> some View {
