@@ -6,9 +6,15 @@ public final class JellyfinClient {
     public let serverURL: URL
 
     private static let clientName = "JellyBlair"
-    private static let deviceName = "Mac"
-    private static let deviceID = "jellyblair-mac"
     private static let clientVersion = "0.1"
+
+    #if os(macOS)
+    private static let deviceName = "Mac"
+    #else
+    private static let deviceName = "iPhone"
+    #endif
+
+    private static var deviceID: String { DeviceIdentifier.value }
 
     private var accessToken: String?
     private var userID: String?

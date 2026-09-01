@@ -73,16 +73,20 @@ public final class AppSession {
     }
 
     private func activate(_ client: JellyfinClient) {
-        client.onUnauthorized = { [weak self] in
+        client.onUnauthorized = { [weak self, weak client] in
             Task { @MainActor in
-                self?.handleUnauthorized()
+                guard let self, let client else { return }
+                self.handleUnauthorized(from: client)
             }
         }
         state = .signedIn(client)
     }
 
-    private func handleUnauthorized() {
-        guard isSignedIn else { return }
+    /// Signs out on a rejected token, but only when the complaint comes from
+    /// the current client. A stale 401 from a replaced client must not knock
+    /// out a session that was just re-established.
+    private func handleUnauthorized(from client: JellyfinClient) {
+        guard case .signedIn(let current) = state, current === client else { return }
         store.clearCredentials()
         loginErrorMessage = "Your session expired. Sign in again."
         state = .needsLogin
