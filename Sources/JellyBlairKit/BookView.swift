@@ -10,12 +10,9 @@ public struct BookView: View {
     @Environment(PlayerController.self) private var player
     @Environment(BookCatalog.self) private var catalog
 
-    @State private var isAutoScrollWindowOpen = true
+    @Environment(\.scenePhase) private var scenePhase
 
-    /// The book with fresh user data from the server. The library snapshot's
-    /// resume position can be stale, which would mislabel the play button
-    /// and misplace the progress marks.
-    @State private var refreshedBook: Book?
+    @State private var isAutoScrollWindowOpen = true
 
     public init(book: Book) {
         self.book = book
@@ -25,12 +22,12 @@ public struct BookView: View {
         player.book?.id == book.id
     }
 
-    private var displayBook: Book {
-        refreshedBook ?? book
+    private var model: BookModel {
+        catalog.model(for: book)
     }
 
     private var chapters: [Chapter] {
-        isLoaded ? player.chapters : catalog.cachedChapters(for: book)
+        isLoaded ? player.chapters : model.chapters
     }
 
     public var body: some View {
@@ -66,14 +63,16 @@ public struct BookView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(book.name)
                     .font(.title2.bold())
-                Text(book.authorAndRuntimeText)
+                if let author = book.author {
+                    Text(author)
+                }
                 if let narrator = book.narrator {
                     Text("Narrated by \(narrator)")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
+                lengthLine
                 Spacer()
-                positionLine
             }
             Spacer()
         }
@@ -94,16 +93,18 @@ public struct BookView: View {
             Text(book.name)
                 .font(.title3.bold())
                 .multilineTextAlignment(.center)
-            Text(book.authorAndRuntimeText)
-                .font(.subheadline)
-                .multilineTextAlignment(.center)
+            if let author = book.author {
+                Text(author)
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+            }
             if let narrator = book.narrator {
                 Text("Narrated by \(narrator)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
-            positionLine
+            lengthLine
         }
         .frame(maxWidth: .infinity)
     }
@@ -113,15 +114,21 @@ public struct BookView: View {
         BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fit)
     }
 
-    @ViewBuilder
-    private var positionLine: some View {
-        if isLoaded {
-            RemainingTimeView()
-        } else if displayBook.resumePositionSeconds > 0 {
-            Text("\(formatTime(displayBook.resumePositionSeconds)) in")
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
+    /// "Total Length · Remaining", the remaining part gray and only shown
+    /// when the book is partway through.
+    private var lengthLine: some View {
+        HStack(spacing: 5) {
+            Text(formatTime(book.runTimeSeconds))
+            if isLoaded {
+                Text("·")
+                    .foregroundStyle(.secondary)
+                RemainingTimeView()
+            } else if model.resumePositionSeconds > 0 {
+                Text("· \(formatHoursMinutes(book.runTimeSeconds - model.resumePositionSeconds)) remaining")
+                    .foregroundStyle(.secondary)
+            }
         }
+        .font(.callout.monospacedDigit())
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -137,12 +144,30 @@ public struct BookView: View {
 
     private var playButton: some View {
         Button {
-            player.open(book, playWhenReady: true)
+            player.open(model, playWhenReady: true)
         } label: {
-            Label(displayBook.resumePositionSeconds > 0 ? "Resume" : "Play", systemImage: "play.fill")
-                .frame(minWidth: 100)
+            HStack(spacing: 6) {
+                Image(systemName: "play.fill")
+                Text(model.resumePositionSeconds > 0 ? "Resume" : "Play")
+                if let title = resumeChapterTitle {
+                    Text(title)
+                        .fontWeight(.light)
+                        .lineLimit(1)
+                }
+            }
+            .frame(minWidth: 100)
         }
+        .buttonStyle(.borderedProminent)
         .controlSize(.large)
+    }
+
+    /// The chapter the Resume button will land in, once chapters are known.
+    private var resumeChapterTitle: String? {
+        guard model.resumePositionSeconds > 0,
+              let index = markedChapterIndex,
+              chapters.indices.contains(index)
+        else { return nil }
+        return chapters[index].title
     }
 
     // MARK: - Chapters
@@ -160,14 +185,14 @@ public struct BookView: View {
                     if isLoaded {
                         Task { await player.jump(to: chapter) }
                     } else {
-                        player.open(book, playWhenReady: true, startAtSeconds: chapter.startSeconds)
+                        player.open(model, playWhenReady: true, startAtSeconds: chapter.startSeconds)
                     }
                 }
             }
             .listStyle(.inset)
             .overlay {
                 if chapters.isEmpty {
-                    if catalog.isFetchingChapters(for: book) {
+                    if model.isFetchingChapters {
                         ProgressView()
                     } else {
                         Text("No chapters in this file")
@@ -181,7 +206,8 @@ public struct BookView: View {
             .onChange(of: chapters) {
                 scrollToMarkedChapter(proxy)
             }
-            .onChange(of: refreshedBook) {
+            .onChange(of: model.resumePositionSeconds) {
+                guard !isLoaded else { return }
                 scrollToMarkedChapter(proxy)
             }
             .onChange(of: player.currentChapterIndex) {
@@ -194,11 +220,16 @@ public struct BookView: View {
             }
             .task(id: book.id) {
                 guard !isLoaded else { return }
-                async let freshFetch = catalog.freshBook(book)
-                await catalog.fetchChapters(for: book)
-                if let fresh = await freshFetch {
-                    refreshedBook = fresh
-                }
+                async let userDataFetch: Void = model.refreshUserData()
+                await model.fetchChaptersIfNeeded()
+                await model.prewarmAsset()
+                await userDataFetch
+            }
+            .onChange(of: scenePhase) { _, phase in
+                // Coming back to a book that is not playing can be much later:
+                // the position may have moved on another device.
+                guard phase == .active, !isLoaded else { return }
+                Task { await model.refreshUserData() }
             }
         }
     }
@@ -209,8 +240,8 @@ public struct BookView: View {
         if isLoaded {
             return player.currentChapterIndex
         }
-        guard displayBook.resumePositionSeconds > 0 else { return nil }
-        return chapters.last(where: { $0.startSeconds <= displayBook.resumePositionSeconds + 0.5 })?.index
+        guard model.resumePositionSeconds > 0 else { return nil }
+        return chapters.last(where: { $0.startSeconds <= model.resumePositionSeconds + 0.5 })?.index
     }
 
     /// Centers the list on the marked chapter shortly after opening,

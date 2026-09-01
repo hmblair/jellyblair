@@ -16,8 +16,7 @@ public struct RemainingTimeView: View {
 
     private var text: String {
         let remaining = max(0, player.duration - player.currentTime) / player.playbackSpeed
-        let minutes = Int((remaining / 60).rounded())
-        let label = minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+        let label = formatHoursMinutes(remaining)
         guard player.playbackSpeed != 1 else {
             return "\(label) remaining"
         }

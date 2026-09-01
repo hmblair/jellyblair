@@ -13,3 +13,10 @@ public func formatTime(_ seconds: Double) -> String {
 public func formatPlaybackSpeed(_ speed: Double) -> String {
     String(format: "%g×", speed)
 }
+
+/// Formats a duration as "13h 11m", or "42m" under one hour.
+public func formatHoursMinutes(_ seconds: Double) -> String {
+    let minutes = Int((seconds / 60).rounded())
+    guard minutes >= 60 else { return "\(minutes)m" }
+    return "\(minutes / 60)h \(minutes % 60)m"
+}

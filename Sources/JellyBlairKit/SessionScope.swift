@@ -13,10 +13,9 @@ public final class SessionScope {
 
     public init(client: JellyfinClient) {
         self.client = client
-        let catalog = BookCatalog(client: client)
-        self.catalog = catalog
+        catalog = BookCatalog(client: client)
         library = LibraryViewModel(client: client)
-        player = PlayerController(client: client, catalog: catalog)
+        player = PlayerController(client: client)
         connection = ConnectionMonitor(client: client)
     }
 }
