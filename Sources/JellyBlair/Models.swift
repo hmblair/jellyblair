@@ -74,6 +74,13 @@ struct Book: Decodable, Identifiable, Hashable {
         return joined.isEmpty ? nil : joined
     }
 
+    /// "Author · H:MM:SS", or just the runtime when the author is unknown.
+    var authorAndRuntimeText: String {
+        let time = formatTime(runTimeSeconds)
+        guard let author else { return time }
+        return "\(author) · \(time)"
+    }
+
     /// Jellyfin stores audiobook narrators as people with the Composer type.
     var narrator: String? {
         let names = (people ?? []).filter { $0.type == "Composer" }.map(\.name)

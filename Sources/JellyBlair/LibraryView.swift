@@ -38,18 +38,12 @@ struct BookRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(book.name)
                     .lineLimit(1)
-                Text(subtitle)
+                Text(book.authorAndRuntimeText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
         }
         .padding(.vertical, 2)
-    }
-
-    private var subtitle: String {
-        let time = formatTime(book.runTimeSeconds)
-        guard let author = book.author else { return time }
-        return "\(author) · \(time)"
     }
 }

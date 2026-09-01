@@ -32,8 +32,8 @@ struct PlayerView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(player.book?.name ?? "")
                     .font(.title2.bold())
-                if let author = player.book?.author {
-                    Text(author)
+                if let book = player.book {
+                    Text(book.authorAndRuntimeText)
                 }
                 if let narrator = player.book?.narrator {
                     Text("Narrated by \(narrator)")
