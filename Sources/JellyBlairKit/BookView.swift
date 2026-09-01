@@ -13,6 +13,7 @@ public struct BookView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var isAutoScrollWindowOpen = true
+    @State private var chapterQuery = ""
 
     public init(book: Book) {
         self.book = book
@@ -28,6 +29,14 @@ public struct BookView: View {
 
     private var chapters: [Chapter] {
         isLoaded ? player.chapters : model.chapters
+    }
+
+    /// Chapters whose titles contain the query; all of them when it is empty.
+    /// Filtering only subsets the rows, so progress marks stay truthful.
+    private var visibleChapters: [Chapter] {
+        let trimmed = chapterQuery.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return chapters }
+        return chapters.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
     }
 
     public var body: some View {
@@ -50,12 +59,43 @@ public struct BookView: View {
             .padding(.horizontal, 20)
             #endif
             Divider()
+            chapterFilterField
             chapterList
         }
         #if os(macOS)
         .padding(20)
         #else
         .padding(.top, 8)
+        #endif
+    }
+
+    /// A slim filter row attached to the top of the chapter list.
+    private var chapterFilterField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            TextField("Search Chapters", text: $chapterQuery)
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled()
+            if !chapterQuery.isEmpty {
+                Button {
+                    chapterQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .background(
+            Capsule()
+                .fill(Color.primary.opacity(0.06))
+        )
+        #if os(iOS)
+        .padding(.horizontal, 20)
         #endif
     }
 
@@ -188,7 +228,7 @@ public struct BookView: View {
 
     private var chapterList: some View {
         ScrollViewReader { proxy in
-            List(chapters) { chapter in
+            List(visibleChapters) { chapter in
                 ChapterRow(
                     chapter: chapter,
                     state: rowState(for: chapter),
@@ -212,6 +252,8 @@ public struct BookView: View {
                         Text("No chapters in this file")
                             .foregroundStyle(.secondary)
                     }
+                } else if visibleChapters.isEmpty {
+                    ContentUnavailableView.search(text: chapterQuery)
                 }
             }
             .onAppear {
@@ -261,7 +303,9 @@ public struct BookView: View {
     /// Centers the list on the marked chapter shortly after opening,
     /// then disarms so playback does not move a list being browsed.
     private func scrollToMarkedChapter(_ proxy: ScrollViewProxy) {
-        guard let index = markedChapterIndex else { return }
+        guard let index = markedChapterIndex,
+              visibleChapters.contains(where: { $0.index == index })
+        else { return }
         proxy.scrollTo(index, anchor: .center)
     }
 
