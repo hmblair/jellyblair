@@ -36,21 +36,32 @@ public final class LibraryViewModel {
     public private(set) var isLoading = true
     public private(set) var errorMessage: String?
 
+    private let store = LibraryStore()
+
     public init(client: JellyfinClient) {
         self.client = client
+        // The last snapshot shows immediately and carries offline launches.
+        setBooks(store.load())
     }
 
     public func load() async {
         isLoading = true
         errorMessage = nil
         do {
-            books = try await client.fetchAudiobooks()
-            authorGroups = Self.group(books, kind: .author, by: { $0.author ?? "Unknown Author" })
-            narratorGroups = Self.group(books.filter { $0.narrator != nil }, kind: .narrator, by: { $0.narrator ?? "" })
+            setBooks(try await client.fetchAudiobooks())
+            store.save(books)
         } catch {
+            // The cached snapshot stands; the overlay only shows the error
+            // when there are no books at all.
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    private func setBooks(_ newBooks: [Book]) {
+        books = newBooks
+        authorGroups = Self.group(books, kind: .author, by: { $0.author ?? "Unknown Author" })
+        narratorGroups = Self.group(books.filter { $0.narrator != nil }, kind: .narrator, by: { $0.narrator ?? "" })
     }
 
     /// Groups filtered to books whose title, author, or narrator contains

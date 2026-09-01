@@ -186,6 +186,7 @@ public struct BookView: View {
                         .foregroundStyle(.secondary)
                 }
                 lengthLine
+                downloadControl
                 Spacer()
             }
             Spacer()
@@ -219,6 +220,7 @@ public struct BookView: View {
                     .multilineTextAlignment(.center)
             }
             lengthLine
+            downloadControl
         }
         .frame(maxWidth: .infinity)
         // The chapter list below competes for vertical space; without this the
@@ -303,6 +305,53 @@ public struct BookView: View {
             }
         }
         .font(.body.monospacedDigit())
+    }
+
+    /// Download, cancel, or remove the offline copy of the book.
+    @ViewBuilder
+    private var downloadControl: some View {
+        switch model.downloadState {
+        case .notDownloaded:
+            Button {
+                model.download()
+            } label: {
+                Label("Download", systemImage: "arrow.down.circle")
+            }
+            .buttonStyle(.plain)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        case .downloading(let progress):
+            HStack(spacing: 8) {
+                if let progress {
+                    ProgressView(value: progress)
+                        .frame(width: 100)
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Button {
+                    model.cancelDownload()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .font(.callout)
+        case .downloaded:
+            Menu {
+                Button("Remove Download", role: .destructive) {
+                    model.removeDownload()
+                }
+            } label: {
+                Label("Downloaded", systemImage: "checkmark.circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
     }
 
     private func errorBanner(_ message: String) -> some View {

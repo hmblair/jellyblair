@@ -137,7 +137,7 @@ public final class JellyfinClient {
             URLQueryItem(name: "IncludeItemTypes", value: "AudioBook"),
             URLQueryItem(name: "Recursive", value: "true"),
             URLQueryItem(name: "SortBy", value: "SortName"),
-            URLQueryItem(name: "Fields", value: "People"),
+            URLQueryItem(name: "Fields", value: "People,MediaSources"),
             URLQueryItem(name: "UserId", value: userID),
         ]
         let request = makeRequest(path: "Items", query: query)
@@ -164,10 +164,20 @@ public final class JellyfinClient {
     /// Builds the asset for a book's audio stream. The token travels in an
     /// Authorization header instead of the URL, so it stays out of server logs.
     func streamAsset(for book: Book) -> AVURLAsset {
+        AVURLAsset(url: streamURL(for: book), options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": authorizationHeader]])
+    }
+
+    /// An authenticated request for the book's file, for downloading it.
+    func streamRequest(for book: Book) -> URLRequest {
+        var request = URLRequest(url: streamURL(for: book))
+        request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
+        return request
+    }
+
+    private func streamURL(for book: Book) -> URL {
         var components = URLComponents(url: serverURL.appendingPathComponent("Audio/\(book.id)/stream"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "static", value: "true")]
-        let headers = ["Authorization": authorizationHeader]
-        return AVURLAsset(url: components.url!, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        return components.url!
     }
 
     // MARK: - Playback reports

@@ -29,7 +29,7 @@ struct ItemsResponse: Decodable {
     }
 }
 
-public struct BookUserData: Decodable, Hashable {
+public struct BookUserData: Codable, Hashable {
     public let playbackPositionTicks: Int64
 
     enum CodingKeys: String, CodingKey {
@@ -37,7 +37,7 @@ public struct BookUserData: Decodable, Hashable {
     }
 }
 
-public struct Person: Decodable, Hashable {
+public struct Person: Codable, Hashable {
     public let name: String
     public let type: String
 
@@ -47,7 +47,15 @@ public struct Person: Decodable, Hashable {
     }
 }
 
-public struct Book: Decodable, Identifiable, Hashable {
+public struct MediaSource: Codable, Hashable {
+    public let container: String?
+
+    enum CodingKeys: String, CodingKey {
+        case container = "Container"
+    }
+}
+
+public struct Book: Codable, Identifiable, Hashable {
     public let id: String
     public let name: String
     public let runTimeTicks: Int64?
@@ -55,6 +63,7 @@ public struct Book: Decodable, Identifiable, Hashable {
     public let albumArtist: String?
     public let artists: [String]?
     public let people: [Person]?
+    public let mediaSources: [MediaSource]?
 
     enum CodingKeys: String, CodingKey {
         case id = "Id"
@@ -64,6 +73,12 @@ public struct Book: Decodable, Identifiable, Hashable {
         case albumArtist = "AlbumArtist"
         case artists = "Artists"
         case people = "People"
+        case mediaSources = "MediaSources"
+    }
+
+    /// The audio container format, for naming downloaded files.
+    public var container: String? {
+        mediaSources?.first?.container
     }
 
     public var author: String? {

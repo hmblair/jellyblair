@@ -16,6 +16,16 @@ public final class BookModel: Identifiable {
     public private(set) var chapters: [Chapter]
     public private(set) var isFetchingChapters = false
 
+    public enum DownloadState: Equatable {
+        case notDownloaded
+        /// Fraction complete, or nil while the total size is unknown.
+        case downloading(Double?)
+        case downloaded
+    }
+
+    public private(set) var downloadState: DownloadState = .notDownloaded
+    @ObservationIgnored private var downloader: Downloader?
+
     private let client: JellyfinClient
     private let onChaptersChanged: ([Chapter]) -> Void
     @ObservationIgnored private var cachedAsset: AVURLAsset?
@@ -26,6 +36,9 @@ public final class BookModel: Identifiable {
         self.chapters = initialChapters
         self.onChaptersChanged = onChaptersChanged
         resumePositionSeconds = book.resumePositionSeconds
+        if FileManager.default.fileExists(atPath: downloadedFileURL.path) {
+            downloadState = .downloaded
+        }
     }
 
     public nonisolated var id: String { book.id }
@@ -34,15 +47,66 @@ public final class BookModel: Identifiable {
         client.imageURL(for: book)
     }
 
-    /// The stream asset, shared between chapter reading and playback so the
+    /// The stream asset: the downloaded file when present, the server
+    /// stream otherwise. Chapter reading and playback share it, so the
     /// file's index data downloads and parses once.
     public func streamAsset() -> AVURLAsset {
         if let cachedAsset {
             return cachedAsset
         }
-        let asset = client.streamAsset(for: book)
+        let asset: AVURLAsset
+        if downloadState == .downloaded {
+            asset = AVURLAsset(url: downloadedFileURL)
+        } else {
+            asset = client.streamAsset(for: book)
+        }
         cachedAsset = asset
         return asset
+    }
+
+    // MARK: - Download
+
+    private var downloadedFileURL: URL {
+        let directory = jellyBlairDataDirectory().appendingPathComponent("downloads")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("\(book.id).\(book.container ?? "m4b")")
+    }
+
+    /// Downloads the book's file for offline playback.
+    public func download() {
+        guard downloadState == .notDownloaded else { return }
+        downloadState = .downloading(nil)
+        let downloader = Downloader(
+            destination: downloadedFileURL,
+            onProgress: { [weak self] progress in
+                guard let self, case .downloading = self.downloadState else { return }
+                self.downloadState = .downloading(progress)
+            },
+            onFinish: { [weak self] succeeded in
+                guard let self else { return }
+                self.downloader = nil
+                self.downloadState = succeeded ? .downloaded : .notDownloaded
+                // Playback switches source on the next open.
+                self.releaseAsset()
+            }
+        )
+        self.downloader = downloader
+        downloader.start(client.streamRequest(for: book))
+    }
+
+    public func cancelDownload() {
+        guard case .downloading = downloadState else { return }
+        downloader?.cancel()
+        downloader = nil
+        downloadState = .notDownloaded
+    }
+
+    /// Deletes the downloaded file; playback returns to streaming.
+    public func removeDownload() {
+        guard downloadState == .downloaded else { return }
+        try? FileManager.default.removeItem(at: downloadedFileURL)
+        downloadState = .notDownloaded
+        releaseAsset()
     }
 
     /// Drops the parsed asset to bound memory; it recreates lazily on demand.
