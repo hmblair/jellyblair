@@ -19,6 +19,11 @@ public struct BookView: View {
     @State private var chapterQuery = ""
     @State private var isHoveringJumpButton = false
     @State private var isHoveringDownload = false
+
+    /// Removal asks once: the first tap shows a red question mark that
+    /// reverts after a few seconds; a second tap within that window deletes.
+    @State private var isConfirmingRemoval = false
+    @State private var removalConfirmationTimeout: Task<Void, Never>?
     @State private var isHoveringAuthor = false
     @State private var hoveredNameWords = 0
 
@@ -326,6 +331,21 @@ public struct BookView: View {
         }
     }
 
+    private func handleRemovalTap() {
+        removalConfirmationTimeout?.cancel()
+        guard isConfirmingRemoval else {
+            isConfirmingRemoval = true
+            removalConfirmationTimeout = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(4))
+                guard !Task.isCancelled else { return }
+                isConfirmingRemoval = false
+            }
+            return
+        }
+        isConfirmingRemoval = false
+        model.removeDownload()
+    }
+
     /// Download the book, cancel a download in progress, or show that the
     /// offline copy exists.
     @ViewBuilder
@@ -373,11 +393,11 @@ public struct BookView: View {
             .onHover { isHoveringDownload = $0 }
         case .downloaded:
             Button {
-                model.removeDownload()
+                handleRemovalTap()
             } label: {
-                Image(systemName: "checkmark.circle.fill")
+                Image(systemName: isConfirmingRemoval ? "questionmark.circle.fill" : "checkmark.circle.fill")
                     .font(.title)
-                    .foregroundStyle(Color.green)
+                    .foregroundStyle(isConfirmingRemoval ? Color.red : Color.green)
                     .opacity(isHoveringDownload ? 0.6 : 1)
                     .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
             }
