@@ -14,6 +14,7 @@ public struct BookView: View {
 
     @State private var isAutoScrollWindowOpen = true
     @State private var chapterQuery = ""
+    @State private var isHoveringJumpButton = false
 
     public init(book: Book) {
         self.book = book
@@ -73,21 +74,57 @@ public struct BookView: View {
     /// The filter bar floats over the list, whose rows scroll up behind it,
     /// masked to nothing in the bar's zone with a fade beneath.
     private var chapterSection: some View {
-        ZStack(alignment: .top) {
-            chapterList
-                .mask(
+        ScrollViewReader { proxy in
+            ZStack(alignment: .top) {
+                chapterList(proxy)
+                    .mask(
                     VStack(spacing: 0) {
-                        Color.clear
-                            .frame(height: Self.filterBarZoneHeight)
-                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 22)
-                        Rectangle()
-                        LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 22)
-                    }
-                )
-            chapterFilterField
+                            Color.clear
+                                .frame(height: Self.filterBarZoneHeight)
+                            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 22)
+                            Rectangle()
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 22)
+                        }
+                    )
+                HStack(spacing: 8) {
+                    chapterFilterField
+                    jumpToCurrentButton(proxy)
+                }
+                #if os(iOS)
+                .padding(.horizontal, 20)
+                #endif
+            }
         }
+    }
+
+    /// Centers the list on the marked chapter, clearing any filter that hides
+    /// it first. The same logic runs when a book's screen opens.
+    private func jumpToCurrentButton(_ proxy: ScrollViewProxy) -> some View {
+        Button {
+            chapterQuery = ""
+            Task { @MainActor in
+                withAnimation {
+                    scrollToMarkedChapter(proxy)
+                }
+            }
+        } label: {
+            Image(systemName: "scope")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 5)
+                .padding(.horizontal, 8)
+                .background(
+                    Capsule()
+                        .fill(Color.primary.opacity(isHoveringJumpButton ? 0.12 : 0.06))
+                        .animation(.easeOut(duration: 0.1), value: isHoveringJumpButton)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHoveringJumpButton = $0 }
+        .disabled(markedChapterIndex == nil)
+        .opacity(markedChapterIndex == nil ? 0.4 : 1)
     }
 
     /// Height of the region the floating filter bar occupies over the list.
@@ -118,9 +155,6 @@ public struct BookView: View {
             Capsule()
                 .fill(Color.primary.opacity(0.06))
         )
-        #if os(iOS)
-        .padding(.horizontal, 20)
-        #endif
     }
 
     // MARK: - Header
@@ -250,9 +284,8 @@ public struct BookView: View {
 
     // MARK: - Chapters
 
-    private var chapterList: some View {
-        ScrollViewReader { proxy in
-            List(visibleChapters) { chapter in
+    private func chapterList(_ proxy: ScrollViewProxy) -> some View {
+        List(visibleChapters) { chapter in
                 ChapterRow(
                     chapter: chapter,
                     state: rowState(for: chapter),
@@ -318,7 +351,6 @@ public struct BookView: View {
                 guard phase == .active, !isLoaded else { return }
                 Task { await model.refreshUserData() }
             }
-        }
     }
 
     /// The chapter marked as current: the playing one when loaded,
