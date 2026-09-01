@@ -9,8 +9,10 @@ public struct RemainingTimeView: View {
     public init() {}
 
     public var body: some View {
+        // Inherits the font from its context, so it always matches the
+        // total length displayed beside it.
         Text(text)
-            .font(.callout.monospacedDigit())
+            .monospacedDigit()
             .foregroundStyle(.secondary)
     }
 
