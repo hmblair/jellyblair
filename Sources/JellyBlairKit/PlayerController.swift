@@ -399,17 +399,27 @@ public final class PlayerController {
     }
 
     /// Pushes the current state to the system Now Playing center.
+    /// Times are chapter-scoped, matching every other display in the app.
     private func syncNowPlaying() {
+        let scopeStart = currentChapter?.startSeconds ?? 0
+        let scopeDuration = currentChapter?.durationSeconds ?? duration
         nowPlaying.update(
             bookTitle: book?.name,
             author: book?.author,
             chapterTitle: currentChapter?.title,
-            elapsed: currentTime,
-            duration: duration,
+            elapsed: max(0, currentTime - scopeStart),
+            duration: scopeDuration,
             rate: playbackSpeed,
             isPlaying: isPlaying,
             artwork: currentArtwork
         )
+    }
+
+    /// Seeks to a position relative to the current chapter, for the system
+    /// scrubber, whose times are chapter-scoped.
+    func seekWithinCurrentChapter(to seconds: Double) async {
+        let scopeStart = currentChapter?.startSeconds ?? 0
+        await seek(to: scopeStart + seconds)
     }
 
     // MARK: - Player observation

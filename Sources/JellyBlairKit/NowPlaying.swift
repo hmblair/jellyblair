@@ -25,7 +25,7 @@ final class NowPlayingCenter {
             return
         }
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: chapterTitle ?? bookTitle,
+            MPMediaItemPropertyTitle: chapterTitle.map { "\(bookTitle) · \($0)" } ?? bookTitle,
             MPMediaItemPropertyAlbumTitle: bookTitle,
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed,
@@ -78,7 +78,7 @@ final class NowPlayingCenter {
         center.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             let position = event.positionTime
-            return self?.dispatch { player in Task { await player.seek(to: position) } } ?? .commandFailed
+            return self?.dispatch { player in Task { await player.seekWithinCurrentChapter(to: position) } } ?? .commandFailed
         }
     }
 
