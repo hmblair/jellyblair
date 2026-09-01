@@ -96,9 +96,10 @@ public struct BookRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(book.name)
+                    .font(.title3)
                     .lineLimit(1)
                 Text(formatHoursMinutes(book.runTimeSeconds))
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -142,6 +143,7 @@ public struct AuthorHeading: View {
         Button(action: action) {
             HStack {
                 Text(name)
+                    .font(.callout)
                 Spacer()
             }
             .contentShape(Rectangle())
