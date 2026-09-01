@@ -18,6 +18,7 @@ public struct BookView: View {
     @State private var isAutoScrollWindowOpen = true
     @State private var chapterQuery = ""
     @State private var isHoveringJumpButton = false
+    @State private var isHoveringDownload = false
     @State private var isHoveringAuthor = false
     @State private var hoveredNameWords = 0
 
@@ -313,7 +314,8 @@ public struct BookView: View {
         .font(.body.monospacedDigit())
     }
 
-    /// Download, cancel, or remove the offline copy of the book.
+    /// Download the book, cancel a download in progress, or show that the
+    /// offline copy exists.
     @ViewBuilder
     private var downloadControl: some View {
         switch model.downloadState {
@@ -321,11 +323,14 @@ public struct BookView: View {
             Button {
                 model.download()
             } label: {
-                Label("Download", systemImage: "arrow.down.circle")
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.title)
+                    .foregroundStyle(.primary)
+                    .opacity(isHoveringDownload ? 0.6 : 1)
+                    .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
             }
             .buttonStyle(.plain)
-            .font(.callout)
-            .foregroundStyle(.secondary)
+            .onHover { isHoveringDownload = $0 }
             .disabled(!connection.isServerReachable)
             .opacity(connection.isServerReachable ? 1 : 0.4)
         case .downloading(let progress):
@@ -345,20 +350,19 @@ public struct BookView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .font(.callout)
+            .font(.body)
         case .downloaded:
-            Menu {
-                Button("Remove Download", role: .destructive) {
-                    model.removeDownload()
-                }
+            Button {
+                model.removeDownload()
             } label: {
-                Label("Downloaded", systemImage: "checkmark.circle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                Image(systemName: "arrow.down.circle.badge.xmark.fill")
+                    .font(.title)
+                    .symbolRenderingMode(.multicolor)
+                    .opacity(isHoveringDownload ? 0.6 : 1)
+                    .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
             }
             .buttonStyle(.plain)
-            .menuStyle(.borderlessButton)
-            .fixedSize()
+            .onHover { isHoveringDownload = $0 }
         }
     }
 
