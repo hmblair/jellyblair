@@ -83,12 +83,22 @@ public final class BookModel: Identifiable {
         onChaptersChanged(loaded)
     }
 
-    /// Discards the chapters and reads them again from the file.
+    /// Reads the chapters again from the file. The old list and its disk
+    /// cache survive unless the re-read succeeds.
     public func refreshChapters() async {
+        guard !isFetchingChapters else { return }
+        isFetchingChapters = true
+        defer { isFetchingChapters = false }
+        let previous = chapters
         chapters = []
-        onChaptersChanged([])
         releaseAsset()
-        await fetchChaptersIfNeeded()
+        let loaded = await loadChapters()
+        guard !loaded.isEmpty else {
+            chapters = previous
+            return
+        }
+        chapters = loaded
+        onChaptersChanged(loaded)
     }
 
     // MARK: - Chapter reading

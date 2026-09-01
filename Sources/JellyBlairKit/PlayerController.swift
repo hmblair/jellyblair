@@ -81,6 +81,9 @@ public final class PlayerController {
             if let terminationObserver {
                 NotificationCenter.default.removeObserver(terminationObserver)
             }
+            if let playbackEndObserver {
+                NotificationCenter.default.removeObserver(playbackEndObserver)
+            }
         }
     }
 
@@ -416,6 +419,7 @@ public final class PlayerController {
     }
 
     private func handlePlaybackFailure(_ message: String) {
+        guard playbackErrorMessage == nil else { return }
         playbackErrorMessage = message
         isPlaying = false
         isReady = false
@@ -432,6 +436,8 @@ public final class PlayerController {
         currentModel?.recordPosition(duration)
         audioMeter.reset()
         stopProgressReports()
+        // The stop report below ends the session; replaying starts a new one.
+        hasActiveSession = false
         syncNowPlaying()
         Task {
             await client.reportPlaybackStopped(bookID: book.id, positionSeconds: duration)
