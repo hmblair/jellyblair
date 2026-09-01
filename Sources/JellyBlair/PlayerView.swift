@@ -134,7 +134,7 @@ struct RemainingTimeView: View {
         guard player.playbackSpeed != 1 else {
             return "\(label) remaining"
         }
-        return "\(label) remaining at \(String(format: "%g×", player.playbackSpeed))"
+        return "\(label) remaining at \(formatPlaybackSpeed(player.playbackSpeed))"
     }
 }
 
@@ -257,21 +257,17 @@ struct TransportControlsView: View {
                 set: { player.setPlaybackSpeed($0) }
             )) {
                 ForEach(Self.speeds, id: \.self) { speed in
-                    Text(speedLabel(speed)).tag(speed)
+                    Text(formatPlaybackSpeed(speed)).tag(speed)
                 }
             }
             .pickerStyle(.inline)
         } label: {
-            Text(speedLabel(player.playbackSpeed))
+            Text(formatPlaybackSpeed(player.playbackSpeed))
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-    }
-
-    private func speedLabel(_ speed: Double) -> String {
-        String(format: "%g×", speed)
     }
 }
 

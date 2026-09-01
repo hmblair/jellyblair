@@ -66,7 +66,10 @@ struct ContentView: View {
     @State private var library: LibraryViewModel
     @State private var player: PlayerController
     @State private var connection: ConnectionMonitor
-    @State private var selectedBook: Book?
+
+    /// Selection is tracked by ID, so it survives library refreshes that
+    /// replace the Book values.
+    @State private var selectedBookID: String?
 
     init(client: JellyfinClient) {
         _library = State(initialValue: LibraryViewModel(client: client))
@@ -74,9 +77,13 @@ struct ContentView: View {
         _connection = State(initialValue: ConnectionMonitor(client: client))
     }
 
+    private var selectedBook: Book? {
+        library.books.first { $0.id == selectedBookID }
+    }
+
     var body: some View {
         NavigationSplitView {
-            LibraryView(library: library, selection: $selectedBook)
+            LibraryView(library: library, selection: $selectedBookID)
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } detail: {
             if let selectedBook {
@@ -95,8 +102,8 @@ struct ContentView: View {
             connection.start()
             await library.load()
         }
-        .onChange(of: selectedBook) { _, newBook in
-            guard let newBook else { return }
+        .onChange(of: selectedBookID) { _, newID in
+            guard let newBook = library.books.first(where: { $0.id == newID }) else { return }
             player.open(newBook)
         }
         .onChange(of: connection.isServerReachable) { _, reachable in

@@ -27,6 +27,7 @@ final class PlayerController {
     private var timeObserver: Any?
     private var statusObservation: NSKeyValueObservation?
     private var playbackEndObserver: NSObjectProtocol?
+    private var terminationObserver: NSObjectProtocol?
     private var progressReportTimer: Timer?
 
     /// Number of seeks in flight. The time observer is ignored while this is nonzero,
@@ -70,6 +71,19 @@ final class PlayerController {
         playbackSpeed = storedSpeed > 0 ? storedSpeed : 1.0
         observeAppTermination()
         nowPlaying.attach(to: self)
+    }
+
+    deinit {
+        // Owned by SwiftUI state, so deallocation happens on the main thread.
+        MainActor.assumeIsolated {
+            progressReportTimer?.invalidate()
+            if let timeObserver, let player {
+                player.removeTimeObserver(timeObserver)
+            }
+            if let terminationObserver {
+                NotificationCenter.default.removeObserver(terminationObserver)
+            }
+        }
     }
 
     var currentChapter: Chapter? {
@@ -127,14 +141,14 @@ final class PlayerController {
         let ready = await waitUntilReady(item)
         guard generation == openGeneration else { return }
         guard ready else {
-            handlePlaybackFailure("Cannot reach the server.")
+            handlePlaybackFailure(item.error?.localizedDescription ?? "Cannot reach the server.")
             return
         }
         isReady = true
 
-        if let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first,
-           let audioMix = audioMeter.makeAudioMix(for: audioTrack) {
-            guard generation == openGeneration else { return }
+        let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first
+        guard generation == openGeneration else { return }
+        if let audioTrack, let audioMix = audioMeter.makeAudioMix(for: audioTrack) {
             item.audioMix = audioMix
         }
 
@@ -433,6 +447,9 @@ final class PlayerController {
     private func handlePlaybackEnded() {
         guard let book else { return }
         isPlaying = false
+        setCurrentTime(duration)
+        lastKnownPositions[book.id] = duration
+        audioMeter.reset()
         stopProgressReports()
         syncNowPlaying()
         Task {
@@ -470,7 +487,7 @@ final class PlayerController {
     /// Sends a final stop report before the process exits, blocking briefly so the
     /// request has a chance to leave. Async reporting cannot finish during termination.
     private func observeAppTermination() {
-        NotificationCenter.default.addObserver(
+        terminationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main

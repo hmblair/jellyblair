@@ -47,13 +47,17 @@ final class AudioLevelMeter {
 
     /// Builds an audio mix whose processing tap feeds this meter.
     func makeAudioMix(for track: AVAssetTrack) -> AVAudioMix? {
+        // The tap retains the meter and releases it in finalize, so the audio
+        // thread can never call into a deallocated meter.
         var callbacks = MTAudioProcessingTapCallbacks(
             version: kMTAudioProcessingTapCallbacksVersion_0,
-            clientInfo: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()),
+            clientInfo: UnsafeMutableRawPointer(Unmanaged.passRetained(self).toOpaque()),
             init: { _, clientInfo, tapStorageOut in
                 tapStorageOut.pointee = clientInfo!
             },
-            finalize: nil,
+            finalize: { tap in
+                Unmanaged<AudioLevelMeter>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).release()
+            },
             prepare: nil,
             unprepare: nil,
             process: { tap, numberFrames, _, bufferListInOut, numberFramesOut, flagsOut in

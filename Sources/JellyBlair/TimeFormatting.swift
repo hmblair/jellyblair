@@ -8,3 +8,8 @@ func formatTime(_ seconds: Double) -> String {
     let secs = total % 60
     return String(format: "%d:%02d:%02d", hours, minutes, secs)
 }
+
+/// Formats a playback speed as "1×" or "1.5×".
+func formatPlaybackSpeed(_ speed: Double) -> String {
+    String(format: "%g×", speed)
+}

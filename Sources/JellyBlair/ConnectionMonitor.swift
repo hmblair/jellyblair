@@ -20,25 +20,33 @@ final class ConnectionMonitor {
         self.client = client
     }
 
-    func start() {
-        guard pollTask == nil else { return }
-        pollTask = Task { await poll() }
-    }
-
-    private func poll() async {
-        while !Task.isCancelled {
-            let reachable = await client.pingServer()
-            await update(reachable)
-            let interval = reachable ? Self.reachablePollInterval : Self.unreachablePollInterval
-            try? await Task.sleep(for: .seconds(interval))
+    deinit {
+        // Owned by SwiftUI state, so deallocation happens on the main thread.
+        MainActor.assumeIsolated {
+            pollTask?.cancel()
         }
     }
 
-    private func update(_ reachable: Bool) async {
+    func start() {
+        guard pollTask == nil else { return }
+        // The task holds the monitor weakly and only for the duration of each
+        // poll, so a discarded monitor stops polling instead of leaking.
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let interval = await self?.pollOnce() else { return }
+                try? await Task.sleep(for: .seconds(interval))
+            }
+        }
+    }
+
+    /// Runs one reachability check and returns the delay until the next one.
+    private func pollOnce() async -> TimeInterval {
+        let reachable = await client.pingServer()
         let cameBack = reachable && !isServerReachable
         isServerReachable = reachable
         if cameBack {
             await client.flushUnsentProgressReport()
         }
+        return reachable ? Self.reachablePollInterval : Self.unreachablePollInterval
     }
 }

@@ -3,20 +3,23 @@ import SwiftUI
 /// Sidebar list of audiobooks with cover art and runtime.
 struct LibraryView: View {
     let library: LibraryViewModel
-    @Binding var selection: Book?
+    @Binding var selection: String?
 
     var body: some View {
         List(library.books, selection: $selection) { book in
             BookRow(book: book, imageURL: library.client.imageURL(for: book))
-                .tag(book)
+                .tag(book.id)
         }
         .listStyle(.sidebar)
         .navigationTitle("Audiobooks")
         .overlay {
-            if library.isLoading {
-                ProgressView()
-            } else if let message = library.errorMessage {
-                ContentUnavailableView("Cannot load the library", systemImage: "exclamationmark.triangle", description: Text(message))
+            // A refresh failure keeps the current list; overlays only cover an empty one.
+            if library.books.isEmpty {
+                if library.isLoading {
+                    ProgressView()
+                } else if let message = library.errorMessage {
+                    ContentUnavailableView("Cannot load the library", systemImage: "exclamationmark.triangle", description: Text(message))
+                }
             }
         }
     }
