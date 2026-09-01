@@ -31,21 +31,32 @@ public struct BookView: View {
     }
 
     public var body: some View {
+        // On the phone the list runs edge to edge; only the upper content
+        // keeps side padding. The Mac pads the whole page.
         VStack(spacing: 16) {
-            header
-            if isLoaded {
-                if let message = player.playbackErrorMessage {
-                    errorBanner(message)
+            Group {
+                header
+                if isLoaded {
+                    if let message = player.playbackErrorMessage {
+                        errorBanner(message)
+                    }
+                    SeekBarView()
+                    TransportControlsView()
+                } else {
+                    playButton
                 }
-                SeekBarView()
-                TransportControlsView()
-            } else {
-                playButton
             }
+            #if os(iOS)
+            .padding(.horizontal, 20)
+            #endif
             Divider()
             chapterList
         }
+        #if os(macOS)
         .padding(20)
+        #else
+        .padding(.top, 8)
+        #endif
     }
 
     // MARK: - Header
@@ -192,7 +203,7 @@ public struct BookView: View {
                     }
                 }
             }
-            .listStyle(.inset)
+            .platformChapterListStyle()
             .overlay {
                 if chapters.isEmpty {
                     if model.isFetchingChapters {
@@ -262,5 +273,16 @@ public struct BookView: View {
         if chapter.index > marked { return .upcoming }
         guard isLoaded else { return .current(.bookmark) }
         return .current(player.isPlaying ? .playing : .paused)
+    }
+}
+
+private extension View {
+    /// Edge-to-edge rows on the phone; the inset style on the Mac.
+    func platformChapterListStyle() -> some View {
+        #if os(iOS)
+        return listStyle(.plain)
+        #else
+        return listStyle(.inset)
+        #endif
     }
 }
