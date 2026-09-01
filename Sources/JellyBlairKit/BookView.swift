@@ -59,15 +59,39 @@ public struct BookView: View {
             .padding(.horizontal, 20)
             #endif
             Divider()
-            chapterFilterField
-            chapterList
+            chapterSection
+                .modifier(ExtendToScreenBottom())
         }
         #if os(macOS)
-        .padding(20)
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
         #else
         .padding(.top, 8)
         #endif
     }
+
+    /// The filter bar floats over the list, whose rows scroll up behind it,
+    /// masked to nothing in the bar's zone with a fade beneath.
+    private var chapterSection: some View {
+        ZStack(alignment: .top) {
+            chapterList
+                .mask(
+                    VStack(spacing: 0) {
+                        Color.clear
+                            .frame(height: Self.filterBarZoneHeight)
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 22)
+                        Rectangle()
+                        LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 22)
+                    }
+                )
+            chapterFilterField
+        }
+    }
+
+    /// Height of the region the floating filter bar occupies over the list.
+    private static let filterBarZoneHeight: CGFloat = 34
 
     /// A slim filter row attached to the top of the chapter list.
     private var chapterFilterField: some View {
@@ -244,6 +268,13 @@ public struct BookView: View {
                 }
             }
             .platformChapterListStyle()
+            // Keeps the resting rows clear of the floating filter bar.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Color.clear.frame(height: Self.filterBarZoneHeight + 6)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear.frame(height: Self.bottomRestingInset)
+            }
             .overlay {
                 if chapters.isEmpty {
                     if model.isFetchingChapters {
@@ -327,6 +358,30 @@ private extension View {
         return listStyle(.plain)
         #else
         return listStyle(.inset)
+        #endif
+    }
+}
+
+/// On the phone the chapter list runs under the home indicator, so the fade
+/// lands at the true screen bottom. The Mac window has no such inset.
+private struct ExtendToScreenBottom: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.ignoresSafeArea(edges: .bottom)
+        #else
+        content
+        #endif
+    }
+}
+
+private extension BookView {
+    /// Resting clearance for the last row: past the fade, and past the home
+    /// indicator on the phone.
+    static var bottomRestingInset: CGFloat {
+        #if os(iOS)
+        return 44
+        #else
+        return 16
         #endif
     }
 }
