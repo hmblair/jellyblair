@@ -86,6 +86,9 @@ struct ContentView: View {
             NavigationSplitView {
                 LibraryView(selection: $selectedBookID, scope: $sidebarScope)
                     .navigationSplitViewColumnWidth(min: 220, ideal: 260)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        OfflineIndicator()
+                    }
             } detail: {
                 if let selectedBook {
                     BookView(book: selectedBook)
@@ -103,11 +106,6 @@ struct ContentView: View {
         }
         // Blank, so the window shows no title text over the book screen.
         .navigationTitle("")
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if !scope.connection.isServerReachable {
-                ConnectionBanner()
-            }
-        }
         .task {
             scope.connection.start()
             await scope.library.load()
@@ -133,13 +131,3 @@ struct ContentView: View {
     }
 }
 
-/// A persistent strip shown while the server is unreachable.
-struct ConnectionBanner: View {
-    var body: some View {
-        Label("Server unreachable — retrying", systemImage: "wifi.exclamationmark")
-            .font(.callout)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-            .background(.yellow.opacity(0.25))
-    }
-}

@@ -77,10 +77,9 @@ struct MainScreen: View {
                 }
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if !scope.connection.isServerReachable {
-                ConnectionBanner()
-            }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            OfflineIndicator()
+                .background(.bar)
         }
         .task {
             scope.connection.start()
@@ -108,16 +107,6 @@ struct MainScreen: View {
     }
 }
 
-/// A persistent strip shown while the server is unreachable.
-struct ConnectionBanner: View {
-    var body: some View {
-        Label("Server unreachable — retrying", systemImage: "wifi.exclamationmark")
-            .font(.callout)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-            .background(.yellow.opacity(0.25))
-    }
-}
 
 /// A destination the library can navigate to.
 enum LibraryRoute: Hashable {

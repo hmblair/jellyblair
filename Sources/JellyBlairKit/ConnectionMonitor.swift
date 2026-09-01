@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 
 /// Polls the server and tracks whether it is reachable.
@@ -11,6 +12,8 @@ public final class ConnectionMonitor {
     public private(set) var isServerReachable = true
 
     private var pollTask: Task<Void, Never>?
+    @ObservationIgnored private let pathMonitor = NWPathMonitor()
+    @ObservationIgnored private var isStarted = false
 
     /// Poll slowly while healthy, quickly while down so recovery shows promptly.
     private static let reachablePollInterval: TimeInterval = 15
@@ -21,6 +24,7 @@ public final class ConnectionMonitor {
     }
 
     deinit {
+        pathMonitor.cancel()
         // Owned by SwiftUI state, so deallocation happens on the main thread.
         MainActor.assumeIsolated {
             pollTask?.cancel()
@@ -28,7 +32,31 @@ public final class ConnectionMonitor {
     }
 
     public func start() {
-        guard pollTask == nil else { return }
+        guard !isStarted else { return }
+        isStarted = true
+        // The path monitor makes losing the local network known instantly;
+        // regaining it triggers an immediate ping, since a live network does
+        // not guarantee a reachable server.
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            let satisfied = path.status == .satisfied
+            Task { @MainActor in
+                self?.handlePathChange(satisfied: satisfied)
+            }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "connection-path-monitor"))
+        restartPolling()
+    }
+
+    private func handlePathChange(satisfied: Bool) {
+        if satisfied {
+            restartPolling()
+        } else {
+            isServerReachable = false
+        }
+    }
+
+    private func restartPolling() {
+        pollTask?.cancel()
         // The task holds the monitor weakly and only for the duration of each
         // poll, so a discarded monitor stops polling instead of leaking.
         pollTask = Task { [weak self] in

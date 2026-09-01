@@ -9,6 +9,7 @@ public struct BookView: View {
 
     @Environment(PlayerController.self) private var player
     @Environment(BookCatalog.self) private var catalog
+    @Environment(ConnectionMonitor.self) private var connection
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openAuthor) private var openAuthor
@@ -34,6 +35,11 @@ public struct BookView: View {
 
     private var chapters: [Chapter] {
         isLoaded ? player.chapters : model.chapters
+    }
+
+    /// Offline, only a downloaded book can start playing.
+    private var canStartPlayback: Bool {
+        connection.isServerReachable || model.downloadState == .downloaded
     }
 
     /// Chapters whose titles contain the query; all of them when it is empty.
@@ -320,6 +326,8 @@ public struct BookView: View {
             .buttonStyle(.plain)
             .font(.callout)
             .foregroundStyle(.secondary)
+            .disabled(!connection.isServerReachable)
+            .opacity(connection.isServerReachable ? 1 : 0.4)
         case .downloading(let progress):
             HStack(spacing: 8) {
                 if let progress {
@@ -382,6 +390,7 @@ public struct BookView: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
+        .disabled(!canStartPlayback)
     }
 
     /// The chapter the Resume button will land in, once chapters are known.
@@ -406,7 +415,7 @@ public struct BookView: View {
                 .onTapGesture {
                     if isLoaded {
                         Task { await player.jump(to: chapter) }
-                    } else {
+                    } else if canStartPlayback {
                         player.open(model, playWhenReady: true, startAtSeconds: chapter.startSeconds)
                     }
                 }
@@ -451,6 +460,14 @@ public struct BookView: View {
             }
             .task(id: book.id) {
                 guard !isLoaded else { return }
+                // Offline, only a downloaded file can serve chapters, and
+                // there is no server to ask or asset to warm.
+                guard connection.isServerReachable else {
+                    if model.downloadState == .downloaded {
+                        await model.fetchChaptersIfNeeded()
+                    }
+                    return
+                }
                 async let userDataFetch: Void = model.refreshUserData()
                 await model.fetchChaptersIfNeeded()
                 await model.prewarmAsset()
