@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// A sidebar section: one author and their books.
-public struct AuthorGroup: Identifiable {
+public struct AuthorGroup: Identifiable, Hashable {
     public let name: String
     public let books: [Book]
 
@@ -42,14 +42,17 @@ public final class LibraryViewModel {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return authorGroups }
         return authorGroups.compactMap { group in
-            let matches = group.books.filter { book in
-                book.name.localizedCaseInsensitiveContains(trimmed)
-                    || (book.author?.localizedCaseInsensitiveContains(trimmed) ?? false)
-                    || (book.narrator?.localizedCaseInsensitiveContains(trimmed) ?? false)
-            }
+            let matches = group.books.filter { $0.matches(trimmed) }
             guard !matches.isEmpty else { return nil }
             return AuthorGroup(name: group.name, books: matches)
         }
+    }
+
+    /// One author's books, filtered by the query when it is not empty.
+    public func books(in group: AuthorGroup, matching query: String) -> [Book] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return group.books }
+        return group.books.filter { $0.matches(trimmed) }
     }
 
     /// Groups books under their authors. Books keep the server's title order

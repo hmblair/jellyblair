@@ -74,6 +74,14 @@ public struct Book: Decodable, Identifiable, Hashable {
         return joined.isEmpty ? nil : joined
     }
 
+    /// True when the title, author, or narrator contains the query.
+    /// The single matcher behind every search field in the app.
+    public func matches(_ query: String) -> Bool {
+        name.localizedCaseInsensitiveContains(query)
+            || (author?.localizedCaseInsensitiveContains(query) ?? false)
+            || (narrator?.localizedCaseInsensitiveContains(query) ?? false)
+    }
+
     /// Jellyfin stores audiobook narrators as people with the Composer type.
     public var narrator: String? {
         let names = (people ?? []).filter { $0.type == "Composer" }.map(\.name)

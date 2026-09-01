@@ -6,6 +6,7 @@ struct LibraryScreen: View {
     let session: AppSession
 
     @Environment(LibraryViewModel.self) private var library
+    @Environment(\.openAuthor) private var openAuthor
     @Environment(PlayerController.self) private var player
 
     @State private var isShowingSettings = false
@@ -18,11 +19,15 @@ struct LibraryScreen: View {
     var body: some View {
         List {
             ForEach(visibleGroups) { group in
-                Section(group.name) {
+                Section {
                     ForEach(group.books) { book in
-                        NavigationLink(value: book) {
+                        NavigationLink(value: LibraryRoute.book(book)) {
                             BookRow(book: book, isLoaded: book.id == player.book?.id)
                         }
+                    }
+                } header: {
+                    AuthorHeading(name: group.name) {
+                        openAuthor?(group.name)
                     }
                 }
             }

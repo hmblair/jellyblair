@@ -11,10 +11,12 @@ public struct BookView: View {
     @Environment(BookCatalog.self) private var catalog
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openAuthor) private var openAuthor
 
     @State private var isAutoScrollWindowOpen = true
     @State private var chapterQuery = ""
     @State private var isHoveringJumpButton = false
+    @State private var isHoveringAuthor = false
 
     public init(book: Book) {
         self.book = book
@@ -173,7 +175,7 @@ public struct BookView: View {
                 Text(book.name)
                     .font(.title2.bold())
                 if let author = book.author {
-                    Text(author)
+                    authorLine(author)
                 }
                 if let narrator = book.narrator {
                     Text("Narrated by \(narrator)")
@@ -203,7 +205,7 @@ public struct BookView: View {
                 .font(.title3.bold())
                 .multilineTextAlignment(.center)
             if let author = book.author {
-                Text(author)
+                authorLine(author)
                     .font(.subheadline)
                     .multilineTextAlignment(.center)
             }
@@ -221,6 +223,25 @@ public struct BookView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
     #endif
+
+    /// The author's name, navigating to their books when the shell
+    /// provides a destination.
+    @ViewBuilder
+    private func authorLine(_ author: String) -> some View {
+        if let openAuthor {
+            Button {
+                openAuthor(author)
+            } label: {
+                Text(author)
+                    .opacity(isHoveringAuthor ? 0.6 : 1)
+                    .animation(.easeOut(duration: 0.1), value: isHoveringAuthor)
+            }
+            .buttonStyle(.plain)
+            .onHover { isHoveringAuthor = $0 }
+        } else {
+            Text(author)
+        }
+    }
 
     private var cover: some View {
         BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fit)
@@ -416,4 +437,22 @@ private extension BookView {
         return 16
         #endif
     }
+}
+
+/// Navigates to an author's books; injected per shell, since the sidebar
+/// scopes on the Mac and the stack pushes on the phone.
+public struct OpenAuthorAction {
+    private let handler: (String) -> Void
+
+    public init(_ handler: @escaping (String) -> Void) {
+        self.handler = handler
+    }
+
+    public func callAsFunction(_ authorName: String) {
+        handler(authorName)
+    }
+}
+
+public extension EnvironmentValues {
+    @Entry var openAuthor: OpenAuthorAction?
 }

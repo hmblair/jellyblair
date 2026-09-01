@@ -1,9 +1,11 @@
 import JellyBlairKit
 import SwiftUI
 
-/// Sidebar list of audiobooks, grouped by author.
+/// Sidebar list of audiobooks. Shows the full library grouped by author, or
+/// one author's books after their heading is clicked, with a back row.
 struct LibraryView: View {
     @Binding var selection: String?
+    @Binding var authorScope: AuthorGroup?
 
     @Environment(LibraryViewModel.self) private var library
     @Environment(PlayerController.self) private var player
@@ -16,11 +18,21 @@ struct LibraryView: View {
 
     var body: some View {
         List(selection: $selection) {
-            ForEach(visibleGroups) { group in
-                Section(group.name) {
-                    ForEach(group.books) { book in
-                        BookRow(book: book, isLoaded: book.id == player.book?.id)
-                            .tag(book.id)
+            if let authorScope {
+                backRow(to: authorScope)
+                ForEach(library.books(in: authorScope, matching: searchQuery)) { book in
+                    row(for: book)
+                }
+            } else {
+                ForEach(visibleGroups) { group in
+                    Section {
+                        ForEach(group.books) { book in
+                            row(for: book)
+                        }
+                    } header: {
+                        AuthorHeading(name: group.name) {
+                            enterScope(group)
+                        }
                     }
                 }
             }
@@ -36,9 +48,43 @@ struct LibraryView: View {
                 } else if let message = library.errorMessage {
                     ContentUnavailableView("Cannot load the library", systemImage: "exclamationmark.triangle", description: Text(message))
                 }
-            } else if visibleGroups.isEmpty {
+            } else if authorScope == nil, visibleGroups.isEmpty {
                 ContentUnavailableView.search(text: searchQuery)
             }
         }
+    }
+
+    private func row(for book: Book) -> some View {
+        BookRow(book: book, isLoaded: book.id == player.book?.id)
+            .tag(book.id)
+    }
+
+
+
+    private func backRow(to scope: AuthorGroup) -> some View {
+        Button {
+            exitScope()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left")
+                    .font(.caption)
+                Text(scope.name)
+                    .fontWeight(.semibold)
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func enterScope(_ group: AuthorGroup) {
+        searchQuery = ""
+        // The clicked group can be a filtered subset; scope to the full one.
+        authorScope = library.authorGroups.first { $0.name == group.name } ?? group
+    }
+
+    private func exitScope() {
+        searchQuery = ""
+        authorScope = nil
     }
 }

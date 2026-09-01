@@ -48,7 +48,7 @@ struct RootScreen: View {
 struct MainScreen: View {
     let session: AppSession
     @State private var scope: SessionScope
-    @State private var path: [Book] = []
+    @State private var path: [LibraryRoute] = []
 
     init(session: AppSession, client: JellyfinClient) {
         self.session = session
@@ -58,17 +58,22 @@ struct MainScreen: View {
     var body: some View {
         NavigationStack(path: $path) {
             LibraryScreen(session: session)
-                .navigationDestination(for: Book.self) { book in
-                    BookView(book: book)
-                        .navigationBarTitleDisplayMode(.inline)
+                .navigationDestination(for: LibraryRoute.self) { route in
+                    switch route {
+                    case .book(let book):
+                        BookView(book: book)
+                            .navigationBarTitleDisplayMode(.inline)
+                    case .author(let group):
+                        AuthorScreen(group: group)
+                    }
                 }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // The bar shows everywhere except the loaded book's own screen,
             // which already carries the full controls.
-            if let loadedBook = scope.player.book, path.last?.id != loadedBook.id {
+            if let loadedBook = scope.player.book, path.last != .book(loadedBook) {
                 MiniPlayerBar {
-                    path = [loadedBook]
+                    path = [.book(loadedBook)]
                 }
             }
         }
@@ -85,6 +90,10 @@ struct MainScreen: View {
             guard reachable, scope.library.errorMessage != nil else { return }
             Task { await scope.library.load() }
         }
+        .environment(\.openAuthor, OpenAuthorAction { [library = scope.library] name in
+            guard let group = library.authorGroups.first(where: { $0.name == name }) else { return }
+            path.append(.author(group))
+        })
         .environment(scope.library)
         .environment(scope.player)
         .environment(scope.connection)
@@ -101,4 +110,10 @@ struct ConnectionBanner: View {
             .padding(.vertical, 6)
             .background(.yellow.opacity(0.25))
     }
+}
+
+/// A destination the library can navigate to.
+enum LibraryRoute: Hashable {
+    case book(Book)
+    case author(AuthorGroup)
 }

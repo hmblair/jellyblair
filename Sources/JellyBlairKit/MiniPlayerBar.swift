@@ -126,3 +126,26 @@ public struct BookRow: View {
         .onHover { isHovering = $0 }
     }
 }
+
+/// An author section heading: plain text in the platform's header style,
+/// clickable across its full width to open the author's books.
+public struct AuthorHeading: View {
+    let name: String
+    let action: () -> Void
+
+    public init(name: String, action: @escaping () -> Void) {
+        self.name = name
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(name)
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
