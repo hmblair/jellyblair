@@ -17,10 +17,8 @@ public struct BookView: View {
     @Environment(\.openNarrator) private var openNarrator
     @Environment(\.openGenre) private var openGenre
 
-    @State private var isAutoScrollWindowOpen = true
     @State private var filterQuery = ""
     @State private var isShowingTranscript = false
-    @State private var isTrackingPosition = false
     /// The spoken word's last reported height in the transcript content,
     /// for scrolling only when the narration moves to a new wrapped row.
     @State private var trackedWordY: CGFloat?
@@ -161,36 +159,47 @@ public struct BookView: View {
         }
     }
 
-    /// Toggles tracking: while on, the listener's position stays centered as
-    /// it moves. Turning it on clears any filter that hides the position and
-    /// centers it right away. Scrolling the list by hand turns tracking off.
+    /// Toggles tracking, which is on by default and shared across books.
+    /// Turning it on clears any filter that hides the position and centers
+    /// it right away. Scrolling the list by hand turns tracking off.
     private func trackingButton(_ proxy: ScrollViewProxy) -> some View {
         Button {
-            isTrackingPosition.toggle()
-            guard isTrackingPosition else { return }
+            player.isTrackingPosition.toggle()
+            guard player.isTrackingPosition else { return }
             filterQuery = ""
             Task { @MainActor in
-                withAnimation {
-                    scrollToCurrentPosition(proxy)
-                }
+                centerOnTrackedPosition(proxy)
             }
         } label: {
             Image(systemName: "scope")
                 .font(.callout)
-                .foregroundStyle(isTrackingPosition ? Color.white : Color.secondary)
+                .foregroundStyle(player.isTrackingPosition ? Color.white : Color.secondary)
                 .padding(.vertical, 5)
                 .padding(.horizontal, 8)
                 .background(
                     Capsule()
-                        .fill(isTrackingPosition ? Color.accentColor : Color.primary.opacity(isHoveringJumpButton ? 0.12 : 0.06))
+                        .fill(player.isTrackingPosition ? Color.accentColor : Color.primary.opacity(isHoveringJumpButton ? 0.12 : 0.06))
                         .animation(.easeOut(duration: 0.1), value: isHoveringJumpButton)
                 )
         }
         .buttonStyle(.plain)
         .onHover { isHoveringJumpButton = $0 }
-        .help(isTrackingPosition ? "Stop following the listening position" : "Follow the listening position")
+        .help(player.isTrackingPosition ? "Stop following the listening position" : "Follow the listening position")
         .disabled(jumpTargetIndex == nil)
         .opacity(jumpTargetIndex == nil ? 0.4 : 1)
+    }
+
+    /// Centers the listener's position while tracking is on. Every centering
+    /// goes through here: opening a book, pressing the tracking button, and
+    /// the marked chapter moving. The unanimated form serves openings, where
+    /// an animated scroll would glide across the whole list.
+    private func centerOnTrackedPosition(_ proxy: ScrollViewProxy, animated: Bool = true) {
+        guard player.isTrackingPosition else { return }
+        if animated {
+            withAnimation { scrollToCurrentPosition(proxy) }
+        } else {
+            scrollToCurrentPosition(proxy)
+        }
     }
 
     /// The row tracking centers on, in whichever list is showing.
@@ -200,7 +209,7 @@ public struct BookView: View {
 
     private func scrollToCurrentPosition(_ proxy: ScrollViewProxy) {
         if isShowingTranscript {
-            scrollToCurrentLine(proxy)
+            scrollToSpokenWord(proxy)
         } else {
             scrollToMarkedChapter(proxy)
         }
@@ -502,19 +511,13 @@ public struct BookView: View {
             // marked chapter itself moves, instead of on every upstream
             // data change. Each scroll walks the whole row list, so extra
             // firings are expensive on long books.
-            .onChange(of: markedChapterIndex, initial: true) {
-                if isTrackingPosition {
-                    withAnimation { scrollToMarkedChapter(proxy) }
-                } else if !isLoaded || isAutoScrollWindowOpen {
-                    scrollToMarkedChapter(proxy)
-                }
+            // The initial firing passes equal indices; a real chapter move
+            // passes different ones and animates.
+            .onChange(of: markedChapterIndex, initial: true) { oldIndex, newIndex in
+                centerOnTrackedPosition(proxy, animated: oldIndex != newIndex)
             }
             .onUserScroll {
-                isTrackingPosition = false
-            }
-            .task {
-                try? await Task.sleep(for: .seconds(3))
-                isAutoScrollWindowOpen = false
+                player.isTrackingPosition = false
             }
             .task(id: book.id) {
                 guard !isLoaded else { return }
@@ -589,7 +592,7 @@ public struct BookView: View {
         }
         .task(id: book.id) {
             await model.fetchLyricsIfNeeded()
-            scrollToCurrentLine(proxy)
+            centerOnTrackedPosition(proxy, animated: false)
         }
     }
 
@@ -646,6 +649,9 @@ public struct BookView: View {
             .coordinateSpace(name: LyricLineText.contentSpaceName)
             .padding(.horizontal, Self.transcriptHorizontalPadding)
         }
+        // While tracking scrolls the transcript, the indicator would flash
+        // on every followed row; it returns once the user scrolls themselves.
+        .scrollIndicators(player.isTrackingPosition ? .hidden : .automatic)
         // Keeps the resting text clear of the floating filter bar.
         .safeAreaInset(edge: .top, spacing: 0) {
             Color.clear.frame(height: floatingBarZoneHeight + 6)
@@ -666,7 +672,7 @@ public struct BookView: View {
             }
         }
         .onUserScroll {
-            isTrackingPosition = false
+            player.isTrackingPosition = false
         }
     }
 
@@ -726,11 +732,17 @@ public struct BookView: View {
         }
     }
 
-    private func scrollToCurrentLine(_ proxy: ScrollViewProxy) {
-        guard let index = currentLineIndex(at: Date()),
-              visibleLines.contains(where: { $0.index == index })
-        else { return }
-        proxy.scrollTo(index, anchor: .center)
+    /// Kicks the event-based row follow. The marker cannot be scrolled to
+    /// before the lazy stack realizes its row, so the line scroll runs first
+    /// to realize it; once the marker has a frame, its scroll wins and the
+    /// kick lands on the spoken row. On a fresh realization the marker's
+    /// first geometry report follows up with the exact centering.
+    private func scrollToSpokenWord(_ proxy: ScrollViewProxy) {
+        if let index = currentLineIndex(at: Date()),
+           visibleLines.contains(where: { $0.index == index }) {
+            proxy.scrollTo(index, anchor: .center)
+        }
+        proxy.scrollTo(LyricLineText.spokenWordID, anchor: .center)
     }
 
     /// Follows the narration onto a new wrapped row. The spoken word reports
@@ -739,7 +751,7 @@ public struct BookView: View {
     private func followSpokenWord(at midY: CGFloat, _ proxy: ScrollViewProxy) {
         let movedRows = abs((trackedWordY ?? -.infinity) - midY) > 1
         trackedWordY = midY
-        guard isTrackingPosition, movedRows else { return }
+        guard player.isTrackingPosition, movedRows else { return }
         withAnimation { proxy.scrollTo(LyricLineText.spokenWordID, anchor: .center) }
     }
 

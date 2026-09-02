@@ -38,6 +38,11 @@ public final class PlayerController {
     public private(set) var currentChapterIndex: Int?
     public private(set) var isPlaying = false
 
+    /// Whether lists follow the listening position, keeping it centered as
+    /// it moves. On by default and shared across screens; scrolling a list
+    /// by hand turns it off, the tracking button turns it back on.
+    public var isTrackingPosition = true
+
     /// The position anchor, written on playback events: play, pause, seek,
     /// speed change, chapter boundary, and the periodic progress report.
     public private(set) var anchor = PlaybackAnchor(positionSeconds: 0, date: .distantPast, rate: 0)
