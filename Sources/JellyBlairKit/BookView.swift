@@ -174,6 +174,11 @@ public struct BookView: View {
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
+                if let genre = book.genre {
+                    Text(genre)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
                 lengthLine
                 downloadRow
                 Spacer()
@@ -204,6 +209,12 @@ public struct BookView: View {
             }
             if let narrator = book.narrator {
                 narratorLine(narrator)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            if let genre = book.genre {
+                Text(genre)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

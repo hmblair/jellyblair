@@ -137,7 +137,7 @@ public final class JellyfinClient {
             URLQueryItem(name: "IncludeItemTypes", value: "AudioBook"),
             URLQueryItem(name: "Recursive", value: "true"),
             URLQueryItem(name: "SortBy", value: "SortName"),
-            URLQueryItem(name: "Fields", value: "People,MediaSources"),
+            URLQueryItem(name: "Fields", value: "People,MediaSources,Genres"),
             URLQueryItem(name: "UserId", value: userID),
         ]
         let request = makeRequest(path: "Items", query: query)

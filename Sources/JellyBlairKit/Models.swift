@@ -66,6 +66,7 @@ public struct Book: Codable, Identifiable, Hashable {
     public let artists: [String]?
     public let people: [Person]?
     public let mediaSources: [MediaSource]?
+    public let genres: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id = "Id"
@@ -76,6 +77,7 @@ public struct Book: Codable, Identifiable, Hashable {
         case artists = "Artists"
         case people = "People"
         case mediaSources = "MediaSources"
+        case genres = "Genres"
     }
 
     /// The audio container format, for naming downloaded files.
@@ -102,6 +104,12 @@ public struct Book: Codable, Identifiable, Hashable {
         name.localizedCaseInsensitiveContains(query)
             || (author?.localizedCaseInsensitiveContains(query) ?? false)
             || (narrator?.localizedCaseInsensitiveContains(query) ?? false)
+    }
+
+    /// The genres joined for display, as the server states them.
+    public var genre: String? {
+        let joined = (genres ?? []).joined(separator: ", ")
+        return joined.isEmpty ? nil : joined
     }
 
     /// Jellyfin stores audiobook narrators as people with the Composer type.
