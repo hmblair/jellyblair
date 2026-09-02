@@ -20,3 +20,17 @@ public func formatHoursMinutes(_ seconds: Double) -> String {
     guard minutes >= 60 else { return "\(minutes)m" }
     return "\(minutes / 60)h \(minutes % 60)m"
 }
+
+/// Formats a byte count with at most three digits, like "63.5 MB",
+/// "147 MB", or "2.38 GB".
+public func formatFileSize(_ bytes: Int64) -> String {
+    let units = ["bytes", "KB", "MB", "GB", "TB"]
+    var value = Double(bytes)
+    var index = 0
+    while value >= 1000, index + 1 < units.count {
+        value /= 1000
+        index += 1
+    }
+    let wholeDigits = value >= 100 ? 3 : (value >= 10 ? 2 : 1)
+    return String(format: "%.\(3 - wholeDigits)f %@", value, units[index])
+}

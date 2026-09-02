@@ -300,7 +300,7 @@ public struct BookView: View {
                 .imageScale(.small)
         } content: {
             if let bytes = book.fileSizeBytes {
-                Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
+                Text(formatFileSize(bytes))
             }
             if let kbps = book.bitrateKbps {
                 Image(systemName: "waveform")
