@@ -134,6 +134,22 @@ public final class LibraryViewModel {
         groups(ofKind: group.kind).first { $0.id == group.id }
     }
 
+    /// Groups of the active kind matching the query, keeping only downloaded
+    /// books when the filter is on.
+    public func visibleGroups(matching query: String, downloadedOnly: Bool, catalog: BookCatalog) -> [BookGroup] {
+        groups(matching: query).compactMap { group in
+            downloadedOnly ? group.keeping { catalog.isDownloaded($0) } : group
+        }
+    }
+
+    /// One group's books matching the query, keeping only downloaded books
+    /// when the filter is on.
+    public func visibleBooks(in group: BookGroup, matching query: String, downloadedOnly: Bool, catalog: BookCatalog) -> [Book] {
+        let matches = books(in: group, matching: query)
+        guard downloadedOnly else { return matches }
+        return matches.filter { catalog.isDownloaded($0) }
+    }
+
     /// One group's books, filtered by the query when it is not empty.
     public func books(in group: BookGroup, matching query: String) -> [Book] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)

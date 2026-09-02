@@ -97,15 +97,10 @@ public final class PlayerController {
     deinit {
         // Owned by SwiftUI state, so deallocation happens on the main thread.
         MainActor.assumeIsolated {
-            progressReportTimer?.invalidate()
-            if let boundaryObserver, let player {
-                player.removeTimeObserver(boundaryObserver)
-            }
+            stopProgressReports()
+            removeObservers()
             if let terminationObserver {
                 NotificationCenter.default.removeObserver(terminationObserver)
-            }
-            if let playbackEndObserver {
-                NotificationCenter.default.removeObserver(playbackEndObserver)
             }
         }
     }
