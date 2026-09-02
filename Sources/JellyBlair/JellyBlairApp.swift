@@ -81,6 +81,15 @@ struct ContentView: View {
         scope.library.books.first { $0.id == selectedBookID }
     }
 
+    /// Runs an arrow key skip unless a text field is being edited, whose
+    /// caret keeps the arrow keys.
+    private func skipKeyResult(_ player: PlayerController, _ skip: @escaping () async -> Void) -> KeyPress.Result {
+        let isEditingText = NSApp.keyWindow?.firstResponder is NSTextView
+        guard player.isReady, !isEditingText else { return .ignored }
+        Task { await skip() }
+        return .handled
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             NavigationSplitView {
@@ -106,6 +115,12 @@ struct ContentView: View {
         }
         // Blank, so the window shows no title text over the book screen.
         .navigationTitle("")
+        .onKeyPress(.leftArrow) { [player = scope.player] in
+            skipKeyResult(player) { await player.skip(by: -30) }
+        }
+        .onKeyPress(.rightArrow) { [player = scope.player] in
+            skipKeyResult(player) { await player.skip(by: 30) }
+        }
         .task {
             scope.connection.start()
             await scope.library.load()
