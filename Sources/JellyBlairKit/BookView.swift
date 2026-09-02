@@ -166,21 +166,21 @@ public struct BookView: View {
                 Text(book.name)
                     .font(.title.bold())
                 if let author = book.author {
-                    authorLine(author)
+                    metadataLine(icon: "person.fill") { authorLine(author) }
                         .font(.title3)
                 }
                 if let narrator = book.narrator {
-                    narratorLine(narrator)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
+                    metadataLine(icon: "mic.fill") { narratorLine(narrator) }
+                        .font(.title3)
                 }
                 if let genre = book.genre {
-                    Text(genre)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
+                    metadataLine(icon: "tag.fill") { Text(genre) }
+                        .font(.title3)
                 }
-                lengthLine
+                metadataLine(icon: "clock.fill") { lengthLine }
+                    .font(.title3)
                 downloadRow
+                    .font(.title3)
                 Spacer()
             }
             Spacer()
@@ -203,24 +203,24 @@ public struct BookView: View {
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
             if let author = book.author {
-                authorLine(author)
+                metadataLine(icon: "person.fill") { authorLine(author) }
                     .font(.callout)
                     .multilineTextAlignment(.center)
             }
             if let narrator = book.narrator {
-                narratorLine(narrator)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                metadataLine(icon: "mic.fill") { narratorLine(narrator) }
+                    .font(.callout)
                     .multilineTextAlignment(.center)
             }
             if let genre = book.genre {
-                Text(genre)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                metadataLine(icon: "tag.fill") { Text(genre) }
+                    .font(.callout)
                     .multilineTextAlignment(.center)
             }
-            lengthLine
+            metadataLine(icon: "clock.fill") { lengthLine }
+                .font(.callout)
             downloadRow
+                .font(.callout)
         }
         .frame(maxWidth: .infinity)
         // The chapter list below competes for vertical space; without this the
@@ -228,6 +228,26 @@ public struct BookView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
     #endif
+
+    /// A metadata row: a small dimmed icon beside its text.
+    private func metadataLine(icon: String, @ViewBuilder content: () -> some View) -> some View {
+        metadataLine {
+            Image(systemName: icon)
+                .imageScale(.small)
+                .foregroundStyle(.secondary)
+        } content: {
+            content()
+        }
+    }
+
+    /// A metadata row with a custom view in the icon column.
+    private func metadataLine(@ViewBuilder icon: () -> some View, @ViewBuilder content: () -> some View) -> some View {
+        HStack(spacing: 6) {
+            icon()
+                .frame(width: 22)
+            content()
+        }
+    }
 
     /// The author's name, navigating to their books when the shell
     /// provides a destination.
@@ -254,13 +274,11 @@ public struct BookView: View {
     private static let narratorAlignment = FlowLayout.Alignment.center
     #endif
 
-    /// The narrator credit, wrapping word by word like text, with the name's
-    /// words forming one hover-and-click group that brightens together.
+    /// The narrator's name, wrapping word by word like text, with the words
+    /// forming one hover-and-click group that dims together like the author.
     private func narratorLine(_ narrator: String) -> some View {
         let nameWords = narrator.split(separator: " ").map(String.init)
         return FlowLayout(alignment: Self.narratorAlignment) {
-            Text("Narrated")
-            Text("by")
             ForEach(Array(nameWords.enumerated()), id: \.offset) { _, word in
                 nameWord(word, narrator: narrator)
             }
@@ -271,7 +289,7 @@ public struct BookView: View {
     private func nameWord(_ word: String, narrator: String) -> some View {
         if let openNarrator {
             Text(word)
-                .foregroundStyle(hoveredNameWords > 0 ? .primary : .secondary)
+                .opacity(hoveredNameWords > 0 ? 0.6 : 1)
                 .animation(.easeOut(duration: 0.1), value: hoveredNameWords > 0)
                 .onTapGesture {
                     openNarrator(narrator)
@@ -304,16 +322,17 @@ public struct BookView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .font(.body.monospacedDigit())
+        .monospacedDigit()
     }
 
-    /// The download control with the file's size beside it.
+    /// The download control in the icon column with the file's size beside it.
     private var downloadRow: some View {
-        HStack(spacing: 5) {
+        metadataLine {
             downloadControl
+                .imageScale(.small)
+        } content: {
             if let bytes = book.fileSizeBytes {
                 Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
-                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
         }
@@ -344,8 +363,7 @@ public struct BookView: View {
                 model.download()
             } label: {
                 Image(systemName: "arrow.down.circle.fill")
-                    .font(.title)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.secondary)
                     .opacity(isHoveringDownload ? 0.6 : 1)
                     .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
             }
@@ -363,7 +381,7 @@ public struct BookView: View {
                     Image(systemName: "arrow.down.circle.fill")
                         .foregroundStyle(.quaternary)
                     Image(systemName: "arrow.down.circle.fill")
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.secondary)
                         .mask {
                             GeometryReader { geometry in
                                 Rectangle()
@@ -372,7 +390,6 @@ public struct BookView: View {
                             }
                         }
                 }
-                .font(.title)
                 .animation(.linear(duration: 0.3), value: progress)
                 .opacity(isHoveringDownload ? 0.6 : 1)
                 .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
@@ -384,7 +401,6 @@ public struct BookView: View {
                 handleRemovalTap()
             } label: {
                 Image(systemName: isConfirmingRemoval ? "questionmark.circle.fill" : "checkmark.circle.fill")
-                    .font(.title)
                     .foregroundStyle(isConfirmingRemoval ? Color.red : Color.green)
                     .contentTransition(.identity)
                     .animation(nil, value: isConfirmingRemoval)
