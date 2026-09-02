@@ -63,6 +63,7 @@ public final class PlayerController {
     private var player: AVPlayer?
     private var boundaryObserver: Any?
     private var statusObservation: NSKeyValueObservation?
+    private var timeControlObservation: NSKeyValueObservation?
     private var playbackEndObserver: NSObjectProtocol?
     private var terminationObserver: NSObjectProtocol?
     private var progressReportTimer: Timer?
@@ -163,6 +164,7 @@ public final class PlayerController {
         player = newPlayer
         observeFailure(of: item)
         observePlaybackEnd(of: item)
+        observeTimeControl(of: newPlayer)
 
         let ready = await waitUntilReady(item)
         guard generation == openGeneration else { return }
@@ -364,11 +366,14 @@ public final class PlayerController {
     }
 
     /// Pins the anchor to the player's authoritative position and current
-    /// rate. This is the drift correction of the projected time.
+    /// rate. This is the drift correction of the projected time. While the
+    /// player waits to rebuffer, the rate is zero, so the projection freezes
+    /// with the audio instead of running ahead.
     private func reanchorFromPlayer() {
         let reported = player?.currentTime().seconds
         let position = reported?.isFinite == true ? reported! : anchor.position()
-        setAnchor(position: position, rate: isPlaying ? playbackSpeed : 0)
+        let isAdvancing = isPlaying && player?.timeControlStatus == .playing
+        setAnchor(position: position, rate: isAdvancing ? playbackSpeed : 0)
     }
 
     private func setChapters(_ newChapters: [Chapter]) {
@@ -435,6 +440,18 @@ public final class PlayerController {
         boundaryObserver = nil
     }
 
+    /// Reanchors whenever the player stalls to rebuffer or starts moving
+    /// again, so the projected time freezes and resumes with the audio.
+    /// Without this, only the periodic progress report corrects the drift,
+    /// and the correction shows as a backward jump.
+    private func observeTimeControl(of player: AVPlayer) {
+        timeControlObservation = player.observe(\.timeControlStatus) { [weak self] _, _ in
+            Task { @MainActor in
+                self?.reanchorFromPlayer()
+            }
+        }
+    }
+
     private func observeFailure(of item: AVPlayerItem) {
         statusObservation = item.observe(\.status) { [weak self] item, _ in
             guard item.status == .failed else { return }
@@ -461,6 +478,8 @@ public final class PlayerController {
         removeChapterBoundaryObserver()
         statusObservation?.invalidate()
         statusObservation = nil
+        timeControlObservation?.invalidate()
+        timeControlObservation = nil
         if let playbackEndObserver {
             NotificationCenter.default.removeObserver(playbackEndObserver)
         }

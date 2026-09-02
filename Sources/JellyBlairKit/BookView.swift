@@ -677,10 +677,12 @@ public struct BookView: View {
         currentLineIndex(for: listeningPosition(at: date))
     }
 
-    /// The transcript line containing a position.
+    /// The transcript line containing a position. The comparison takes no
+    /// slack: the tick dates already land just past each boundary, and any
+    /// slack here flips a line to read while its last word is still spoken.
     private func currentLineIndex(for positionSeconds: Double) -> Int? {
         guard positionSeconds > 0 else { return nil }
-        return model.lyrics.last(where: { ($0.startSeconds ?? .infinity) <= positionSeconds + 0.5 })?.index
+        return model.lyrics.last(where: { ($0.startSeconds ?? .infinity) <= positionSeconds })?.index
     }
 
     /// A click beside the words falls back to the line's own start.
