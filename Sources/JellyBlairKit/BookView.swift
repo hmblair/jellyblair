@@ -335,11 +335,9 @@ public struct BookView: View {
         HStack(spacing: 5) {
             Text(formatHoursMinutes(book.runTimeSeconds))
             if isLoaded {
-                Text("·")
-                    .foregroundStyle(.secondary)
                 RemainingTimeView()
             } else if model.resumePositionSeconds > 0 {
-                Text("· \(formatHoursMinutes(book.runTimeSeconds - model.resumePositionSeconds)) left")
+                Text("(\(formatHoursMinutes(book.runTimeSeconds - model.resumePositionSeconds)) left)")
                     .foregroundStyle(.secondary)
             }
         }
