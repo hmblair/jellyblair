@@ -29,10 +29,10 @@ public struct LyricLineText: View, Equatable {
     /// wraps onto the next row.
     let onSpokenWordMoved: ((CGFloat) -> Void)?
 
-    static let font = Font.title3
+    static let font = Font.title2
 
     /// The style of a chapter heading inside the transcript.
-    static let titleFont = Font.title2.bold()
+    static let titleFont = Font.title.bold()
 
     /// Space above a chapter heading, separating it from the preceding text.
     private static let titleTopPadding: CGFloat = 12
