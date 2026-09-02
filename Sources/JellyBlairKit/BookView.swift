@@ -62,8 +62,13 @@ public struct BookView: View {
         // On the phone the list runs edge to edge; only the upper content
         // keeps side padding. The Mac pads the whole page.
         VStack(spacing: 16) {
+            header
+            #if os(iOS)
+            // The side-by-side header is width-hungry, so it gets a slimmer
+            // margin than the controls below it.
+                .padding(.horizontal, 10)
+            #endif
             Group {
-                header
                 if isLoaded {
                     if let message = player.playbackErrorMessage {
                         errorBanner(message)
@@ -157,74 +162,84 @@ public struct BookView: View {
     #if os(macOS)
     private static let coverSize: CGFloat = 193
 
-    /// Side-by-side header: cover at the left, text beside it.
+    /// Centered title over a side-by-side section: cover at the left,
+    /// text beside it.
     private var header: some View {
-        HStack(alignment: .top, spacing: 16) {
-            cover
-                .frame(width: Self.coverSize, height: Self.coverSize)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+        VStack(spacing: 12) {
+            Text(book.name)
+                .font(.title.bold())
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(book.name)
-                    .font(.title.bold())
-                if let author = book.author {
-                    metadataLine(icon: BookGroup.Kind.author.iconName) { authorLine(author) }
+            HStack(alignment: .top, spacing: 12) {
+                cover
+                    .frame(width: Self.coverSize, height: Self.coverSize)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    if let author = book.author {
+                        metadataLine(icon: BookGroup.Kind.author.iconName) { authorLine(author) }
+                            .font(.title3)
+                    }
+                    if let narrator = book.narrator {
+                        metadataLine(icon: BookGroup.Kind.narrator.iconName) { narratorLine(narrator) }
+                            .font(.title3)
+                    }
+                    if let genre = book.genre {
+                        metadataLine(icon: BookGroup.Kind.genre.iconName) { genreLine(genre) }
+                            .font(.title3)
+                    }
+                    metadataLine(icon: "clock.fill") { lengthLine }
                         .font(.title3)
-                }
-                if let narrator = book.narrator {
-                    metadataLine(icon: BookGroup.Kind.narrator.iconName) { narratorLine(narrator) }
+                    downloadRow
                         .font(.title3)
+                    Spacer()
                 }
-                if let genre = book.genre {
-                    metadataLine(icon: BookGroup.Kind.genre.iconName) { genreLine(genre) }
-                        .font(.title3)
-                }
-                metadataLine(icon: "clock.fill") { lengthLine }
-                    .font(.title3)
-                downloadRow
-                    .font(.title3)
                 Spacer()
             }
-            Spacer()
+            .frame(height: Self.coverSize)
         }
-        .frame(height: Self.coverSize)
     }
     #else
-    private static let coverSize: CGFloat = 220
+    private static let coverSize: CGFloat = 150
 
-    /// Stacked header for the narrow screen: large centered cover, then text
-    /// that wraps freely.
+    /// Centered title over a side-by-side section like the Mac's: cover at
+    /// the left near 40% of the width, left-aligned text beside it. The
+    /// height follows the text, which can outgrow the cover.
     private var header: some View {
-        VStack(spacing: 6) {
-            cover
-                .frame(width: Self.coverSize, height: Self.coverSize)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.bottom, 6)
-
+        VStack(spacing: 12) {
             Text(book.name)
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
-            if let author = book.author {
-                metadataLine(icon: BookGroup.Kind.author.iconName) { authorLine(author) }
-                    .font(.callout)
-                    .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+
+            HStack(alignment: .top, spacing: 10) {
+                cover
+                    .frame(width: Self.coverSize, height: Self.coverSize)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    if let author = book.author {
+                        metadataLine(icon: BookGroup.Kind.author.iconName) { authorLine(author) }
+                            .font(.callout)
+                    }
+                    if let narrator = book.narrator {
+                        metadataLine(icon: BookGroup.Kind.narrator.iconName) { narratorLine(narrator) }
+                            .font(.callout)
+                    }
+                    if let genre = book.genre {
+                        metadataLine(icon: BookGroup.Kind.genre.iconName) { genreLine(genre) }
+                            .font(.callout)
+                    }
+                    metadataLine(icon: "clock.fill") { lengthLine }
+                        .font(.callout)
+                    downloadRow
+                        .font(.callout)
+                }
+                Spacer(minLength: 0)
             }
-            if let narrator = book.narrator {
-                metadataLine(icon: BookGroup.Kind.narrator.iconName) { narratorLine(narrator) }
-                    .font(.callout)
-                    .multilineTextAlignment(.center)
-            }
-            if let genre = book.genre {
-                metadataLine(icon: BookGroup.Kind.genre.iconName) { genreLine(genre) }
-                    .font(.callout)
-                    .multilineTextAlignment(.center)
-            }
-            metadataLine(icon: "clock.fill") { lengthLine }
-                .font(.callout)
-            downloadRow
-                .font(.callout)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity)
         // The chapter list below competes for vertical space; without this the
         // stack compresses the text into truncation instead of wrapping it.
         .fixedSize(horizontal: false, vertical: true)
@@ -236,7 +251,6 @@ public struct BookView: View {
         metadataLine {
             Image(systemName: icon)
                 .imageScale(.small)
-                .foregroundStyle(.secondary)
         } content: {
             content()
         }
@@ -289,11 +303,7 @@ public struct BookView: View {
         }
     }
 
-    #if os(macOS)
     private static let narratorAlignment = FlowLayout.Alignment.leading
-    #else
-    private static let narratorAlignment = FlowLayout.Alignment.center
-    #endif
 
     /// The narrator's name, wrapping word by word like text, with the words
     /// forming one hover-and-click group that dims together like the author.
@@ -334,10 +344,15 @@ public struct BookView: View {
     private var lengthLine: some View {
         HStack(spacing: 5) {
             Text(formatHoursMinutes(book.runTimeSeconds))
+            if isLoaded || model.resumePositionSeconds > 0 {
+                Image(systemName: "hourglass.tophalf.filled")
+                    .imageScale(.small)
+                    .foregroundStyle(.secondary)
+            }
             if isLoaded {
                 RemainingTimeView()
             } else if model.resumePositionSeconds > 0 {
-                Text("(\(formatHoursMinutes(book.runTimeSeconds - model.resumePositionSeconds)) left)")
+                Text(formatHoursMinutes(book.runTimeSeconds - model.resumePositionSeconds))
                     .foregroundStyle(.secondary)
             }
         }
@@ -381,7 +396,7 @@ public struct BookView: View {
                 model.download()
             } label: {
                 Image(systemName: "arrow.down.circle.fill")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                     .opacity(isHoveringDownload ? 0.6 : 1)
                     .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
             }
@@ -399,7 +414,7 @@ public struct BookView: View {
                     Image(systemName: "arrow.down.circle.fill")
                         .foregroundStyle(.quaternary)
                     Image(systemName: "arrow.down.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
                         .mask {
                             GeometryReader { geometry in
                                 Rectangle()

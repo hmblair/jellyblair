@@ -126,7 +126,6 @@ struct LibraryView: View {
                     .font(.caption)
                 Image(systemName: scope.iconName)
                     .imageScale(.small)
-                    .foregroundStyle(.secondary)
                 Text(scope.name)
                     .fontWeight(.semibold)
                 Spacer()

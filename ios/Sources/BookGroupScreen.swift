@@ -25,7 +25,6 @@ struct BookGroupScreen: View {
                 HStack(spacing: 6) {
                     Image(systemName: group.iconName)
                         .imageScale(.small)
-                        .foregroundStyle(.secondary)
                     Text(group.name)
                         .font(.headline)
                 }
