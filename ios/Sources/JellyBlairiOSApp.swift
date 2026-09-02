@@ -64,7 +64,7 @@ struct MainScreen: View {
                         BookView(book: book)
                             .navigationBarTitleDisplayMode(.inline)
                     case .group(let group):
-                        BookGroupScreen(group: group)
+                        LibraryScreen(session: session, scope: group)
                     }
                 }
         }

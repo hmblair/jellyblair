@@ -1,10 +1,10 @@
 import JellyBlairKit
 import SwiftUI
 
-/// Sidebar list of audiobooks. Shows the full library grouped by author, or
-/// one author's books after their heading is clicked, with a back row.
-/// A floating bar holds the search field and the downloaded-only filter;
-/// rows fade out beneath it as they scroll up.
+/// Sidebar list of audiobooks. Shows the full library grouped by author,
+/// narrator, or genre, or one group's books after its heading is clicked.
+/// A floating bar holds the search field, the grouping toggle, and the
+/// downloaded-only filter; rows fade out beneath it as they scroll up.
 struct LibraryView: View {
     @Binding var selection: String?
     @Binding var scope: BookGroup?
@@ -16,12 +16,13 @@ struct LibraryView: View {
     @State private var searchQuery = ""
     @State private var showDownloadedOnly = false
     @State private var isHoveringFilter = false
+    @State private var isHoveringGroupToggle = false
 
     /// Height of the region the floating bar occupies over the list.
     private static let barZoneHeight: CGFloat = 34
 
     private var visibleGroups: [BookGroup] {
-        library.authorGroups(matching: searchQuery).compactMap { group in
+        library.groups(matching: searchQuery).compactMap { group in
             showDownloadedOnly ? group.keeping { catalog.isDownloaded($0) } : group
         }
     }
@@ -41,6 +42,9 @@ struct LibraryView: View {
 
             HStack(spacing: 8) {
                 CapsuleSearchField("Search", text: $searchQuery)
+                if scope == nil {
+                    groupToggle
+                }
                 filterToggle
             }
             .padding(.horizontal, 10)
@@ -51,9 +55,14 @@ struct LibraryView: View {
     private var bookList: some View {
         List(selection: $selection) {
             if let scope {
-                backRow(to: scope)
-                ForEach(filteredBooks(library.books(in: scope, matching: searchQuery))) { book in
-                    row(for: book)
+                Section {
+                    ForEach(filteredBooks(library.books(in: scope, matching: searchQuery))) { book in
+                        row(for: book)
+                    }
+                } header: {
+                    GroupHeading(name: scope.name, iconName: scope.iconName, showsBackChevron: true) {
+                        exitScope()
+                    }
                 }
             } else {
                 ForEach(visibleGroups) { group in
@@ -62,7 +71,7 @@ struct LibraryView: View {
                             row(for: book)
                         }
                     } header: {
-                        AuthorHeading(name: group.name) {
+                        GroupHeading(name: group.name) {
                             enterScope(group)
                         }
                     }
@@ -92,6 +101,27 @@ struct LibraryView: View {
         return books.filter { catalog.isDownloaded($0) }
     }
 
+    /// Cycles the library grouping through author, narrator, and genre.
+    private var groupToggle: some View {
+        Button {
+            library.groupKind = library.groupKind.next
+        } label: {
+            Image(systemName: library.groupKind.iconName)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 5)
+                .padding(.horizontal, 8)
+                .background(
+                    Capsule()
+                        .fill(Color.primary.opacity(isHoveringGroupToggle ? 0.12 : 0.06))
+                        .animation(.easeOut(duration: 0.1), value: isHoveringGroupToggle)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHoveringGroupToggle = $0 }
+        .help("Change the grouping")
+    }
+
     private var filterToggle: some View {
         Button {
             showDownloadedOnly.toggle()
@@ -117,28 +147,10 @@ struct LibraryView: View {
             .tag(book.id)
     }
 
-    private func backRow(to scope: BookGroup) -> some View {
-        Button {
-            exitScope()
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                    .font(.caption)
-                Image(systemName: scope.iconName)
-                    .imageScale(.small)
-                Text(scope.name)
-                    .fontWeight(.semibold)
-                Spacer()
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
     private func enterScope(_ group: BookGroup) {
         searchQuery = ""
         // The clicked group can be a filtered subset; scope to the full one.
-        scope = library.authorGroups.first { $0.name == group.name } ?? group
+        scope = library.fullGroup(matching: group) ?? group
     }
 
     private func exitScope() {

@@ -136,26 +136,47 @@ public struct BookRow: View {
     }
 }
 
-/// An author section heading: plain text in the platform's header style,
-/// clickable across its full width to open the author's books.
-public struct AuthorHeading: View {
+/// A group section heading: plain text in the platform's header style,
+/// clickable across its full width when it has an action. A scoped list's
+/// heading carries the role icon, and on the Mac a back chevron.
+public struct GroupHeading: View {
     let name: String
-    let action: () -> Void
+    let iconName: String?
+    let showsBackChevron: Bool
+    let action: (() -> Void)?
 
-    public init(name: String, action: @escaping () -> Void) {
+    public init(name: String, iconName: String? = nil, showsBackChevron: Bool = false, action: (() -> Void)? = nil) {
         self.name = name
+        self.iconName = iconName
+        self.showsBackChevron = showsBackChevron
         self.action = action
     }
 
     public var body: some View {
-        Button(action: action) {
-            HStack {
-                Text(name)
-                    .font(.callout)
-                Spacer()
+        if let action {
+            Button(action: action) {
+                label
+                    .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+        } else {
+            label
         }
-        .buttonStyle(.plain)
+    }
+
+    private var label: some View {
+        HStack(spacing: 5) {
+            if showsBackChevron {
+                Image(systemName: "chevron.left")
+                    .font(.caption)
+            }
+            if let iconName {
+                Image(systemName: iconName)
+                    .imageScale(.small)
+            }
+            Text(name)
+                .font(.callout)
+            Spacer()
+        }
     }
 }
