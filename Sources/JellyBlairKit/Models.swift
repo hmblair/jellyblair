@@ -107,7 +107,7 @@ public struct Book: Codable, Identifiable, Hashable {
             || (genre?.localizedCaseInsensitiveContains(query) ?? false)
     }
 
-    /// The genres joined for display, as the server states them.
+    /// The genres joined, as the single string the search matcher checks.
     public var genre: String? {
         let joined = (genres ?? []).joined(separator: ", ")
         return joined.isEmpty ? nil : joined

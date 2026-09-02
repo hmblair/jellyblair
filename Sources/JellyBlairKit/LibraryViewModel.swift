@@ -95,9 +95,12 @@ public final class LibraryViewModel {
 
     private func setBooks(_ newBooks: [Book]) {
         books = newBooks
-        authorGroups = Self.group(books, kind: .author, by: { $0.author ?? Self.unknownName })
-        narratorGroups = Self.group(books, kind: .narrator, by: { $0.narrator ?? Self.unknownName })
-        genreGroups = Self.group(books, kind: .genre, by: { $0.genre ?? Self.unknownName })
+        authorGroups = Self.group(books, kind: .author, by: { [$0.author ?? Self.unknownName] })
+        narratorGroups = Self.group(books, kind: .narrator, by: { [$0.narrator ?? Self.unknownName] })
+        genreGroups = Self.group(books, kind: .genre, by: { book in
+            let genres = book.genres ?? []
+            return genres.isEmpty ? [Self.unknownName] : genres
+        })
     }
 
     public func groups(ofKind kind: BookGroup.Kind) -> [BookGroup] {
@@ -135,13 +138,16 @@ public final class LibraryViewModel {
         return group.books.filter { $0.matches(trimmed) }
     }
 
-    /// Groups books under a derived name. Books keep the server's title order
+    /// Groups books under derived names; a book with several names, such as
+    /// genres, appears in each group. Books keep the server's title order
     /// within each group, and names sort ignoring a leading article, with
     /// the Unknown group last.
-    private static func group(_ books: [Book], kind: BookGroup.Kind, by name: (Book) -> String) -> [BookGroup] {
+    private static func group(_ books: [Book], kind: BookGroup.Kind, by names: (Book) -> [String]) -> [BookGroup] {
         var grouped: [String: [Book]] = [:]
         for book in books {
-            grouped[name(book), default: []].append(book)
+            for name in names(book) {
+                grouped[name, default: []].append(book)
+            }
         }
         let names = grouped.keys
             .sorted { sortKey($0).localizedStandardCompare(sortKey($1)) == .orderedAscending }

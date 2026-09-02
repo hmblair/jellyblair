@@ -26,7 +26,7 @@ public struct BookView: View {
     @State private var isConfirmingRemoval = false
     @State private var removalConfirmationTimeout: Task<Void, Never>?
     @State private var isHoveringAuthor = false
-    @State private var isHoveringGenre = false
+    @State private var hoveredGenre: String?
     @State private var hoveredNameWords = 0
 
     public init(book: Book) {
@@ -191,8 +191,8 @@ public struct BookView: View {
                     if let narrator = book.narrator {
                         metadataLine(icon: BookGroup.Kind.narrator.iconName) { narratorLine(narrator) }
                     }
-                    if let genre = book.genre {
-                        metadataLine(icon: BookGroup.Kind.genre.iconName) { genreLine(genre) }
+                    if let genres = book.genres, !genres.isEmpty {
+                        metadataLine(icon: BookGroup.Kind.genre.iconName) { genreLine(genres) }
                     }
                     metadataLine(icon: "clock.fill") { lengthLine }
                     downloadRow
@@ -253,20 +253,45 @@ public struct BookView: View {
         }
     }
 
-    /// The genre, navigating to its books when the shell provides
-    /// a destination.
+    /// The genres, each its own click-and-hover target navigating to that
+    /// genre's books when the shell provides a destination.
+    private func genreLine(_ genres: [String]) -> some View {
+        FlowLayout(alignment: .leading) {
+            ForEach(Array(genres.enumerated()), id: \.offset) { index, genre in
+                genreItem(genre, isLast: index == genres.count - 1)
+            }
+        }
+    }
+
+    /// The separating comma stays outside the name, so it takes no part in
+    /// the hover effect.
+    private func genreItem(_ genre: String, isLast: Bool) -> some View {
+        HStack(spacing: 0) {
+            genreName(genre)
+            if !isLast {
+                Text(",")
+            }
+        }
+    }
+
     @ViewBuilder
-    private func genreLine(_ genre: String) -> some View {
+    private func genreName(_ genre: String) -> some View {
         if let openGenre {
             Button {
                 openGenre(genre)
             } label: {
                 Text(genre)
-                    .opacity(isHoveringGenre ? 0.6 : 1)
-                    .animation(.easeOut(duration: 0.1), value: isHoveringGenre)
+                    .opacity(hoveredGenre == genre ? 0.6 : 1)
+                    .animation(.easeOut(duration: 0.1), value: hoveredGenre == genre)
             }
             .buttonStyle(.plain)
-            .onHover { isHoveringGenre = $0 }
+            .onHover { hovering in
+                if hovering {
+                    hoveredGenre = genre
+                } else if hoveredGenre == genre {
+                    hoveredGenre = nil
+                }
+            }
         } else {
             Text(genre)
         }
