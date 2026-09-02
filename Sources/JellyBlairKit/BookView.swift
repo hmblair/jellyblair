@@ -159,92 +159,66 @@ public struct BookView: View {
 
     // MARK: - Header
 
+    // The header layout is shared; only its measurements differ per platform.
     #if os(macOS)
     private static let coverSize: CGFloat = 193
-
-    /// Centered title over a side-by-side section: cover at the left,
-    /// text beside it.
-    private var header: some View {
-        VStack(spacing: 12) {
-            Text(book.name)
-                .font(.title.bold())
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-
-            HStack(alignment: .top, spacing: 12) {
-                cover
-                    .frame(width: Self.coverSize, height: Self.coverSize)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                VStack(alignment: .leading, spacing: 6) {
-                    if let author = book.author {
-                        metadataLine(icon: BookGroup.Kind.author.iconName) { authorLine(author) }
-                            .font(.title3)
-                    }
-                    if let narrator = book.narrator {
-                        metadataLine(icon: BookGroup.Kind.narrator.iconName) { narratorLine(narrator) }
-                            .font(.title3)
-                    }
-                    if let genre = book.genre {
-                        metadataLine(icon: BookGroup.Kind.genre.iconName) { genreLine(genre) }
-                            .font(.title3)
-                    }
-                    metadataLine(icon: "clock.fill") { lengthLine }
-                        .font(.title3)
-                    downloadRow
-                        .font(.title3)
-                    Spacer()
-                }
-                Spacer()
-            }
-            .frame(height: Self.coverSize)
-        }
-    }
+    private static let coverCornerRadius: CGFloat = 10
+    private static let coverSpacing: CGFloat = 12
+    private static let titleFont = Font.title.bold()
+    private static let lineFont = Font.title3
     #else
     private static let coverSize: CGFloat = 150
+    private static let coverCornerRadius: CGFloat = 12
+    private static let coverSpacing: CGFloat = 10
+    private static let titleFont = Font.title2.bold()
+    private static let lineFont = Font.callout
+    #endif
 
-    /// Centered title over a side-by-side section like the Mac's: cover at
-    /// the left near 40% of the width, left-aligned text beside it. The
-    /// height follows the text, which can outgrow the cover.
+    /// Centered title over a side-by-side section: cover at the left,
+    /// left-aligned metadata lines beside it. The height follows the text,
+    /// which can outgrow the cover.
     private var header: some View {
         VStack(spacing: 12) {
             Text(book.name)
-                .font(.title2.bold())
+                .font(Self.titleFont)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
 
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: Self.coverSpacing) {
                 cover
                     .frame(width: Self.coverSize, height: Self.coverSize)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: Self.coverCornerRadius))
 
                 VStack(alignment: .leading, spacing: 6) {
                     if let author = book.author {
                         metadataLine(icon: BookGroup.Kind.author.iconName) { authorLine(author) }
-                            .font(.callout)
                     }
                     if let narrator = book.narrator {
                         metadataLine(icon: BookGroup.Kind.narrator.iconName) { narratorLine(narrator) }
-                            .font(.callout)
                     }
                     if let genre = book.genre {
                         metadataLine(icon: BookGroup.Kind.genre.iconName) { genreLine(genre) }
-                            .font(.callout)
                     }
                     metadataLine(icon: "clock.fill") { lengthLine }
-                        .font(.callout)
                     downloadRow
-                        .font(.callout)
                 }
+                .font(Self.lineFont)
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            #if os(macOS)
+            // The Mac pins the section to the cover height. A flexible
+            // height fights the split view's layout and walks the window
+            // content upward on every book switch.
+            .frame(height: Self.coverSize, alignment: .top)
+            #endif
         }
+        #if os(iOS)
         // The chapter list below competes for vertical space; without this the
         // stack compresses the text into truncation instead of wrapping it.
         .fixedSize(horizontal: false, vertical: true)
+        #endif
     }
-    #endif
 
     /// A metadata row: a small dimmed icon beside its text.
     private func metadataLine(icon: String, @ViewBuilder content: () -> some View) -> some View {
