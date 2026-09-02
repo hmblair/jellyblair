@@ -216,19 +216,20 @@ public struct BookView: View {
     }
 
     /// Swaps the list below between the chapters and the transcript.
+    /// The icon shows the view the button switches to.
     private var transcriptToggle: some View {
         Button {
             filterQuery = ""
             isShowingTranscript.toggle()
         } label: {
-            Image(systemName: "text.quote")
+            Image(systemName: isShowingTranscript ? "list.bullet" : "text.quote")
                 .font(.callout)
-                .foregroundStyle(isShowingTranscript ? Color.white : Color.secondary)
+                .foregroundStyle(.secondary)
                 .padding(.vertical, 5)
                 .padding(.horizontal, 8)
                 .background(
                     Capsule()
-                        .fill(isShowingTranscript ? Color.accentColor : Color.primary.opacity(isHoveringTranscriptToggle ? 0.12 : 0.06))
+                        .fill(Color.primary.opacity(isHoveringTranscriptToggle ? 0.12 : 0.06))
                         .animation(.easeOut(duration: 0.1), value: isHoveringTranscriptToggle)
                 )
         }
