@@ -100,6 +100,10 @@ struct MainScreen: View {
             guard let group = library.narratorGroups.first(where: { $0.name == name }) else { return }
             path.append(.group(group))
         })
+        .environment(\.openGenre, OpenBookGroupAction { [library = scope.library] name in
+            guard let group = library.genreGroups.first(where: { $0.name == name }) else { return }
+            path.append(.group(group))
+        })
         .environment(scope.library)
         .environment(scope.player)
         .environment(scope.connection)

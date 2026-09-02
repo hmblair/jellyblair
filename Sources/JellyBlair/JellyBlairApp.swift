@@ -124,6 +124,9 @@ struct ContentView: View {
         .environment(\.openNarrator, OpenBookGroupAction { [library = scope.library] name in
             sidebarScope = library.narratorGroups.first { $0.name == name }
         })
+        .environment(\.openGenre, OpenBookGroupAction { [library = scope.library] name in
+            sidebarScope = library.genreGroups.first { $0.name == name }
+        })
         .environment(scope.library)
         .environment(scope.player)
         .environment(scope.connection)

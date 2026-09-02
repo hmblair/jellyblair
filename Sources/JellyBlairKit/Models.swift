@@ -98,12 +98,13 @@ public struct Book: Codable, Identifiable, Hashable {
         return joined.isEmpty ? nil : joined
     }
 
-    /// True when the title, author, or narrator contains the query.
+    /// True when the title, author, narrator, or genre contains the query.
     /// The single matcher behind every search field in the app.
     public func matches(_ query: String) -> Bool {
         name.localizedCaseInsensitiveContains(query)
             || (author?.localizedCaseInsensitiveContains(query) ?? false)
             || (narrator?.localizedCaseInsensitiveContains(query) ?? false)
+            || (genre?.localizedCaseInsensitiveContains(query) ?? false)
     }
 
     /// The genres joined for display, as the server states them.

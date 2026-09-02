@@ -1,11 +1,12 @@
 import Foundation
 import Observation
 
-/// A named shelf of books: one author's or one narrator's.
+/// A named shelf of books: one author's, one narrator's, or one genre's.
 public struct BookGroup: Identifiable, Hashable {
     public enum Kind: Hashable {
         case author
         case narrator
+        case genre
     }
 
     public let name: String
@@ -27,6 +28,8 @@ public struct BookGroup: Identifiable, Hashable {
             return "Author"
         case .narrator:
             return "Narrator"
+        case .genre:
+            return "Genre"
         }
     }
 }
@@ -40,6 +43,7 @@ public final class LibraryViewModel {
     public private(set) var books: [Book] = []
     public private(set) var authorGroups: [BookGroup] = []
     public private(set) var narratorGroups: [BookGroup] = []
+    public private(set) var genreGroups: [BookGroup] = []
     public private(set) var isLoading = true
     public private(set) var errorMessage: String?
 
@@ -69,6 +73,7 @@ public final class LibraryViewModel {
         books = newBooks
         authorGroups = Self.group(books, kind: .author, by: { $0.author ?? "Unknown Author" })
         narratorGroups = Self.group(books.filter { $0.narrator != nil }, kind: .narrator, by: { $0.narrator ?? "" })
+        genreGroups = Self.group(books.filter { $0.genre != nil }, kind: .genre, by: { $0.genre ?? "" })
     }
 
     /// Groups filtered to books whose title, author, or narrator contains

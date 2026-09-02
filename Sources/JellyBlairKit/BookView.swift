@@ -14,6 +14,7 @@ public struct BookView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openAuthor) private var openAuthor
     @Environment(\.openNarrator) private var openNarrator
+    @Environment(\.openGenre) private var openGenre
 
     @State private var isAutoScrollWindowOpen = true
     @State private var chapterQuery = ""
@@ -25,6 +26,7 @@ public struct BookView: View {
     @State private var isConfirmingRemoval = false
     @State private var removalConfirmationTimeout: Task<Void, Never>?
     @State private var isHoveringAuthor = false
+    @State private var isHoveringGenre = false
     @State private var hoveredNameWords = 0
 
     public init(book: Book) {
@@ -174,7 +176,7 @@ public struct BookView: View {
                         .font(.title3)
                 }
                 if let genre = book.genre {
-                    metadataLine(icon: "tag.fill") { Text(genre) }
+                    metadataLine(icon: "tag.fill") { genreLine(genre) }
                         .font(.title3)
                 }
                 metadataLine(icon: "clock.fill") { lengthLine }
@@ -213,7 +215,7 @@ public struct BookView: View {
                     .multilineTextAlignment(.center)
             }
             if let genre = book.genre {
-                metadataLine(icon: "tag.fill") { Text(genre) }
+                metadataLine(icon: "tag.fill") { genreLine(genre) }
                     .font(.callout)
                     .multilineTextAlignment(.center)
             }
@@ -265,6 +267,25 @@ public struct BookView: View {
             .onHover { isHoveringAuthor = $0 }
         } else {
             Text(author)
+        }
+    }
+
+    /// The genre, navigating to its books when the shell provides
+    /// a destination.
+    @ViewBuilder
+    private func genreLine(_ genre: String) -> some View {
+        if let openGenre {
+            Button {
+                openGenre(genre)
+            } label: {
+                Text(genre)
+                    .opacity(isHoveringGenre ? 0.6 : 1)
+                    .animation(.easeOut(duration: 0.1), value: isHoveringGenre)
+            }
+            .buttonStyle(.plain)
+            .onHover { isHoveringGenre = $0 }
+        } else {
+            Text(genre)
         }
     }
 
@@ -623,5 +644,6 @@ public struct OpenBookAction {
 public extension EnvironmentValues {
     @Entry var openAuthor: OpenBookGroupAction?
     @Entry var openNarrator: OpenBookGroupAction?
+    @Entry var openGenre: OpenBookGroupAction?
     @Entry var openBook: OpenBookAction?
 }
