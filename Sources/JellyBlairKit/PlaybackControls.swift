@@ -18,13 +18,11 @@ public struct RemainingTimeView: View {
         }
     }
 
+    /// The listening time left at the current speed. The speed itself is not
+    /// repeated here; the transport controls already show it.
     private func text(at date: Date) -> String {
         let remaining = max(0, player.duration - player.projectedTime(at: date)) / player.playbackSpeed
-        let label = formatHoursMinutes(remaining)
-        guard player.playbackSpeed != 1 else {
-            return "\(label) remaining"
-        }
-        return "\(label) remaining at \(formatPlaybackSpeed(player.playbackSpeed))"
+        return "\(formatHoursMinutes(remaining)) left"
     }
 }
 

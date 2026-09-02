@@ -339,7 +339,7 @@ public struct BookView: View {
                     .foregroundStyle(.secondary)
                 RemainingTimeView()
             } else if model.resumePositionSeconds > 0 {
-                Text("· \(formatHoursMinutes(book.runTimeSeconds - model.resumePositionSeconds)) remaining")
+                Text("· \(formatHoursMinutes(book.runTimeSeconds - model.resumePositionSeconds)) left")
                     .foregroundStyle(.secondary)
             }
         }
