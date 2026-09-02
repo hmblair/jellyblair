@@ -19,6 +19,12 @@ public struct PlaybackAnchor: Equatable {
     public func position(at date: Date = Date()) -> Double {
         positionSeconds + max(0, date.timeIntervalSince(self.date)) * rate
     }
+
+    /// The moment playback reaches a position, or nil while not moving.
+    public func date(forPosition position: Double) -> Date? {
+        guard rate > 0 else { return nil }
+        return date.addingTimeInterval((position - positionSeconds) / rate)
+    }
 }
 
 /// Owns the AVPlayer, the chapter list, and playback progress reports for one book at a time.
@@ -317,7 +323,12 @@ public final class PlayerController {
 
     /// Jumps to a chapter and plays it, like clicking a song in a music app.
     public func jump(to chapter: Chapter) async {
-        await seek(to: chapter.startSeconds)
+        await jump(toSeconds: chapter.startSeconds)
+    }
+
+    /// Jumps to a position and plays, like clicking a transcript line.
+    public func jump(toSeconds seconds: Double) async {
+        await seek(to: seconds)
         play()
     }
 

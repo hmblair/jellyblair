@@ -16,6 +16,10 @@ public final class BookModel: Identifiable {
     public private(set) var chapters: [Chapter]
     public private(set) var isFetchingChapters = false
 
+    public private(set) var lyrics: [LyricLine] = []
+    public private(set) var isFetchingLyrics = false
+    private let lyricsStore = LyricsStore()
+
     public enum DownloadState: Equatable {
         case notDownloaded
         /// Fraction complete, or nil while the total size is unknown.
@@ -163,6 +167,37 @@ public final class BookModel: Identifiable {
         }
         chapters = loaded
         onChaptersChanged(loaded)
+    }
+
+    // MARK: - Lyrics
+
+    /// Reads the transcript from the disk cache or the server unless it is
+    /// already known.
+    public func fetchLyricsIfNeeded() async {
+        guard lyrics.isEmpty, !isFetchingLyrics else { return }
+        isFetchingLyrics = true
+        defer { isFetchingLyrics = false }
+        let cached = lyricsStore.load(bookID: book.id)
+        guard cached.isEmpty else {
+            lyrics = cached
+            return
+        }
+        await fetchLyricsFromServer()
+    }
+
+    /// Fetches the transcript from the server again. The old lines and their
+    /// disk cache survive unless the fetch succeeds.
+    public func refreshLyrics() async {
+        guard !isFetchingLyrics else { return }
+        isFetchingLyrics = true
+        defer { isFetchingLyrics = false }
+        await fetchLyricsFromServer()
+    }
+
+    private func fetchLyricsFromServer() async {
+        guard let loaded = try? await client.fetchLyrics(bookID: book.id), !loaded.isEmpty else { return }
+        lyrics = loaded
+        lyricsStore.save(loaded, for: book.id)
     }
 
     // MARK: - Chapter reading

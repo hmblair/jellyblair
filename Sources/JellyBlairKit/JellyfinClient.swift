@@ -153,6 +153,28 @@ public final class JellyfinClient {
         return try? decode(Book.self, from: data)
     }
 
+    /// Fetches a book's lyric sidecar, parsed by the server into transcript lines.
+    func fetchLyrics(bookID: String) async throws -> [LyricLine] {
+        let request = makeRequest(path: "Audio/\(bookID)/Lyrics")
+        let data = try await send(request)
+        let response = try decode(LyricsResponse.self, from: data)
+        return response.lyrics.enumerated().map { index, line in
+            LyricLine(
+                index: index,
+                text: line.text,
+                startSeconds: line.startTicks.map { Double($0) / ticksPerSecond },
+                cues: (line.cues ?? []).map { cue in
+                    LyricCue(
+                        startSeconds: Double(cue.startTicks) / ticksPerSecond,
+                        endSeconds: Double(cue.endTicks ?? cue.startTicks) / ticksPerSecond,
+                        startPosition: cue.position,
+                        endPosition: cue.endPosition ?? line.text.count
+                    )
+                }
+            )
+        }
+    }
+
     // MARK: - URLs
 
     public func imageURL(for book: Book) -> URL {

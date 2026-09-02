@@ -69,6 +69,7 @@ public struct Book: Codable, Identifiable, Hashable {
     public let people: [Person]?
     public let mediaSources: [MediaSource]?
     public let genres: [String]?
+    public let hasLyrics: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id = "Id"
@@ -80,6 +81,7 @@ public struct Book: Codable, Identifiable, Hashable {
         case people = "People"
         case mediaSources = "MediaSources"
         case genres = "Genres"
+        case hasLyrics = "HasLyrics"
     }
 
     /// The audio container format, for naming downloaded files.
@@ -139,6 +141,61 @@ public struct Book: Codable, Identifiable, Hashable {
 
     public var resumePositionSeconds: Double {
         Double(userData?.playbackPositionTicks ?? 0) / ticksPerSecond
+    }
+}
+
+/// One line of a book's transcript, read from the lyric sidecar on the server.
+public struct LyricLine: Identifiable, Hashable, Codable {
+    public let index: Int
+    public let text: String
+    /// When the line is spoken, or nil when the sidecar has no timestamps.
+    public let startSeconds: Double?
+    /// Word timings within the line, when the sidecar carries them.
+    public let cues: [LyricCue]
+
+    public var id: Int { index }
+}
+
+/// One word's timing within a transcript line: when it is spoken, and the
+/// character range it covers in the line's text.
+public struct LyricCue: Hashable, Codable {
+    public let startSeconds: Double
+    public let endSeconds: Double
+    public let startPosition: Int
+    public let endPosition: Int
+}
+
+struct LyricsResponse: Decodable {
+    let lyrics: [LyricsResponseLine]
+
+    enum CodingKeys: String, CodingKey {
+        case lyrics = "Lyrics"
+    }
+}
+
+struct LyricsResponseLine: Decodable {
+    let text: String
+    let startTicks: Int64?
+    let cues: [LyricsResponseCue]?
+
+    enum CodingKeys: String, CodingKey {
+        case text = "Text"
+        case startTicks = "Start"
+        case cues = "Cues"
+    }
+}
+
+struct LyricsResponseCue: Decodable {
+    let position: Int
+    let endPosition: Int?
+    let startTicks: Int64
+    let endTicks: Int64?
+
+    enum CodingKeys: String, CodingKey {
+        case position = "Position"
+        case endPosition = "EndPosition"
+        case startTicks = "Start"
+        case endTicks = "End"
     }
 }
 

@@ -18,8 +18,10 @@ public struct BookView: View {
     @Environment(\.openGenre) private var openGenre
 
     @State private var isAutoScrollWindowOpen = true
-    @State private var chapterQuery = ""
+    @State private var filterQuery = ""
+    @State private var isShowingTranscript = false
     @State private var isHoveringJumpButton = false
+    @State private var isHoveringTranscriptToggle = false
     @State private var isHoveringDownload = false
 
     /// Removal asks once: the first tap shows a red question mark that
@@ -51,9 +53,16 @@ public struct BookView: View {
     /// Chapters whose titles contain the query; all of them when it is empty.
     /// Filtering only subsets the rows, so progress marks stay truthful.
     private var visibleChapters: [Chapter] {
-        let trimmed = chapterQuery.trimmingCharacters(in: .whitespaces)
+        let trimmed = filterQuery.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return chapters }
         return chapters.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+    }
+
+    /// Transcript lines whose text contains the query; all of them when it is empty.
+    private var visibleLines: [LyricLine] {
+        let trimmed = filterQuery.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return model.lyrics }
+        return model.lyrics.filter { $0.text.localizedCaseInsensitiveContains(trimmed) }
     }
 
     public var body: some View {
@@ -76,7 +85,7 @@ public struct BookView: View {
             .padding(.horizontal, 20)
             #endif
             Divider()
-            chapterSection
+            listSection
                 .modifier(ExtendToScreenBottom())
         }
         #if os(macOS)
@@ -106,8 +115,8 @@ public struct BookView: View {
         .menuIndicator(.hidden)
     }
 
-    /// Re-reads everything the server and the file know about this book:
-    /// the chapter list, the resume position, and the library fields.
+    /// Re-reads everything the server and the file know about this book: the
+    /// chapter list, the transcript, the resume position, and the library fields.
     private func refreshMetadata() {
         Task {
             if isLoaded {
@@ -115,6 +124,7 @@ public struct BookView: View {
             } else {
                 await model.refreshChapters()
             }
+            await model.refreshLyrics()
             await model.refreshUserData()
             await library.load()
         }
@@ -122,13 +132,22 @@ public struct BookView: View {
 
     /// The filter bar floats over the list, whose rows scroll up behind it,
     /// masked to nothing in the bar's zone with a fade beneath.
-    private var chapterSection: some View {
+    private var listSection: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .top) {
-                chapterList(proxy)
-                    .fadedUnderFloatingBar(fadesBottom: true)
+                Group {
+                    if isShowingTranscript {
+                        transcriptList(proxy)
+                    } else {
+                        chapterList(proxy)
+                    }
+                }
+                .fadedUnderFloatingBar(fadesBottom: true)
                 HStack(spacing: 8) {
-                    chapterFilterField
+                    filterField
+                    if hasTranscript {
+                        transcriptToggle
+                    }
                     jumpToCurrentButton(proxy)
                 }
                 #if os(iOS)
@@ -138,14 +157,14 @@ public struct BookView: View {
         }
     }
 
-    /// Centers the list on the marked chapter, clearing any filter that hides
-    /// it first. The same logic runs when a book's screen opens.
+    /// Centers the list on the listener's position, clearing any filter that
+    /// hides it first. The same logic runs when a book's screen opens.
     private func jumpToCurrentButton(_ proxy: ScrollViewProxy) -> some View {
         Button {
-            chapterQuery = ""
+            filterQuery = ""
             Task { @MainActor in
                 withAnimation {
-                    scrollToMarkedChapter(proxy)
+                    scrollToCurrentPosition(proxy)
                 }
             }
         } label: {
@@ -162,12 +181,47 @@ public struct BookView: View {
         }
         .buttonStyle(.plain)
         .onHover { isHoveringJumpButton = $0 }
-        .disabled(markedChapterIndex == nil)
-        .opacity(markedChapterIndex == nil ? 0.4 : 1)
+        .disabled(jumpTargetIndex == nil)
+        .opacity(jumpTargetIndex == nil ? 0.4 : 1)
     }
 
-    private var chapterFilterField: some View {
-        CapsuleSearchField("Search Chapters", text: $chapterQuery)
+    /// The row the jump button centers on, in whichever list is showing.
+    private var jumpTargetIndex: Int? {
+        isShowingTranscript ? currentLineIndex(at: Date()) : markedChapterIndex
+    }
+
+    private func scrollToCurrentPosition(_ proxy: ScrollViewProxy) {
+        if isShowingTranscript {
+            scrollToCurrentLine(proxy)
+        } else {
+            scrollToMarkedChapter(proxy)
+        }
+    }
+
+    /// Swaps the list below between the chapters and the transcript.
+    private var transcriptToggle: some View {
+        Button {
+            filterQuery = ""
+            isShowingTranscript.toggle()
+        } label: {
+            Image(systemName: "text.quote")
+                .font(.callout)
+                .foregroundStyle(isShowingTranscript ? Color.white : Color.secondary)
+                .padding(.vertical, 5)
+                .padding(.horizontal, 8)
+                .background(
+                    Capsule()
+                        .fill(isShowingTranscript ? Color.accentColor : Color.primary.opacity(isHoveringTranscriptToggle ? 0.12 : 0.06))
+                        .animation(.easeOut(duration: 0.1), value: isHoveringTranscriptToggle)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHoveringTranscriptToggle = $0 }
+        .help(isShowingTranscript ? "Show the chapters" : "Show the transcript")
+    }
+
+    private var filterField: some View {
+        CapsuleSearchField(isShowingTranscript ? "Search Transcript" : "Search Chapters", text: $filterQuery)
     }
 
     // MARK: - Header
@@ -433,7 +487,7 @@ public struct BookView: View {
                             .foregroundStyle(.secondary)
                     }
                 } else if visibleChapters.isEmpty {
-                    ContentUnavailableView.search(text: chapterQuery)
+                    ContentUnavailableView.search(text: filterQuery)
                 }
             }
             // One trigger for centering: fires on appear and whenever the
@@ -499,6 +553,144 @@ public struct BookView: View {
         guard isLoaded else { return .current(.bookmark) }
         return .current(player.isPlaying ? .playing : .paused)
     }
+
+    // MARK: - Transcript
+
+    /// True when this book can show a transcript: the server reports a lyric
+    /// sidecar, or a fetched transcript is already cached.
+    private var hasTranscript: Bool {
+        book.hasLyrics == true || !model.lyrics.isEmpty
+    }
+
+    /// Space between transcript lines, tight enough to read as running text.
+    private static let transcriptLineSpacing: CGFloat = 4
+
+    /// The transcript, marked at the listener's position. The timeline fires
+    /// exactly when playback reaches each word, projected through the playback
+    /// anchor, so the word mark lands on the boundaries without a fast timer.
+    /// The anchor moves on every playback event, rebuilding the schedule.
+    private func transcriptList(_ proxy: ScrollViewProxy) -> some View {
+        TimelineView(.explicit(transcriptTickDates)) { context in
+            transcriptText(at: listeningPosition(at: context.date))
+        }
+        .task(id: book.id) {
+            await model.fetchLyricsIfNeeded()
+            scrollToCurrentLine(proxy)
+        }
+    }
+
+    /// The moments each upcoming line or word starts, as wall-clock dates.
+    /// Empty when nothing is moving, so a paused transcript never redraws.
+    /// Each date carries a few milliseconds of slack, placing the redraw just
+    /// past its boundary so the projected position always covers the word.
+    private var transcriptTickDates: [Date] {
+        guard isLoaded, player.isPlaying else { return [] }
+        let anchor = player.anchor
+        let now = Date()
+        var dates: [Date] = []
+        func append(_ seconds: Double?) {
+            guard let seconds, let date = anchor.date(forPosition: seconds) else { return }
+            let delayed = date.addingTimeInterval(0.005)
+            guard delayed > now, dates.last != delayed else { return }
+            dates.append(delayed)
+        }
+        for line in model.lyrics {
+            append(line.startSeconds)
+            for cue in line.cues {
+                append(cue.startSeconds)
+            }
+        }
+        return dates
+    }
+
+    private func transcriptText(at positionSeconds: Double) -> some View {
+        let current = currentLineIndex(for: positionSeconds)
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: Self.transcriptLineSpacing) {
+                ForEach(visibleLines) { line in
+                    LyricLineText(
+                        line: line,
+                        state: lyricRowState(for: line, current: current),
+                        positionSeconds: line.index == current ? positionSeconds : nil,
+                        onWordTap: { cue in
+                            jumpToTranscriptPosition(cue.startSeconds)
+                        }
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        handleLineTap(line)
+                    }
+                    .id(line.index)
+                }
+            }
+            .padding(.horizontal, Self.transcriptHorizontalPadding)
+        }
+        // Keeps the resting text clear of the floating filter bar.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Color.clear.frame(height: floatingBarZoneHeight + 6)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: Self.bottomRestingInset)
+        }
+        .overlay {
+            if model.lyrics.isEmpty {
+                if model.isFetchingLyrics {
+                    ProgressView()
+                } else {
+                    Text("No transcript for this book")
+                        .foregroundStyle(.secondary)
+                }
+            } else if visibleLines.isEmpty {
+                ContentUnavailableView.search(text: filterQuery)
+            }
+        }
+    }
+
+    /// The listener's position: the playing position when loaded, or the
+    /// resume position in a preview.
+    private func listeningPosition(at date: Date) -> Double {
+        isLoaded ? player.projectedTime(at: date) : model.resumePositionSeconds
+    }
+
+    private func currentLineIndex(at date: Date) -> Int? {
+        currentLineIndex(for: listeningPosition(at: date))
+    }
+
+    /// The transcript line containing a position.
+    private func currentLineIndex(for positionSeconds: Double) -> Int? {
+        guard positionSeconds > 0 else { return nil }
+        return model.lyrics.last(where: { ($0.startSeconds ?? .infinity) <= positionSeconds + 0.5 })?.index
+    }
+
+    /// A click beside the words falls back to the line's own start.
+    /// Lines without timestamps have no position to go to.
+    private func handleLineTap(_ line: LyricLine) {
+        guard let start = line.startSeconds else { return }
+        jumpToTranscriptPosition(start)
+    }
+
+    /// Seeks a loaded book to the position, or starts playback there in a preview.
+    private func jumpToTranscriptPosition(_ seconds: Double) {
+        if isLoaded {
+            Task { await player.jump(toSeconds: seconds) }
+        } else if canStartPlayback {
+            player.open(model, playWhenReady: true, startAtSeconds: seconds)
+        }
+    }
+
+    private func scrollToCurrentLine(_ proxy: ScrollViewProxy) {
+        guard let index = currentLineIndex(at: Date()),
+              visibleLines.contains(where: { $0.index == index })
+        else { return }
+        proxy.scrollTo(index, anchor: .center)
+    }
+
+    private func lyricRowState(for line: LyricLine, current: Int?) -> LyricRowState {
+        guard let current else { return .upcoming }
+        if line.index < current { return .played }
+        if line.index > current { return .upcoming }
+        return .current
+    }
 }
 
 private extension View {
@@ -532,6 +724,16 @@ private extension BookView {
         return 44
         #else
         return 16
+        #endif
+    }
+
+    /// Side padding of the transcript text: the phone's content padding, and
+    /// the inset list's margin on the Mac.
+    static var transcriptHorizontalPadding: CGFloat {
+        #if os(iOS)
+        return 20
+        #else
+        return 12
         #endif
     }
 }
