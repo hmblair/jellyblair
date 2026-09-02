@@ -10,6 +10,7 @@ public struct BookView: View {
     @Environment(PlayerController.self) private var player
     @Environment(BookCatalog.self) private var catalog
     @Environment(ConnectionMonitor.self) private var connection
+    @Environment(LibraryViewModel.self) private var library
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openAuthor) private var openAuthor
@@ -84,6 +85,39 @@ public struct BookView: View {
         #else
         .padding(.top, 8)
         #endif
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                bookActionsMenu
+            }
+        }
+    }
+
+    /// Actions on this book, in its title bar so it is clear which book
+    /// they apply to.
+    private var bookActionsMenu: some View {
+        Menu {
+            Button("Refresh Metadata") {
+                refreshMetadata()
+            }
+            .disabled(!connection.isServerReachable)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuIndicator(.hidden)
+    }
+
+    /// Re-reads everything the server and the file know about this book:
+    /// the chapter list, the resume position, and the library fields.
+    private func refreshMetadata() {
+        Task {
+            if isLoaded {
+                await player.refreshChapters()
+            } else {
+                await model.refreshChapters()
+            }
+            await model.refreshUserData()
+            await library.load()
+        }
     }
 
     /// The filter bar floats over the list, whose rows scroll up behind it,

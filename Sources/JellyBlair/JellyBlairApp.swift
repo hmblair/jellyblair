@@ -115,8 +115,7 @@ struct ContentView: View {
             Task { await scope.library.load() }
         }
         .focusedSceneValue(\.refreshActions, RefreshActions(
-            refreshLibrary: { [library = scope.library] in Task { await library.load() } },
-            refreshChapters: scope.player.book == nil ? nil : { [player = scope.player] in Task { await player.refreshChapters() } }
+            refreshLibrary: { [library = scope.library] in Task { await library.load() } }
         ))
         .environment(\.openAuthor, OpenBookGroupAction { [library = scope.library] name in
             sidebarScope = library.authorGroups.first { $0.name == name }
@@ -132,5 +131,6 @@ struct ContentView: View {
         .environment(scope.connection)
         .environment(scope.catalog)
     }
+
 }
 

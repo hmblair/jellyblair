@@ -3,7 +3,6 @@ import SwiftUI
 /// Actions the Library menu invokes on the signed-in window.
 struct RefreshActions {
     let refreshLibrary: () -> Void
-    let refreshChapters: (() -> Void)?
 }
 
 private struct RefreshActionsKey: FocusedValueKey {
@@ -17,8 +16,7 @@ extension FocusedValues {
     }
 }
 
-/// The Library menu. Items are disabled when no signed-in window is focused,
-/// and chapter refresh also requires a loaded book.
+/// The Library menu. Items are disabled when no signed-in window is focused.
 struct RefreshCommands: Commands {
     @FocusedValue(\.refreshActions) private var actions
 
@@ -29,12 +27,6 @@ struct RefreshCommands: Commands {
             }
             .keyboardShortcut("r")
             .disabled(actions == nil)
-
-            Button("Refresh Chapters") {
-                actions?.refreshChapters?()
-            }
-            .keyboardShortcut("R")
-            .disabled(actions?.refreshChapters == nil)
         }
     }
 }
