@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Shows the listening time left in the book at the current speed.
-/// Minute granularity keeps the label stable between time ticks, and keeping
-/// it in its own view spares the header from frequent re-renders.
+/// A half-second timeline drives the text, since the position anchor itself
+/// only changes on playback events.
 public struct RemainingTimeView: View {
     @Environment(PlayerController.self) private var player
 
@@ -11,13 +11,15 @@ public struct RemainingTimeView: View {
     public var body: some View {
         // Inherits the font from its context, so it always matches the
         // total length displayed beside it.
-        Text(text)
-            .monospacedDigit()
-            .foregroundStyle(.secondary)
+        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+            Text(text(at: context.date))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
     }
 
-    private var text: String {
-        let remaining = max(0, player.duration - player.currentTime) / player.playbackSpeed
+    private func text(at date: Date) -> String {
+        let remaining = max(0, player.duration - player.projectedTime(at: date)) / player.playbackSpeed
         let label = formatHoursMinutes(remaining)
         guard player.playbackSpeed != 1 else {
             return "\(label) remaining"
@@ -26,20 +28,22 @@ public struct RemainingTimeView: View {
     }
 }
 
-/// The seek slider and time readout. This is the only view that reads
-/// the playback time, so frequent updates re-render just this subtree.
+/// The seek bar and time readout. The bar's motion is a Core Animation
+/// animation projected from the position anchor, and the time text ticks
+/// twice per second, so playback drives no frequent view updates.
 public struct SeekBarView: View {
     @Environment(PlayerController.self) private var player
 
-    @State private var sliderPosition: Double = 0
-    @State private var isDraggingSlider = false
+    /// The fraction under the pointer during a scrub. Stays set until the
+    /// seek lands, so the bar does not flash back to the pre-seek time.
+    @State private var dragFraction: Double?
 
     public init() {}
 
     public var body: some View {
         VStack(spacing: 4) {
-            slider
-                .disabled(!player.isReady)
+            seekBar
+                .opacity(player.isReady ? 1 : 0.4)
             HStack {
                 if let chapter = player.currentChapter {
                     Text(chapter.title)
@@ -47,44 +51,73 @@ public struct SeekBarView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Text(timeText)
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var slider: some View {
-        let range = player.seekRange
-        return Slider(
-            value: Binding(
-                get: {
-                    let position = isDraggingSlider ? sliderPosition : player.currentTime
-                    return min(max(position, range.lowerBound), range.upperBound)
-                },
-                set: { sliderPosition = $0 }
-            ),
-            in: range
-        ) { editing in
-            if editing {
-                isDraggingSlider = true
-            } else {
-                // Keep showing the drag position until the seek lands, so the bar
-                // does not flash back to the pre-seek time.
-                Task {
-                    await player.seek(to: sliderPosition)
-                    isDraggingSlider = false
+                TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                    Text(timeText(at: context.date))
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
             }
         }
     }
 
-    /// Elapsed and total time within the current chapter, or within the book when there are no chapters.
-    private var timeText: String {
-        guard let chapter = player.currentChapter else {
-            return "\(formatTime(player.currentTime)) / \(formatTime(player.duration))"
+    private var seekBar: some View {
+        GeometryReader { geometry in
+            AnimatedProgressBar(anchor: barAnchor)
+                .allowsHitTesting(false)
+                .overlay {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .gesture(scrubGesture(width: geometry.size.width))
+                }
         }
-        let elapsed = max(0, player.currentTime - chapter.startSeconds)
+        .frame(height: 16)
+    }
+
+    /// The bar's anchor in chapter-fraction space: the scrub position while
+    /// dragging, the player's position anchor otherwise.
+    private var barAnchor: ProgressAnchor {
+        if let dragFraction {
+            return ProgressAnchor(fraction: dragFraction, fractionsPerSecond: 0, date: .distantPast)
+        }
+        let range = player.seekRange
+        let span = max(range.upperBound - range.lowerBound, 0.001)
+        let anchor = player.anchor
+        let fraction = (anchor.positionSeconds - range.lowerBound) / span
+        return ProgressAnchor(
+            fraction: min(1, max(0, fraction)),
+            fractionsPerSecond: anchor.rate / span,
+            date: anchor.date
+        )
+    }
+
+    private func scrubGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard player.isReady else { return }
+                dragFraction = fraction(at: value.location.x, width: width)
+            }
+            .onEnded { value in
+                guard player.isReady else { return }
+                let range = player.seekRange
+                let target = range.lowerBound + fraction(at: value.location.x, width: width) * (range.upperBound - range.lowerBound)
+                Task {
+                    await player.seek(to: target)
+                    dragFraction = nil
+                }
+            }
+    }
+
+    private func fraction(at x: CGFloat, width: CGFloat) -> Double {
+        min(1, max(0, x / max(width, 1)))
+    }
+
+    /// Elapsed and total time within the current chapter, or within the book when there are no chapters.
+    private func timeText(at date: Date) -> String {
+        let position = player.projectedTime(at: date)
+        guard let chapter = player.currentChapter else {
+            return "\(formatTime(position)) / \(formatTime(player.duration))"
+        }
+        let elapsed = max(0, min(position, chapter.endSeconds) - chapter.startSeconds)
         return "\(formatTime(elapsed)) / \(formatTime(chapter.durationSeconds))"
     }
 }

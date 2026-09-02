@@ -7,6 +7,20 @@ import AVFoundation
 import Foundation
 import Observation
 
+/// A playback position fixed to a wall-clock moment, with the rate carrying
+/// it forward. Displays project the current position from it, so playback
+/// needs no periodic time updates.
+public struct PlaybackAnchor: Equatable {
+    public let positionSeconds: Double
+    public let date: Date
+    public let rate: Double
+
+    /// The position the anchor projects to at the given moment.
+    public func position(at date: Date = Date()) -> Double {
+        positionSeconds + max(0, date.timeIntervalSince(self.date)) * rate
+    }
+}
+
 /// Owns the AVPlayer, the chapter list, and playback progress reports for one book at a time.
 @MainActor
 @Observable
@@ -17,8 +31,21 @@ public final class PlayerController {
     public private(set) var chapters: [Chapter] = []
     public private(set) var currentChapterIndex: Int?
     public private(set) var isPlaying = false
-    public private(set) var currentTime: Double = 0
+
+    /// The position anchor, written on playback events: play, pause, seek,
+    /// speed change, chapter boundary, and the periodic progress report.
+    public private(set) var anchor = PlaybackAnchor(positionSeconds: 0, date: .distantPast, rate: 0)
+
     public private(set) var duration: Double = 0
+
+    /// The projected position now. For a display that must stay current over
+    /// time, use projectedTime(at:) inside a TimelineView instead.
+    public var currentTime: Double { projectedTime(at: Date()) }
+
+    /// The position the anchor projects to at the given moment.
+    public func projectedTime(at date: Date) -> Double {
+        min(max(0, duration), anchor.position(at: date))
+    }
     public private(set) var playbackErrorMessage: String?
 
     /// True once the player item can actually play. Transport controls and
@@ -28,15 +55,11 @@ public final class PlayerController {
     public private(set) var playbackSpeed: Double
 
     private var player: AVPlayer?
-    private var timeObserver: Any?
+    private var boundaryObserver: Any?
     private var statusObservation: NSKeyValueObservation?
     private var playbackEndObserver: NSObjectProtocol?
     private var terminationObserver: NSObjectProtocol?
     private var progressReportTimer: Timer?
-
-    /// Number of seeks in flight. The time observer is ignored while this is nonzero,
-    /// so the bar does not jump back to the pre-seek position.
-    private var pendingSeekCount = 0
 
     /// Incremented on each open. Work that resumes from an await under a stale
     /// generation discards its result instead of touching the newer book's state.
@@ -75,8 +98,8 @@ public final class PlayerController {
         // Owned by SwiftUI state, so deallocation happens on the main thread.
         MainActor.assumeIsolated {
             progressReportTimer?.invalidate()
-            if let timeObserver, let player {
-                player.removeTimeObserver(timeObserver)
+            if let boundaryObserver, let player {
+                player.removeTimeObserver(boundaryObserver)
             }
             if let terminationObserver {
                 NotificationCenter.default.removeObserver(terminationObserver)
@@ -131,7 +154,7 @@ public final class PlayerController {
         duration = newBook.runTimeSeconds
         setChapters(model.chapters)
         let startPosition = startAtSeconds ?? model.resumePositionSeconds
-        setCurrentTime(startPosition)
+        setAnchor(position: startPosition, rate: 0)
 
         let asset = model.streamAsset()
         let item = AVPlayerItem(asset: asset)
@@ -147,6 +170,7 @@ public final class PlayerController {
             return
         }
         isReady = true
+        installChapterBoundaryObserver()
 
         let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first
         guard generation == openGeneration else { return }
@@ -158,9 +182,6 @@ public final class PlayerController {
             await seek(to: startPosition)
             guard generation == openGeneration else { return }
         }
-        // The time observer starts only now: installed earlier, its initial
-        // callback would report position zero and clobber the staged position.
-        observeTime(of: newPlayer)
         if playWhenReady {
             play()
         }
@@ -197,6 +218,8 @@ public final class PlayerController {
     private func closeCurrentBook() async {
         guard let book else { return }
         player?.pause()
+        isPlaying = false
+        reanchorFromPlayer()
         removeObservers()
         stopProgressReports()
         let position = currentTime
@@ -205,7 +228,6 @@ public final class PlayerController {
         self.book = nil
         currentModel = nil
         player = nil
-        isPlaying = false
         isReady = false
         hasActiveSession = false
         playbackErrorMessage = nil
@@ -247,6 +269,7 @@ public final class PlayerController {
         guard isReady, let book else { return }
         player?.rate = Float(playbackSpeed)
         isPlaying = true
+        reanchorFromPlayer()
         if !hasActiveSession {
             hasActiveSession = true
             startProgressReports(for: book)
@@ -257,6 +280,7 @@ public final class PlayerController {
     public func pause() {
         player?.pause()
         isPlaying = false
+        reanchorFromPlayer()
         audioMeter.reset()
         reportProgressNow()
         syncNowPlaying()
@@ -268,6 +292,7 @@ public final class PlayerController {
         if isPlaying {
             player?.rate = Float(speed)
         }
+        reanchorFromPlayer()
         syncNowPlaying()
     }
 
@@ -278,16 +303,16 @@ public final class PlayerController {
     public func seek(to seconds: Double) async {
         guard isReady, player != nil else { return }
         let target = max(0, min(seconds, duration))
-        setCurrentTime(target)
-        pendingSeekCount += 1
+        // The displays sit at the target while the seek lands.
+        setAnchor(position: target, rate: 0)
         let time = CMTime(seconds: target, preferredTimescale: Int32(ticksPerSecond))
         await player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
-        pendingSeekCount -= 1
         // Playing to the end zeroes the player's rate, so a seek away from the
         // end must re-assert it to keep the playing state truthful.
         if isPlaying {
             player?.rate = Float(playbackSpeed)
         }
+        reanchorFromPlayer()
         syncNowPlaying()
     }
 
@@ -327,14 +352,23 @@ public final class PlayerController {
 
     // MARK: - Time and chapter tracking
 
-    private func setCurrentTime(_ seconds: Double) {
-        currentTime = seconds
+    private func setAnchor(position: Double, rate: Double) {
+        anchor = PlaybackAnchor(positionSeconds: position, date: Date(), rate: rate)
         refreshCurrentChapterIndex()
+    }
+
+    /// Pins the anchor to the player's authoritative position and current
+    /// rate. This is the drift correction of the projected time.
+    private func reanchorFromPlayer() {
+        let reported = player?.currentTime().seconds
+        let position = reported?.isFinite == true ? reported! : anchor.position()
+        setAnchor(position: position, rate: isPlaying ? playbackSpeed : 0)
     }
 
     private func setChapters(_ newChapters: [Chapter]) {
         chapters = newChapters
         refreshCurrentChapterIndex()
+        installChapterBoundaryObserver()
     }
 
     /// Writes the index only when it changes, so views that depend on the
@@ -373,14 +407,26 @@ public final class PlayerController {
 
     // MARK: - Player observation
 
-    private func observeTime(of player: AVPlayer) {
-        let interval = CMTime(seconds: 1.0 / 30.0, preferredTimescale: 600)
-        timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+    /// Fires exactly when playback crosses a chapter start, replacing time
+    /// polling: the anchor and chapter index refresh only at boundaries.
+    private func installChapterBoundaryObserver() {
+        removeChapterBoundaryObserver()
+        guard let player else { return }
+        let starts = chapters.map(\.startSeconds).filter { $0 > 0 }
+        guard !starts.isEmpty else { return }
+        let times = starts.map { NSValue(time: CMTime(seconds: $0, preferredTimescale: 600)) }
+        boundaryObserver = player.addBoundaryTimeObserver(forTimes: times, queue: .main) { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.pendingSeekCount == 0 else { return }
-                self.setCurrentTime(time.seconds)
+                self?.reanchorFromPlayer()
             }
         }
+    }
+
+    private func removeChapterBoundaryObserver() {
+        if let boundaryObserver, let player {
+            player.removeTimeObserver(boundaryObserver)
+        }
+        boundaryObserver = nil
     }
 
     private func observeFailure(of item: AVPlayerItem) {
@@ -406,10 +452,7 @@ public final class PlayerController {
     }
 
     private func removeObservers() {
-        if let timeObserver, let player {
-            player.removeTimeObserver(timeObserver)
-        }
-        timeObserver = nil
+        removeChapterBoundaryObserver()
         statusObservation?.invalidate()
         statusObservation = nil
         if let playbackEndObserver {
@@ -432,7 +475,7 @@ public final class PlayerController {
     private func handlePlaybackEnded() {
         guard let book else { return }
         isPlaying = false
-        setCurrentTime(duration)
+        setAnchor(position: duration, rate: 0)
         currentModel?.recordPosition(duration)
         audioMeter.reset()
         stopProgressReports()
@@ -464,6 +507,10 @@ public final class PlayerController {
 
     private func reportProgressNow() {
         guard let book, hasActiveSession else { return }
+        // Doubles as the periodic drift correction of the projected time.
+        if isPlaying {
+            reanchorFromPlayer()
+        }
         let position = currentTime
         let paused = !isPlaying
         Task {
