@@ -14,7 +14,7 @@ public enum LyricRowState: Equatable {
 /// given position takes the accent color, and unread words keep the primary
 /// color; a word spanning several cues, like an em-dashed pair, colors each
 /// cued part on its own inside the one view.
-public struct LyricLineText: View {
+public struct LyricLineText: View, Equatable {
     let line: LyricLine
     let state: LyricRowState
     /// The playback position, set only on the current line.
@@ -158,6 +158,14 @@ public struct LyricLineText: View {
         let text: String
 
         var endPosition: Int { id + text.count }
+    }
+
+    /// Equality covers everything the rendering reads, so a tick only
+    /// re-renders the lines whose inputs moved: the current line each time,
+    /// any other line only when its state flips. The two closures carry no
+    /// rendered state and stay out of the comparison.
+    public static func == (lhs: LyricLineText, rhs: LyricLineText) -> Bool {
+        lhs.line == rhs.line && lhs.state == rhs.state && lhs.positionSeconds == rhs.positionSeconds
     }
 
     /// Splits the line after each run of whitespace, keeping every character,

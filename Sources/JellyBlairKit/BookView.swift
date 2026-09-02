@@ -633,6 +633,7 @@ public struct BookView: View {
                             followSpokenWord(at: midY, proxy)
                         }
                     )
+                    .equatable()
                     .contentShape(Rectangle())
                     .onTapGesture {
                         handleLineTap(line)

@@ -13,6 +13,17 @@ struct FlowLayout: Layout {
     var horizontalSpacing: CGFloat = 4
     var verticalSpacing: CGFloat = 2
 
+    /// The subviews' ideal sizes, measured once per subview change. Layout
+    /// passes run every frame of a scroll or an animation, and measuring
+    /// text is the expensive part, so the passes must not repeat it.
+    func makeCache(subviews: Subviews) -> [CGSize] {
+        subviews.map { $0.sizeThatFits(.unspecified) }
+    }
+
+    func updateCache(_ cache: inout [CGSize], subviews: Subviews) {
+        cache = subviews.map { $0.sizeThatFits(.unspecified) }
+    }
+
     private struct Row {
         var indices: [Int] = []
         var width: CGFloat = 0
@@ -38,17 +49,16 @@ struct FlowLayout: Layout {
         return result
     }
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout [CGSize]) -> CGSize {
         let maxWidth = proposal.width ?? .infinity
-        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let laidOut = rows(sizes: sizes, maxWidth: maxWidth)
+        let laidOut = rows(sizes: cache, maxWidth: maxWidth)
         let contentWidth = laidOut.map(\.width).max() ?? 0
         let height = laidOut.map(\.height).reduce(0, +) + verticalSpacing * CGFloat(max(0, laidOut.count - 1))
         return CGSize(width: min(maxWidth, max(contentWidth, proposal.width ?? contentWidth)), height: height)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout [CGSize]) {
+        let sizes = cache
         let laidOut = rows(sizes: sizes, maxWidth: bounds.width)
         var y = bounds.minY
         for row in laidOut {
