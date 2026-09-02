@@ -17,6 +17,8 @@ public enum LyricRowState: Equatable {
 public struct LyricLineText: View, Equatable {
     let line: LyricLine
     let state: LyricRowState
+    /// True for a line that is a chapter's heading, drawn in a title style.
+    let isTitle: Bool
     /// The playback position, set only on the current line.
     let positionSeconds: Double?
     /// Called with the clicked word's cue.
@@ -29,6 +31,12 @@ public struct LyricLineText: View, Equatable {
 
     static let font = Font.title3
 
+    /// The style of a chapter heading inside the transcript.
+    static let titleFont = Font.title2.bold()
+
+    /// Space above a chapter heading, separating it from the preceding text.
+    private static let titleTopPadding: CGFloat = 12
+
     /// The scroll id riding on the word being spoken, so tracking can center
     /// on the wrapped line that contains it.
     public static let spokenWordID = "spokenWord"
@@ -40,9 +48,10 @@ public struct LyricLineText: View, Equatable {
     /// How long a word takes to fade between its colors.
     private static let colorFadeDuration: TimeInterval = 0.05
 
-    public init(line: LyricLine, state: LyricRowState, positionSeconds: Double? = nil, onWordTap: ((LyricCue) -> Void)? = nil, onSpokenWordMoved: ((CGFloat) -> Void)? = nil) {
+    public init(line: LyricLine, state: LyricRowState, isTitle: Bool = false, positionSeconds: Double? = nil, onWordTap: ((LyricCue) -> Void)? = nil, onSpokenWordMoved: ((CGFloat) -> Void)? = nil) {
         self.line = line
         self.state = state
+        self.isTitle = isTitle
         self.positionSeconds = positionSeconds
         self.onWordTap = onWordTap
         self.onSpokenWordMoved = onSpokenWordMoved
@@ -62,7 +71,8 @@ public struct LyricLineText: View, Equatable {
                 }
             }
         }
-        .font(Self.font)
+        .font(isTitle ? Self.titleFont : Self.font)
+        .padding(.top, isTitle ? Self.titleTopPadding : 0)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -165,7 +175,7 @@ public struct LyricLineText: View, Equatable {
     /// any other line only when its state flips. The two closures carry no
     /// rendered state and stay out of the comparison.
     public static func == (lhs: LyricLineText, rhs: LyricLineText) -> Bool {
-        lhs.line == rhs.line && lhs.state == rhs.state && lhs.positionSeconds == rhs.positionSeconds
+        lhs.line == rhs.line && lhs.state == rhs.state && lhs.isTitle == rhs.isTitle && lhs.positionSeconds == rhs.positionSeconds
     }
 
     /// Splits the line after each run of whitespace, keeping every character,

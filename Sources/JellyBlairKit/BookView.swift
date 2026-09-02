@@ -619,12 +619,14 @@ public struct BookView: View {
 
     private func transcriptText(_ proxy: ScrollViewProxy, at positionSeconds: Double) -> some View {
         let current = currentLineIndex(for: positionSeconds)
+        let titleLines = titleLineIndices
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: Self.transcriptLineSpacing) {
                 ForEach(visibleLines) { line in
                     LyricLineText(
                         line: line,
                         state: lyricRowState(for: line, current: current),
+                        isTitle: titleLines.contains(line.index),
                         positionSeconds: line.index == current ? positionSeconds : nil,
                         onWordTap: { cue in
                             jumpToTranscriptPosition(cue.startSeconds)
@@ -666,6 +668,28 @@ public struct BookView: View {
         .onUserScroll {
             isTrackingPosition = false
         }
+    }
+
+    /// Indices of transcript lines that are chapter headings: the first line
+    /// at a chapter's start whose words are exactly the chapter's title,
+    /// compared without case. One walk covers both ordered lists.
+    private var titleLineIndices: Set<Int> {
+        var indices: Set<Int> = []
+        let lines = model.lyrics
+        var lineIndex = 0
+        for chapter in chapters {
+            while lineIndex < lines.count, (lines[lineIndex].startSeconds ?? -1) < chapter.startSeconds - 0.5 {
+                lineIndex += 1
+            }
+            guard lineIndex < lines.count else { break }
+            let line = lines[lineIndex]
+            let lineText = line.text.trimmingCharacters(in: .whitespaces)
+            let title = chapter.title.trimmingCharacters(in: .whitespaces)
+            if lineText.caseInsensitiveCompare(title) == .orderedSame {
+                indices.insert(line.index)
+            }
+        }
+        return indices
     }
 
     /// The listener's position: the playing position when loaded, or the
