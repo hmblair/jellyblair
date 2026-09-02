@@ -187,13 +187,11 @@ public struct BookView: View {
 
     // The header layout is shared; only its measurements differ per platform.
     #if os(macOS)
-    private static let coverSize: CGFloat = 193
     private static let coverCornerRadius: CGFloat = 10
     private static let coverSpacing: CGFloat = 12
     private static let titleFont = Font.title.bold()
     private static let lineFont = Font.title3
     #else
-    private static let coverSize: CGFloat = 150
     private static let coverCornerRadius: CGFloat = 12
     private static let coverSpacing: CGFloat = 10
     private static let titleFont = Font.title2.bold()
@@ -210,10 +208,17 @@ public struct BookView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
 
+            // Two equal halves: the cover fills its half as a square, the
+            // metadata lines take the other.
             HStack(alignment: .top, spacing: Self.coverSpacing) {
+                // The square fits its half's width and the header's height,
+                // whichever is tighter. The clip hugs the image itself; the
+                // outer frame then claims the half, with the cover against
+                // the metadata beside it.
                 cover
-                    .frame(width: Self.coverSize, height: Self.coverSize)
+                    .aspectRatio(1, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: Self.coverCornerRadius))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
 
                 VStack(alignment: .leading, spacing: 6) {
                     if let author = book.author {
@@ -235,15 +240,8 @@ public struct BookView: View {
                     downloadRow
                 }
                 .font(Self.lineFont)
-                Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            #if os(macOS)
-            // The Mac pins the section to the cover height. A flexible
-            // height fights the split view's layout and walks the window
-            // content upward on every book switch.
-            .frame(height: Self.coverSize, alignment: .top)
-            #endif
         }
         #if os(iOS)
         // The chapter list below competes for vertical space; without this the
