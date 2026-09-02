@@ -155,7 +155,7 @@ public struct BookView: View {
     // MARK: - Header
 
     #if os(macOS)
-    private static let coverSize: CGFloat = 175
+    private static let coverSize: CGFloat = 193
 
     /// Side-by-side header: cover at the left, text beside it.
     private var header: some View {
@@ -352,7 +352,6 @@ public struct BookView: View {
         } content: {
             if let bytes = book.fileSizeBytes {
                 Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
-                    .foregroundStyle(.secondary)
             }
         }
     }
