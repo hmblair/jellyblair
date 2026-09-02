@@ -68,7 +68,7 @@ public final class PlayerController {
     private var player: AVPlayer?
     private var boundaryObserver: Any?
     private var statusObservation: NSKeyValueObservation?
-    private var timeControlObservation: NSKeyValueObservation?
+    private var timebaseRateObserver: NSObjectProtocol?
     private var playbackEndObserver: NSObjectProtocol?
     private var terminationObserver: NSObjectProtocol?
     private var progressReportTimer: Timer?
@@ -169,7 +169,6 @@ public final class PlayerController {
         player = newPlayer
         observeFailure(of: item)
         observePlaybackEnd(of: item)
-        observeTimeControl(of: newPlayer)
 
         let ready = await waitUntilReady(item)
         guard generation == openGeneration else { return }
@@ -179,6 +178,7 @@ public final class PlayerController {
         }
         isReady = true
         installChapterBoundaryObserver()
+        observeTimebaseRate(of: item)
 
         let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first
         guard generation == openGeneration else { return }
@@ -370,15 +370,18 @@ public final class PlayerController {
         refreshCurrentChapterIndex()
     }
 
-    /// Pins the anchor to the player's authoritative position and current
-    /// rate. This is the drift correction of the projected time. While the
-    /// player waits to rebuffer, the rate is zero, so the projection freezes
-    /// with the audio instead of running ahead.
+    /// Pins the anchor to the item's timebase, the clock that drives audio
+    /// rendering. The timebase time is the exact playback position. The
+    /// timebase rate is zero while the player primes or rebuffers, so the
+    /// projection freezes and resumes with the audio.
     private func reanchorFromPlayer() {
-        let reported = player?.currentTime().seconds
-        let position = reported?.isFinite == true ? reported! : anchor.position()
-        let isAdvancing = isPlaying && player?.timeControlStatus == .playing
-        setAnchor(position: position, rate: isAdvancing ? playbackSpeed : 0)
+        guard let timebase = player?.currentItem?.timebase else {
+            setAnchor(position: anchor.position(), rate: 0)
+            return
+        }
+        let reported = timebase.time.seconds
+        let position = reported.isFinite ? reported : anchor.position()
+        setAnchor(position: position, rate: timebase.rate)
     }
 
     private func setChapters(_ newChapters: [Chapter]) {
@@ -445,13 +448,17 @@ public final class PlayerController {
         boundaryObserver = nil
     }
 
-    /// Reanchors whenever the player stalls to rebuffer or starts moving
-    /// again, so the projected time freezes and resumes with the audio.
-    /// Without this, only the periodic progress report corrects the drift,
-    /// and the correction shows as a backward jump.
-    private func observeTimeControl(of player: AVPlayer) {
-        timeControlObservation = player.observe(\.timeControlStatus) { [weak self] _, _ in
-            Task { @MainActor in
+    /// Reanchors when the timebase's effective rate changes. The notification
+    /// arrives at the exact moments rendering starts, stalls, resumes, or
+    /// changes speed, so the projection follows the audio without polling.
+    private func observeTimebaseRate(of item: AVPlayerItem) {
+        guard let timebase = item.timebase else { return }
+        timebaseRateObserver = NotificationCenter.default.addObserver(
+            forName: .init(kCMTimebaseNotification_EffectiveRateChanged as String),
+            object: timebase,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
                 self?.reanchorFromPlayer()
             }
         }
@@ -483,8 +490,10 @@ public final class PlayerController {
         removeChapterBoundaryObserver()
         statusObservation?.invalidate()
         statusObservation = nil
-        timeControlObservation?.invalidate()
-        timeControlObservation = nil
+        if let timebaseRateObserver {
+            NotificationCenter.default.removeObserver(timebaseRateObserver)
+        }
+        timebaseRateObserver = nil
         if let playbackEndObserver {
             NotificationCenter.default.removeObserver(playbackEndObserver)
         }
@@ -537,10 +546,6 @@ public final class PlayerController {
 
     private func reportProgressNow() {
         guard let book, hasActiveSession else { return }
-        // Doubles as the periodic drift correction of the projected time.
-        if isPlaying {
-            reanchorFromPlayer()
-        }
         let position = currentTime
         let paused = !isPlaying
         Task {
