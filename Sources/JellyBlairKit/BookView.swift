@@ -270,6 +270,13 @@ public struct BookView: View {
             if let bytes = book.fileSizeBytes {
                 Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
             }
+            if let kbps = book.bitrateKbps {
+                Image(systemName: "waveform")
+                    .imageScale(.small)
+                    .foregroundStyle(.secondary)
+                Text("\(kbps) kbps")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

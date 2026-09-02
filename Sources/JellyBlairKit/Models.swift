@@ -50,10 +50,12 @@ public struct Person: Codable, Hashable {
 public struct MediaSource: Codable, Hashable {
     public let container: String?
     public let size: Int64?
+    public let bitrate: Int?
 
     enum CodingKeys: String, CodingKey {
         case container = "Container"
         case size = "Size"
+        case bitrate = "Bitrate"
     }
 }
 
@@ -88,6 +90,13 @@ public struct Book: Codable, Identifiable, Hashable {
     /// The audio file's size in bytes, when the server reports it.
     public var fileSizeBytes: Int64? {
         mediaSources?.first?.size
+    }
+
+    /// The file's overall bitrate in kilobits per second, when the server
+    /// reports it.
+    public var bitrateKbps: Int? {
+        guard let bitrate = mediaSources?.first?.bitrate else { return nil }
+        return Int((Double(bitrate) / 1000).rounded())
     }
 
     public var author: String? {
