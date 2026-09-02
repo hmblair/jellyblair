@@ -20,6 +20,7 @@ public struct BookView: View {
     @State private var isAutoScrollWindowOpen = true
     @State private var filterQuery = ""
     @State private var isShowingTranscript = false
+    @State private var isTrackingPosition = false
     @State private var isHoveringJumpButton = false
     @State private var isHoveringTranscriptToggle = false
     @State private var isHoveringDownload = false
@@ -148,7 +149,7 @@ public struct BookView: View {
                     if hasTranscript {
                         transcriptToggle
                     }
-                    jumpToCurrentButton(proxy)
+                    trackingButton(proxy)
                 }
                 #if os(iOS)
                 .padding(.horizontal, 20)
@@ -157,10 +158,13 @@ public struct BookView: View {
         }
     }
 
-    /// Centers the list on the listener's position, clearing any filter that
-    /// hides it first. The same logic runs when a book's screen opens.
-    private func jumpToCurrentButton(_ proxy: ScrollViewProxy) -> some View {
+    /// Toggles tracking: while on, the listener's position stays centered as
+    /// it moves. Turning it on clears any filter that hides the position and
+    /// centers it right away. Scrolling the list by hand turns tracking off.
+    private func trackingButton(_ proxy: ScrollViewProxy) -> some View {
         Button {
+            isTrackingPosition.toggle()
+            guard isTrackingPosition else { return }
             filterQuery = ""
             Task { @MainActor in
                 withAnimation {
@@ -170,22 +174,23 @@ public struct BookView: View {
         } label: {
             Image(systemName: "scope")
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isTrackingPosition ? Color.white : Color.secondary)
                 .padding(.vertical, 5)
                 .padding(.horizontal, 8)
                 .background(
                     Capsule()
-                        .fill(Color.primary.opacity(isHoveringJumpButton ? 0.12 : 0.06))
+                        .fill(isTrackingPosition ? Color.accentColor : Color.primary.opacity(isHoveringJumpButton ? 0.12 : 0.06))
                         .animation(.easeOut(duration: 0.1), value: isHoveringJumpButton)
                 )
         }
         .buttonStyle(.plain)
         .onHover { isHoveringJumpButton = $0 }
+        .help(isTrackingPosition ? "Stop following the listening position" : "Follow the listening position")
         .disabled(jumpTargetIndex == nil)
         .opacity(jumpTargetIndex == nil ? 0.4 : 1)
     }
 
-    /// The row the jump button centers on, in whichever list is showing.
+    /// The row tracking centers on, in whichever list is showing.
     private var jumpTargetIndex: Int? {
         isShowingTranscript ? currentLineIndex(at: Date()) : markedChapterIndex
     }
@@ -495,8 +500,14 @@ public struct BookView: View {
             // data change. Each scroll walks the whole row list, so extra
             // firings are expensive on long books.
             .onChange(of: markedChapterIndex, initial: true) {
-                guard !isLoaded || isAutoScrollWindowOpen else { return }
-                scrollToMarkedChapter(proxy)
+                if isTrackingPosition {
+                    withAnimation { scrollToMarkedChapter(proxy) }
+                } else if !isLoaded || isAutoScrollWindowOpen {
+                    scrollToMarkedChapter(proxy)
+                }
+            }
+            .onUserScroll {
+                isTrackingPosition = false
             }
             .task {
                 try? await Task.sleep(for: .seconds(3))
@@ -571,7 +582,7 @@ public struct BookView: View {
     /// The anchor moves on every playback event, rebuilding the schedule.
     private func transcriptList(_ proxy: ScrollViewProxy) -> some View {
         TimelineView(.explicit(transcriptTickDates)) { context in
-            transcriptText(at: listeningPosition(at: context.date))
+            transcriptText(proxy, at: listeningPosition(at: context.date))
         }
         .task(id: book.id) {
             await model.fetchLyricsIfNeeded()
@@ -603,7 +614,7 @@ public struct BookView: View {
         return dates
     }
 
-    private func transcriptText(at positionSeconds: Double) -> some View {
+    private func transcriptText(_ proxy: ScrollViewProxy, at positionSeconds: Double) -> some View {
         let current = currentLineIndex(for: positionSeconds)
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: Self.transcriptLineSpacing) {
@@ -643,6 +654,16 @@ public struct BookView: View {
             } else if visibleLines.isEmpty {
                 ContentUnavailableView.search(text: filterQuery)
             }
+        }
+        // Tracking re-centers whenever the current line itself moves; the
+        // timeline already redraws this view at every boundary, so the
+        // change is observed without extra work.
+        .onChange(of: current) {
+            guard isTrackingPosition else { return }
+            withAnimation { scrollToCurrentLine(proxy) }
+        }
+        .onUserScroll {
+            isTrackingPosition = false
         }
     }
 
@@ -694,6 +715,25 @@ public struct BookView: View {
 }
 
 private extension View {
+    /// Runs the action when the user scrolls the view themselves. The
+    /// animating phase of programmatic centering does not count. Systems
+    /// without the phase API never report, so the action stays unrun there.
+    @ViewBuilder
+    func onUserScroll(perform action: @escaping () -> Void) -> some View {
+        if #available(macOS 15.0, iOS 18.0, *) {
+            onScrollPhaseChange { _, newPhase in
+                switch newPhase {
+                case .tracking, .interacting:
+                    action()
+                default:
+                    break
+                }
+            }
+        } else {
+            self
+        }
+    }
+
     /// Edge-to-edge rows on the phone; the inset style on the Mac.
     func platformChapterListStyle() -> some View {
         #if os(iOS)

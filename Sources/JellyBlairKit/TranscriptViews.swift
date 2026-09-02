@@ -24,6 +24,9 @@ public struct LyricLineText: View {
 
     static let font = Font.title3
 
+    /// How long a word takes to fade between its colors.
+    private static let colorFadeDuration: TimeInterval = 0.05
+
     public init(line: LyricLine, state: LyricRowState, positionSeconds: Double? = nil, onWordTap: ((LyricCue) -> Void)? = nil) {
         self.line = line
         self.state = state
@@ -36,6 +39,7 @@ public struct LyricLineText: View {
             if line.cues.isEmpty {
                 Text(line.text)
                     .foregroundStyle(state == .played ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                    .animation(.easeOut(duration: Self.colorFadeDuration), value: state)
             } else {
                 FlowLayout(alignment: .leading, horizontalSpacing: 0) {
                     ForEach(tokens) { token in
@@ -48,9 +52,14 @@ public struct LyricLineText: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// The interpolating content transition fades each character between its
+    /// colors when the attributed text changes; the string itself never does.
     @ViewBuilder
     private func tokenView(_ token: WordToken) -> some View {
-        let text = Text(attributedText(for: token))
+        let attributed = attributedText(for: token)
+        let text = Text(attributed)
+            .contentTransition(.interpolate)
+            .animation(.easeOut(duration: Self.colorFadeDuration), value: attributed)
         if let cue = cue(for: token), let onWordTap {
             text.onTapGesture {
                 onWordTap(cue)
