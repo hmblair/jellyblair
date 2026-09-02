@@ -36,7 +36,33 @@ public struct SeekBarView: View {
     /// seek lands, so the bar does not flash back to the pre-seek time.
     @State private var dragFraction: Double?
 
+    @State private var isHoveringSpeed = false
+
+    private static let speeds: [Double] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+
     public init() {}
+
+    private var speedMenu: some View {
+        Menu {
+            Picker("Speed", selection: Binding(
+                get: { player.playbackSpeed },
+                set: { player.setPlaybackSpeed($0) }
+            )) {
+                ForEach(Self.speeds, id: \.self) { speed in
+                    Text(formatPlaybackSpeed(speed)).tag(speed)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Text(formatPlaybackSpeed(player.playbackSpeed))
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .fixedSize()
+        .menuIndicator(.hidden)
+        // The label wears the time display's gray instead of the tint.
+        .tint(Color.secondary)
+    }
 
     public var body: some View {
         VStack(spacing: 4) {
@@ -49,6 +75,17 @@ public struct SeekBarView: View {
                         .lineLimit(1)
                 }
                 Spacer()
+                speedMenu
+                    .buttonStyle(.plain)
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .padding(4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.primary.opacity(isHoveringSpeed ? 0.1 : 0))
+                    )
+                    .onHover { isHoveringSpeed = $0 }
+                    .animation(.easeOut(duration: 0.1), value: isHoveringSpeed)
                 TimelineView(.periodic(from: .now, by: 0.5)) { context in
                     Text(timeText(at: context.date))
                         .font(.callout.monospacedDigit())
@@ -120,19 +157,20 @@ public struct SeekBarView: View {
     }
 }
 
-/// Play/pause, skip buttons, chapter navigation, and the playback speed menu.
+/// Play/pause, skip buttons, and chapter navigation.
 public struct TransportControlsView: View {
     @Environment(PlayerController.self) private var player
 
-    private static let speeds: [Double] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+    #if os(macOS)
+    private static let playButtonSize: CGFloat = 44
+    #else
+    private static let playButtonSize: CGFloat = 55
+    #endif
 
     public init() {}
 
-    @State private var isHoveringSpeed = false
-
     public var body: some View {
-        ZStack {
-            HStack(spacing: 24) {
+        HStack(spacing: 24) {
                 Button {
                     Task { await player.previousChapter() }
                 } label: {
@@ -151,7 +189,7 @@ public struct TransportControlsView: View {
                     player.togglePlayback()
                 } label: {
                     Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 44))
+                        .font(.system(size: Self.playButtonSize))
                         .contentTransition(.identity)
                         .animation(nil, value: player.isPlaying)
                 }
@@ -170,43 +208,10 @@ public struct TransportControlsView: View {
                     Image(systemName: "forward.fill").font(.title3)
                 }
                 .buttonStyle(HoverScaleButtonStyle())
-            }
-
-            HStack {
-                Spacer()
-                speedMenu
-                    .buttonStyle(.plain)
-                    .menuStyle(.borderlessButton)
-                    .padding(4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.primary.opacity(isHoveringSpeed ? 0.1 : 0))
-                    )
-                    .onHover { isHoveringSpeed = $0 }
-                    .animation(.easeOut(duration: 0.1), value: isHoveringSpeed)
-            }
         }
+        .frame(maxWidth: .infinity)
         .disabled(!player.isReady)
         .opacity(player.isReady ? 1 : 0.4)
-    }
-
-    private var speedMenu: some View {
-        Menu {
-            Picker("Speed", selection: Binding(
-                get: { player.playbackSpeed },
-                set: { player.setPlaybackSpeed($0) }
-            )) {
-                ForEach(Self.speeds, id: \.self) { speed in
-                    Text(formatPlaybackSpeed(speed)).tag(speed)
-                }
-            }
-            .pickerStyle(.inline)
-        } label: {
-            Text(formatPlaybackSpeed(player.playbackSpeed))
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
-        }
-        .fixedSize()
     }
 }
 
