@@ -277,7 +277,6 @@ public final class PlayerController {
         guard isReady, let book else { return }
         player?.rate = Float(playbackSpeed)
         isPlaying = true
-        reanchorFromPlayer()
         if !hasActiveSession {
             hasActiveSession = true
             startProgressReports(for: book)
@@ -300,7 +299,6 @@ public final class PlayerController {
         if isPlaying {
             player?.rate = Float(speed)
         }
-        reanchorFromPlayer()
         syncNowPlaying()
     }
 
@@ -426,8 +424,10 @@ public final class PlayerController {
 
     // MARK: - Player observation
 
-    /// Fires exactly when playback crosses a chapter start, replacing time
-    /// polling: the anchor and chapter index refresh only at boundaries.
+    /// Fires exactly when playback crosses a chapter start, so the chapter
+    /// index refreshes without time polling. The anchor stays untouched: a
+    /// mid-play timebase read can report a position ahead of the audible
+    /// content on a seeked network stream.
     private func installChapterBoundaryObserver() {
         removeChapterBoundaryObserver()
         guard let player else { return }
@@ -436,7 +436,7 @@ public final class PlayerController {
         let times = starts.map { NSValue(time: CMTime(seconds: $0, preferredTimescale: 600)) }
         boundaryObserver = player.addBoundaryTimeObserver(forTimes: times, queue: .main) { [weak self] in
             MainActor.assumeIsolated {
-                self?.reanchorFromPlayer()
+                self?.refreshCurrentChapterIndex()
             }
         }
     }
