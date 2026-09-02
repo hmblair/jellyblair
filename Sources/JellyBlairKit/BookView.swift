@@ -25,9 +25,6 @@ public struct BookView: View {
     /// reverts after a few seconds; a second tap within that window deletes.
     @State private var isConfirmingRemoval = false
     @State private var removalConfirmationTimeout: Task<Void, Never>?
-    @State private var isHoveringAuthor = false
-    @State private var hoveredGenre: String?
-    @State private var hoveredNameWords = 0
 
     public init(book: Book) {
         self.book = book
@@ -186,13 +183,19 @@ public struct BookView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     if let author = book.author {
-                        metadataLine(icon: BookGroup.Kind.author.iconName) { authorLine(author) }
+                        metadataLine(icon: BookGroup.Kind.author.iconName) {
+                            NameListLine(names: [author], open: openAuthor)
+                        }
                     }
-                    if let narrator = book.narrator {
-                        metadataLine(icon: BookGroup.Kind.narrator.iconName) { narratorLine(narrator) }
+                    if !book.narrators.isEmpty {
+                        metadataLine(icon: BookGroup.Kind.narrator.iconName) {
+                            NameListLine(names: book.narrators, open: openNarrator)
+                        }
                     }
                     if let genres = book.genres, !genres.isEmpty {
-                        metadataLine(icon: BookGroup.Kind.genre.iconName) { genreLine(genres) }
+                        metadataLine(icon: BookGroup.Kind.genre.iconName) {
+                            NameListLine(names: genres, open: openGenre)
+                        }
                     }
                     metadataLine(icon: "clock.fill") { lengthLine }
                     downloadRow
@@ -231,101 +234,6 @@ public struct BookView: View {
             icon()
                 .frame(width: 22)
             content()
-        }
-    }
-
-    /// The author's name, navigating to their books when the shell
-    /// provides a destination.
-    @ViewBuilder
-    private func authorLine(_ author: String) -> some View {
-        if let openAuthor {
-            Button {
-                openAuthor(author)
-            } label: {
-                Text(author)
-                    .opacity(isHoveringAuthor ? 0.6 : 1)
-                    .animation(.easeOut(duration: 0.1), value: isHoveringAuthor)
-            }
-            .buttonStyle(.plain)
-            .onHover { isHoveringAuthor = $0 }
-        } else {
-            Text(author)
-        }
-    }
-
-    /// The genres, each its own click-and-hover target navigating to that
-    /// genre's books when the shell provides a destination.
-    private func genreLine(_ genres: [String]) -> some View {
-        FlowLayout(alignment: .leading) {
-            ForEach(Array(genres.enumerated()), id: \.offset) { index, genre in
-                genreItem(genre, isLast: index == genres.count - 1)
-            }
-        }
-    }
-
-    /// The separating comma stays outside the name, so it takes no part in
-    /// the hover effect.
-    private func genreItem(_ genre: String, isLast: Bool) -> some View {
-        HStack(spacing: 0) {
-            genreName(genre)
-            if !isLast {
-                Text(",")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func genreName(_ genre: String) -> some View {
-        if let openGenre {
-            Button {
-                openGenre(genre)
-            } label: {
-                Text(genre)
-                    .opacity(hoveredGenre == genre ? 0.6 : 1)
-                    .animation(.easeOut(duration: 0.1), value: hoveredGenre == genre)
-            }
-            .buttonStyle(.plain)
-            .onHover { hovering in
-                if hovering {
-                    hoveredGenre = genre
-                } else if hoveredGenre == genre {
-                    hoveredGenre = nil
-                }
-            }
-        } else {
-            Text(genre)
-        }
-    }
-
-    private static let narratorAlignment = FlowLayout.Alignment.leading
-
-    /// The narrator's name, wrapping word by word like text, with the words
-    /// forming one hover-and-click group that dims together like the author.
-    private func narratorLine(_ narrator: String) -> some View {
-        let nameWords = narrator.split(separator: " ").map(String.init)
-        return FlowLayout(alignment: Self.narratorAlignment) {
-            ForEach(Array(nameWords.enumerated()), id: \.offset) { _, word in
-                nameWord(word, narrator: narrator)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func nameWord(_ word: String, narrator: String) -> some View {
-        if let openNarrator {
-            Text(word)
-                .opacity(hoveredNameWords > 0 ? 0.6 : 1)
-                .animation(.easeOut(duration: 0.1), value: hoveredNameWords > 0)
-                .onTapGesture {
-                    openNarrator(narrator)
-                }
-                .onHover { hovering in
-                    // Counted, since entering the next word can fire before
-                    // leaving the previous one.
-                    hoveredNameWords = max(0, hoveredNameWords + (hovering ? 1 : -1))
-                }
-        } else {
-            Text(word)
         }
     }
 
@@ -617,6 +525,58 @@ private extension BookView {
         #else
         return 16
         #endif
+    }
+}
+
+/// A comma-separated list of names wrapping like text, each name its own
+/// click-and-hover target navigating to that name's books when the shell
+/// provides a destination.
+private struct NameListLine: View {
+    let names: [String]
+    let open: OpenBookGroupAction?
+
+    @State private var hoveredName: String?
+
+    var body: some View {
+        FlowLayout(alignment: .leading) {
+            ForEach(Array(names.enumerated()), id: \.offset) { index, name in
+                item(name, isLast: index == names.count - 1)
+            }
+        }
+    }
+
+    /// The separating comma stays outside the name, so it takes no part in
+    /// the hover effect.
+    private func item(_ name: String, isLast: Bool) -> some View {
+        HStack(spacing: 0) {
+            nameView(name)
+            if !isLast {
+                Text(",")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func nameView(_ name: String) -> some View {
+        if let open {
+            Button {
+                open(name)
+            } label: {
+                Text(name)
+                    .opacity(hoveredName == name ? 0.6 : 1)
+                    .animation(.easeOut(duration: 0.1), value: hoveredName == name)
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                if hovering {
+                    hoveredName = name
+                } else if hoveredName == name {
+                    hoveredName = nil
+                }
+            }
+        } else {
+            Text(name)
+        }
     }
 }
 

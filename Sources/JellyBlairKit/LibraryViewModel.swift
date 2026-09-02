@@ -96,7 +96,10 @@ public final class LibraryViewModel {
     private func setBooks(_ newBooks: [Book]) {
         books = newBooks
         authorGroups = Self.group(books, kind: .author, by: { [$0.author ?? Self.unknownName] })
-        narratorGroups = Self.group(books, kind: .narrator, by: { [$0.narrator ?? Self.unknownName] })
+        narratorGroups = Self.group(books, kind: .narrator, by: { book in
+            let narrators = book.narrators
+            return narrators.isEmpty ? [Self.unknownName] : narrators
+        })
         genreGroups = Self.group(books, kind: .genre, by: { book in
             let genres = book.genres ?? []
             return genres.isEmpty ? [Self.unknownName] : genres
