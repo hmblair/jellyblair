@@ -675,6 +675,12 @@ public struct BookView: View {
         .onUserScroll {
             player.isTrackingPosition = false
         }
+        // Centers on every current-line change, however far it moved. The
+        // geometry-driven follow only reports from a realized row, so a
+        // distant jump must go through the realizing scroll.
+        .onChange(of: current) { _, _ in
+            centerOnTrackedPosition(proxy)
+        }
     }
 
     /// Indices of transcript lines that are chapter headings: the first line
