@@ -237,6 +237,9 @@ public struct BookView: View {
                         }
                     }
                     metadataLine(icon: "clock.fill") { lengthLine }
+                    if let kbps = book.bitrateKbps {
+                        metadataLine(icon: "waveform") { Text("\(kbps) kbps") }
+                    }
                     downloadRow
                 }
                 .font(Self.lineFont)
@@ -273,24 +276,10 @@ public struct BookView: View {
         BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fit)
     }
 
-    /// "Total Length · Remaining", the remaining part gray and only shown
-    /// when the book is partway through.
+    /// The book's total length.
     private var lengthLine: some View {
-        HStack(spacing: 5) {
-            Text(formatHoursMinutes(book.runTimeSeconds))
-            if isLoaded || model.resumePositionSeconds > 0 {
-                Image(systemName: "hourglass.tophalf.filled")
-                    .imageScale(.small)
-                    .foregroundStyle(.secondary)
-            }
-            if isLoaded {
-                RemainingTimeView()
-            } else if model.resumePositionSeconds > 0 {
-                Text(formatHoursMinutes(book.runTimeSeconds - model.resumePositionSeconds))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .monospacedDigit()
+        Text(formatHoursMinutes(book.runTimeSeconds))
+            .monospacedDigit()
     }
 
     /// The download control in the icon column with the file's size beside it.
@@ -301,13 +290,6 @@ public struct BookView: View {
         } content: {
             if let bytes = book.fileSizeBytes {
                 Text(formatFileSize(bytes))
-            }
-            if let kbps = book.bitrateKbps {
-                Image(systemName: "waveform")
-                    .imageScale(.small)
-                    .foregroundStyle(.secondary)
-                Text("\(kbps) kbps")
-                    .foregroundStyle(.secondary)
             }
         }
     }
