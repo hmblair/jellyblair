@@ -148,12 +148,20 @@ public struct SeekBarView: View {
 
     /// Elapsed and total time within the current chapter, or within the book when there are no chapters.
     private func timeText(at date: Date) -> String {
-        let position = player.projectedTime(at: date)
+        let position = displayedPosition(at: date)
         guard let chapter = player.currentChapter else {
             return "\(formatTime(position)) / \(formatTime(player.duration))"
         }
         let elapsed = max(0, min(position, chapter.endSeconds) - chapter.startSeconds)
         return "\(formatTime(elapsed)) / \(formatTime(chapter.durationSeconds))"
+    }
+
+    /// The position the time text shows: the scrub target while dragging,
+    /// so the readout tracks the pointer, and the playback position otherwise.
+    private func displayedPosition(at date: Date) -> Double {
+        guard let dragFraction else { return player.projectedTime(at: date) }
+        let range = player.seekRange
+        return range.lowerBound + dragFraction * (range.upperBound - range.lowerBound)
     }
 }
 
