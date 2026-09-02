@@ -21,6 +21,9 @@ public struct BookView: View {
     @State private var filterQuery = ""
     @State private var isShowingTranscript = false
     @State private var isTrackingPosition = false
+    /// The spoken word's last reported height in the transcript content,
+    /// for scrolling only when the narration moves to a new wrapped row.
+    @State private var trackedWordY: CGFloat?
     @State private var isHoveringJumpButton = false
     @State private var isHoveringTranscriptToggle = false
     @State private var isHoveringDownload = false
@@ -625,6 +628,9 @@ public struct BookView: View {
                         positionSeconds: line.index == current ? positionSeconds : nil,
                         onWordTap: { cue in
                             jumpToTranscriptPosition(cue.startSeconds)
+                        },
+                        onSpokenWordMoved: { midY in
+                            followSpokenWord(at: midY, proxy)
                         }
                     )
                     .contentShape(Rectangle())
@@ -634,6 +640,7 @@ public struct BookView: View {
                     .id(line.index)
                 }
             }
+            .coordinateSpace(name: LyricLineText.contentSpaceName)
             .padding(.horizontal, Self.transcriptHorizontalPadding)
         }
         // Keeps the resting text clear of the floating filter bar.
@@ -654,13 +661,6 @@ public struct BookView: View {
             } else if visibleLines.isEmpty {
                 ContentUnavailableView.search(text: filterQuery)
             }
-        }
-        // Tracking re-centers whenever the current line itself moves; the
-        // timeline already redraws this view at every boundary, so the
-        // change is observed without extra work.
-        .onChange(of: current) {
-            guard isTrackingPosition else { return }
-            withAnimation { scrollToCurrentLine(proxy) }
         }
         .onUserScroll {
             isTrackingPosition = false
@@ -706,6 +706,16 @@ public struct BookView: View {
               visibleLines.contains(where: { $0.index == index })
         else { return }
         proxy.scrollTo(index, anchor: .center)
+    }
+
+    /// Follows the narration onto a new wrapped row. The spoken word reports
+    /// its height whenever it moves; words on one row share it, so tracking
+    /// scrolls once per wrapped row, not once per word.
+    private func followSpokenWord(at midY: CGFloat, _ proxy: ScrollViewProxy) {
+        let movedRows = abs((trackedWordY ?? -.infinity) - midY) > 1
+        trackedWordY = midY
+        guard isTrackingPosition, movedRows else { return }
+        withAnimation { proxy.scrollTo(LyricLineText.spokenWordID, anchor: .center) }
     }
 
     private func lyricRowState(for line: LyricLine, current: Int?) -> LyricRowState {

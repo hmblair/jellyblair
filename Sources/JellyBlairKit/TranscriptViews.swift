@@ -21,17 +21,31 @@ public struct LyricLineText: View {
     let positionSeconds: Double?
     /// Called with the clicked word's cue.
     let onWordTap: ((LyricCue) -> Void)?
+    /// Called with the spoken word's vertical center, measured in the
+    /// transcript content's coordinate space, so scrolling does not move it.
+    /// Words on one wrapped row share the value; it steps when the narration
+    /// wraps onto the next row.
+    let onSpokenWordMoved: ((CGFloat) -> Void)?
 
     static let font = Font.title3
+
+    /// The scroll id riding on the word being spoken, so tracking can center
+    /// on the wrapped line that contains it.
+    public static let spokenWordID = "spokenWord"
+
+    /// The coordinate space of the transcript content, for measuring the
+    /// spoken word independently of the scroll position.
+    public static let contentSpaceName = "transcriptContent"
 
     /// How long a word takes to fade between its colors.
     private static let colorFadeDuration: TimeInterval = 0.05
 
-    public init(line: LyricLine, state: LyricRowState, positionSeconds: Double? = nil, onWordTap: ((LyricCue) -> Void)? = nil) {
+    public init(line: LyricLine, state: LyricRowState, positionSeconds: Double? = nil, onWordTap: ((LyricCue) -> Void)? = nil, onSpokenWordMoved: ((CGFloat) -> Void)? = nil) {
         self.line = line
         self.state = state
         self.positionSeconds = positionSeconds
         self.onWordTap = onWordTap
+        self.onSpokenWordMoved = onSpokenWordMoved
     }
 
     public var body: some View {
@@ -54,12 +68,25 @@ public struct LyricLineText: View {
 
     /// The interpolating content transition fades each character between its
     /// colors when the attributed text changes; the string itself never does.
+    /// The spoken word carries the scroll marker on an invisible background,
+    /// so the word's own identity, and with it the fade, stays stable.
     @ViewBuilder
     private func tokenView(_ token: WordToken) -> some View {
         let attributed = attributedText(for: token)
         let text = Text(attributed)
             .contentTransition(.interpolate)
             .animation(.easeOut(duration: Self.colorFadeDuration), value: attributed)
+            .background {
+                if isSpoken(token) {
+                    Color.clear
+                        .id(Self.spokenWordID)
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.frame(in: .named(Self.contentSpaceName)).midY
+                        } action: { midY in
+                            onSpokenWordMoved?(midY)
+                        }
+                }
+            }
         if let cue = cue(for: token), let onWordTap {
             text.onTapGesture {
                 onWordTap(cue)
@@ -67,6 +94,12 @@ public struct LyricLineText: View {
         } else {
             text
         }
+    }
+
+    /// True when the token holds the word being spoken.
+    private func isSpoken(_ token: WordToken) -> Bool {
+        guard let spokenCue else { return false }
+        return spokenCue.startPosition >= token.id && spokenCue.startPosition < token.endPosition
     }
 
     /// The cue a click on the word seeks to: the first one it overlaps.
