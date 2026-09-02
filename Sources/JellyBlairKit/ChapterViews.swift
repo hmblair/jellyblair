@@ -96,23 +96,34 @@ public struct AudioBarsView: View {
 
     private static let barMaxHeight: CGFloat = 11
     private static let barMinHeight: CGFloat = 2
+    private static let barWidth: CGFloat = 2
+    private static let barSpacing: CGFloat = 1.5
+
+    private static var totalWidth: CGFloat {
+        CGFloat(AudioLevelMeter.bandCount) * barWidth + CGFloat(AudioLevelMeter.bandCount - 1) * barSpacing
+    }
 
     public init(meter: AudioLevelMeter, isPlaying: Bool) {
         self.meter = meter
         self.isPlaying = isPlaying
     }
 
+    /// The bars draw into a fixed-size canvas, so each animation tick is a
+    /// repaint only. Animating the bar frames instead would force a layout
+    /// pass through the hosting view tree thirty times per second.
     public var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { _ in
             let bands = meter.currentBands()
-            HStack(alignment: .bottom, spacing: 1.5) {
-                ForEach(0..<AudioLevelMeter.bandCount, id: \.self) { index in
-                    Capsule()
-                        .fill(backgroundProminence == .increased ? Color.white : Color.accentColor)
-                        .frame(width: 2, height: Self.barMinHeight + CGFloat(bands[index]) * (Self.barMaxHeight - Self.barMinHeight))
+            let color = backgroundProminence == .increased ? Color.white : Color.accentColor
+            Canvas { context, size in
+                for index in 0..<AudioLevelMeter.bandCount {
+                    let height = Self.barMinHeight + CGFloat(bands[index]) * (Self.barMaxHeight - Self.barMinHeight)
+                    let x = CGFloat(index) * (Self.barWidth + Self.barSpacing)
+                    let rect = CGRect(x: x, y: size.height - height, width: Self.barWidth, height: height)
+                    context.fill(Capsule().path(in: rect), with: .color(color))
                 }
             }
-            .frame(height: Self.barMaxHeight, alignment: .bottom)
+            .frame(width: Self.totalWidth, height: Self.barMaxHeight)
         }
     }
 }
