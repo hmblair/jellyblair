@@ -62,13 +62,8 @@ public struct BookView: View {
         // On the phone the list runs edge to edge; only the upper content
         // keeps side padding. The Mac pads the whole page.
         VStack(spacing: 16) {
-            header
-            #if os(iOS)
-            // The side-by-side header is width-hungry, so it gets a slimmer
-            // margin than the controls below it.
-                .padding(.horizontal, 10)
-            #endif
             Group {
+                header
                 if isLoaded {
                     if let message = player.playbackErrorMessage {
                         errorBanner(message)
