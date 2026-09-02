@@ -18,8 +18,19 @@ struct BookGroupScreen: View {
         List(visibleBooks) { book in
             BookRowLink(book: book)
         }
-        .navigationTitle("\(group.name) (\(group.roleLabel))")
+        .navigationTitle(group.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 6) {
+                    Image(systemName: group.iconName)
+                        .imageScale(.small)
+                        .foregroundStyle(.secondary)
+                    Text(group.name)
+                        .font(.headline)
+                }
+            }
+        }
         .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search")
         .overlay {
             if visibleBooks.isEmpty {

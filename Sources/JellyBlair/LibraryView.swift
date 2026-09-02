@@ -124,10 +124,11 @@ struct LibraryView: View {
             HStack(spacing: 4) {
                 Image(systemName: "chevron.left")
                     .font(.caption)
+                Image(systemName: scope.iconName)
+                    .imageScale(.small)
+                    .foregroundStyle(.secondary)
                 Text(scope.name)
                     .fontWeight(.semibold)
-                Text("(\(scope.roleLabel))")
-                    .foregroundStyle(.secondary)
                 Spacer()
             }
             .contentShape(Rectangle())

@@ -7,7 +7,23 @@ public struct BookGroup: Identifiable, Hashable {
         case author
         case narrator
         case genre
+
+        /// The symbol for this role, shared by the book screen's metadata
+        /// lines and the group views.
+        public var iconName: String {
+            switch self {
+            case .author:
+                return "person.fill"
+            case .narrator:
+                return "mic.fill"
+            case .genre:
+                return "tag.fill"
+            }
+        }
     }
+
+    /// The symbol for the group's role.
+    public var iconName: String { kind.iconName }
 
     public let name: String
     public let kind: Kind
@@ -22,16 +38,6 @@ public struct BookGroup: Identifiable, Hashable {
         return BookGroup(name: name, kind: kind, books: kept)
     }
 
-    public var roleLabel: String {
-        switch kind {
-        case .author:
-            return "Author"
-        case .narrator:
-            return "Narrator"
-        case .genre:
-            return "Genre"
-        }
-    }
 }
 
 /// Holds the audiobook list and its sidebar grouping by author.

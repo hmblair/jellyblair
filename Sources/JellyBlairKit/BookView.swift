@@ -168,15 +168,15 @@ public struct BookView: View {
                 Text(book.name)
                     .font(.title.bold())
                 if let author = book.author {
-                    metadataLine(icon: "person.fill") { authorLine(author) }
+                    metadataLine(icon: BookGroup.Kind.author.iconName) { authorLine(author) }
                         .font(.title3)
                 }
                 if let narrator = book.narrator {
-                    metadataLine(icon: "mic.fill") { narratorLine(narrator) }
+                    metadataLine(icon: BookGroup.Kind.narrator.iconName) { narratorLine(narrator) }
                         .font(.title3)
                 }
                 if let genre = book.genre {
-                    metadataLine(icon: "tag.fill") { genreLine(genre) }
+                    metadataLine(icon: BookGroup.Kind.genre.iconName) { genreLine(genre) }
                         .font(.title3)
                 }
                 metadataLine(icon: "clock.fill") { lengthLine }
@@ -205,17 +205,17 @@ public struct BookView: View {
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
             if let author = book.author {
-                metadataLine(icon: "person.fill") { authorLine(author) }
+                metadataLine(icon: BookGroup.Kind.author.iconName) { authorLine(author) }
                     .font(.callout)
                     .multilineTextAlignment(.center)
             }
             if let narrator = book.narrator {
-                metadataLine(icon: "mic.fill") { narratorLine(narrator) }
+                metadataLine(icon: BookGroup.Kind.narrator.iconName) { narratorLine(narrator) }
                     .font(.callout)
                     .multilineTextAlignment(.center)
             }
             if let genre = book.genre {
-                metadataLine(icon: "tag.fill") { genreLine(genre) }
+                metadataLine(icon: BookGroup.Kind.genre.iconName) { genreLine(genre) }
                     .font(.callout)
                     .multilineTextAlignment(.center)
             }
