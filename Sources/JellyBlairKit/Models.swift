@@ -70,6 +70,8 @@ public struct Book: Codable, Identifiable, Hashable {
     public let mediaSources: [MediaSource]?
     public let genres: [String]?
     public let hasLyrics: Bool?
+    /// The year of the audiobook edition, from the file's year tag.
+    public let productionYear: Int?
 
     enum CodingKeys: String, CodingKey {
         case id = "Id"
@@ -82,6 +84,7 @@ public struct Book: Codable, Identifiable, Hashable {
         case mediaSources = "MediaSources"
         case genres = "Genres"
         case hasLyrics = "HasLyrics"
+        case productionYear = "ProductionYear"
     }
 
     /// The audio container format, for naming downloaded files.

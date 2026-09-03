@@ -290,6 +290,9 @@ public struct BookView: View {
                             NameListLine(names: book.narrators, open: openNarrator)
                         }
                     }
+                    if let year = book.productionYear {
+                        metadataLine(icon: "calendar") { Text(verbatim: String(year)) }
+                    }
                     if let genres = book.genres, !genres.isEmpty {
                         metadataLine(icon: BookGroup.Kind.genre.iconName) {
                             NameListLine(names: genres, open: openGenre)
