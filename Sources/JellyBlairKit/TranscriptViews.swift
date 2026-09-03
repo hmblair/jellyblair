@@ -7,13 +7,13 @@ public enum LyricRowState: Equatable {
     case upcoming
 }
 
-/// One transcript line as flowing text, one view per whitespace-delimited
-/// word so each word can be clicked on its own. Every word keeps its original
-/// trailing whitespace and the layout adds none, so the line's spacing is
-/// exactly the text's. Read words are grey, the word being spoken at the
-/// given position takes the accent color, and unread words keep the primary
-/// color; a word spanning several cues, like an em-dashed pair, colors each
-/// cued part on its own inside the one view.
+/// One transcript line as a single text view, so every line wraps exactly
+/// as native text and realizes cheaply when a scroll crosses many rows.
+/// Read characters are grey, the spoken cue's take the accent color, and
+/// unread ones keep the primary color. Each cued word's range carries a
+/// link, so a click on a word seeks to its cue. On the current line the
+/// spoken cue's range carries a renderer attribute whose reported frame
+/// places the scroll marker.
 public struct LyricLineText: View, Equatable {
     let line: LyricLine
     let state: LyricRowState
@@ -28,6 +28,10 @@ public struct LyricLineText: View, Equatable {
     /// Words on one wrapped row share the value; it steps when the narration
     /// wraps onto the next row.
     let onSpokenWordMoved: ((CGFloat) -> Void)?
+
+    /// The spoken word's frame in the text's own coordinates, reported by
+    /// the renderer. It positions the scroll marker overlay.
+    @State private var spokenWordFrame: CGRect?
 
     static let font = Font.title2
 
@@ -64,11 +68,7 @@ public struct LyricLineText: View, Equatable {
                     .foregroundStyle(state == .played ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                     .animation(.easeOut(duration: Self.colorFadeDuration), value: state)
             } else {
-                FlowLayout(alignment: .leading, horizontalSpacing: 0) {
-                    ForEach(tokens) { token in
-                        tokenView(token)
-                    }
-                }
+                cuedText
             }
         }
         .font(isTitle ? Self.titleFont : Self.font)
@@ -78,43 +78,106 @@ public struct LyricLineText: View, Equatable {
 
     /// The interpolating content transition fades each character between its
     /// colors when the attributed text changes; the string itself never does.
-    /// The spoken word carries the scroll marker on an invisible background,
-    /// so the word's own identity, and with it the fade, stays stable.
-    @ViewBuilder
-    private func tokenView(_ token: WordToken) -> some View {
-        let attributed = attributedText(for: token)
-        let text = Text(attributed)
+    private var cuedText: some View {
+        let attributed = attributedLine
+        return text(for: attributed)
+            .textRenderer(SpokenWordRenderer(onSpokenWordFrame: reportSpokenWordFrame))
             .contentTransition(.interpolate)
             .animation(.easeOut(duration: Self.colorFadeDuration), value: attributed)
-            .background {
-                if isSpoken(token) {
-                    Color.clear
-                        .id(Self.spokenWordID)
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.frame(in: .named(Self.contentSpaceName)).midY
-                        } action: { midY in
-                            onSpokenWordMoved?(midY)
-                        }
+            .environment(\.openURL, OpenURLAction { url in
+                if let cue = cue(forLinkURL: url) {
+                    onWordTap?(cue)
                 }
+                return .handled
+            })
+            .overlay(alignment: .topLeading) {
+                spokenWordMarker
             }
-        if let cue = cue(for: token), let onWordTap {
-            text.onTapGesture {
-                onWordTap(cue)
-            }
-        } else {
-            text
+    }
+
+    /// The line as one text value. On the current line the spoken cue's
+    /// range carries the renderer attribute, split out through text
+    /// concatenation, which keeps the whole line a single paragraph.
+    private func text(for attributed: AttributedString) -> Text {
+        guard state == .current, let spokenCue,
+              let range = characterRange(of: spokenCue.startPosition..<spokenCue.endPosition, in: attributed)
+        else { return Text(attributed) }
+        let before = AttributedString(attributed[attributed.startIndex..<range.lowerBound])
+        let spoken = AttributedString(attributed[range])
+        let after = AttributedString(attributed[range.upperBound..<attributed.endIndex])
+        return Text(before) + Text(spoken).customAttribute(SpokenWordAttribute()) + Text(after)
+    }
+
+    /// The invisible view tracking scrolls to, sized and placed onto the
+    /// spoken word from the renderer's report.
+    @ViewBuilder
+    private var spokenWordMarker: some View {
+        if state == .current, let frame = spokenWordFrame {
+            // Padding, not offset, moves the marker onto the word: offset
+            // shifts only the drawing, so measured frames would stay put.
+            Color.clear
+                .frame(width: frame.width, height: frame.height)
+                .id(Self.spokenWordID)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.frame(in: .named(Self.contentSpaceName)).midY
+                } action: { midY in
+                    onSpokenWordMoved?(midY)
+                }
+                .padding(.leading, frame.minX)
+                .padding(.top, frame.minY)
         }
     }
 
-    /// True when the token holds the word being spoken.
-    private func isSpoken(_ token: WordToken) -> Bool {
-        guard let spokenCue else { return false }
-        return spokenCue.startPosition >= token.id && spokenCue.startPosition < token.endPosition
+    /// Stores the renderer's report outside the draw pass, only when it
+    /// moved the frame.
+    private func reportSpokenWordFrame(_ frame: CGRect?) {
+        Task { @MainActor in
+            if spokenWordFrame != frame {
+                spokenWordFrame = frame
+            }
+        }
     }
 
-    /// The cue a click on the word seeks to: the first one it overlaps.
-    private func cue(for token: WordToken) -> LyricCue? {
-        line.cues.first(where: { $0.endPosition > token.id && $0.startPosition < token.endPosition })
+    /// Colors the line by each character's place relative to the spoken cue
+    /// and puts a link naming its cue on each cued word. The explicit color
+    /// on every range keeps link styling out.
+    private var attributedLine: AttributedString {
+        var attributed = AttributedString(line.text)
+        switch state {
+        case .played:
+            attributed.foregroundColor = .secondary
+        case .upcoming:
+            attributed.foregroundColor = .primary
+        case .current:
+            attributed.foregroundColor = .primary
+            if let spokenCue {
+                if let read = characterRange(of: 0..<spokenCue.startPosition, in: attributed) {
+                    attributed[read].foregroundColor = .secondary
+                }
+                if let spoken = characterRange(of: spokenCue.startPosition..<spokenCue.endPosition, in: attributed) {
+                    attributed[spoken].foregroundColor = Color.accentColor
+                }
+            }
+        }
+        for token in tokens {
+            guard let index = cueIndex(for: token),
+                  let range = characterRange(of: token.id..<token.endPosition, in: attributed)
+            else { continue }
+            attributed[range].link = URL(string: "cue://\(index)")
+        }
+        return attributed
+    }
+
+    /// The index of the cue a click on the word seeks to: the first one it
+    /// overlaps.
+    private func cueIndex(for token: WordToken) -> Int? {
+        line.cues.firstIndex(where: { $0.endPosition > token.id && $0.startPosition < token.endPosition })
+    }
+
+    /// The cue named by a link from the line's attributed text.
+    private func cue(forLinkURL url: URL) -> LyricCue? {
+        guard let host = url.host(), let index = Int(host), line.cues.indices.contains(index) else { return nil }
+        return line.cues[index]
     }
 
     /// The word spoken at the position. During a gap between cues the word
@@ -124,37 +187,11 @@ public struct LyricLineText: View, Equatable {
         return line.cues.last(where: { $0.startSeconds <= positionSeconds })
     }
 
-    /// Colors the word's text by each character's place relative to the
-    /// spoken cue: read characters grey, the spoken cue's the accent color,
-    /// unread ones the primary color.
-    private func attributedText(for token: WordToken) -> AttributedString {
-        var attributed = AttributedString(token.text)
-        switch state {
-        case .played:
-            attributed.foregroundColor = .secondary
-        case .upcoming:
-            attributed.foregroundColor = .primary
-        case .current:
-            guard let spokenCue else {
-                attributed.foregroundColor = .primary
-                return attributed
-            }
-            attributed.foregroundColor = .primary
-            if let read = localRange(of: 0..<spokenCue.startPosition, in: attributed, token: token) {
-                attributed[read].foregroundColor = .secondary
-            }
-            if let spoken = localRange(of: spokenCue.startPosition..<spokenCue.endPosition, in: attributed, token: token) {
-                attributed[spoken].foregroundColor = Color.accentColor
-            }
-        }
-        return attributed
-    }
-
-    /// Maps a character range of the whole line into the token's text,
-    /// clamped to their overlap.
-    private func localRange(of lineRange: Range<Int>, in attributed: AttributedString, token: WordToken) -> Range<AttributedString.Index>? {
-        let start = max(lineRange.lowerBound, token.id) - token.id
-        let end = min(lineRange.upperBound, token.endPosition) - token.id
+    /// Maps a character range of the line into the attributed text, clamped
+    /// to its extent.
+    private func characterRange(of lineRange: Range<Int>, in attributed: AttributedString) -> Range<AttributedString.Index>? {
+        let start = max(lineRange.lowerBound, 0)
+        let end = min(lineRange.upperBound, attributed.characters.count)
         guard end > start else { return nil }
         let lower = attributed.index(attributed.startIndex, offsetByCharacters: start)
         let upper = attributed.index(lower, offsetByCharacters: end - start)
@@ -192,5 +229,35 @@ public struct LyricLineText: View, Equatable {
             start = index
         }
         return result
+    }
+}
+
+/// Marks the spoken cue's range for the renderer.
+private struct SpokenWordAttribute: TextAttribute {}
+
+/// Draws the text unchanged and reports the frame of the range carrying the
+/// spoken word attribute, in the text's own coordinates.
+private struct SpokenWordRenderer: TextRenderer {
+    let onSpokenWordFrame: (CGRect?) -> Void
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        for line in layout {
+            context.draw(line)
+        }
+        onSpokenWordFrame(spokenWordFrame(in: layout))
+    }
+
+    /// The union of the marked slices' bounds, or nil when none are marked.
+    private func spokenWordFrame(in layout: Text.Layout) -> CGRect? {
+        var frame: CGRect?
+        for line in layout {
+            for run in line {
+                for slice in run where slice[SpokenWordAttribute.self] != nil {
+                    let rect = slice.typographicBounds.rect
+                    frame = frame.map { $0.union(rect) } ?? rect
+                }
+            }
+        }
+        return frame
     }
 }
