@@ -588,7 +588,7 @@ public struct BookView: View {
     /// anchor, so the word mark lands on the boundaries without a fast timer.
     /// The anchor moves on every playback event, rebuilding the schedule.
     private func transcriptList(_ proxy: ScrollViewProxy) -> some View {
-        TimelineView(.explicit(transcriptTickDates)) { context in
+        TimelineView(transcriptTickSchedule) { context in
             transcriptText(proxy, at: listeningPosition(at: context.date))
         }
         .task(id: book.id) {
@@ -597,28 +597,15 @@ public struct BookView: View {
         }
     }
 
-    /// The moments each upcoming line or word starts, as wall-clock dates.
-    /// Empty when nothing is moving, so a paused transcript never redraws.
-    /// Each date carries a few milliseconds of slack, placing the redraw just
-    /// past its boundary so the projected position always covers the word.
-    private var transcriptTickDates: [Date] {
-        guard isLoaded, player.isPlaying else { return [] }
-        let anchor = player.anchor
-        let now = Date()
-        var dates: [Date] = []
-        func append(_ seconds: Double?) {
-            guard let seconds, let date = anchor.date(forPosition: seconds) else { return }
-            let delayed = date.addingTimeInterval(0.005)
-            guard delayed > now, dates.last != delayed else { return }
-            dates.append(delayed)
-        }
-        for line in model.lyrics {
-            append(line.startSeconds)
-            for cue in line.cues {
-                append(cue.startSeconds)
-            }
-        }
-        return dates
+    /// The transcript's redraw schedule, rebuilt whenever the anchor moves.
+    /// Reading the anchor and playing state here keeps them observed, so a
+    /// playback event re-evaluates the body and replaces the schedule.
+    private var transcriptTickSchedule: TranscriptTickSchedule {
+        TranscriptTickSchedule(
+            tickSeconds: model.transcriptTickSeconds,
+            anchor: player.anchor,
+            isRunning: isLoaded && player.isPlaying
+        )
     }
 
     private func transcriptText(_ proxy: ScrollViewProxy, at positionSeconds: Double) -> some View {
@@ -767,6 +754,48 @@ public struct BookView: View {
         if line.index < current { return .played }
         if line.index > current { return .upcoming }
         return .current
+    }
+}
+
+/// Fires at each transcript tick moment, projected through the playback
+/// anchor, with a few milliseconds of slack placing each redraw just past
+/// its boundary so the projected position always covers the word. Entries
+/// generate lazily on demand, so replacing the schedule after an anchor
+/// change allocates nothing per remaining cue. Empty while nothing moves,
+/// so a paused transcript never redraws.
+private struct TranscriptTickSchedule: TimelineSchedule {
+    /// The tick moments as positions, sorted without duplicates.
+    let tickSeconds: [Double]
+    let anchor: PlaybackAnchor
+    let isRunning: Bool
+
+    /// Delay after each boundary, keeping the redraw just past it.
+    private static let slack: TimeInterval = 0.005
+
+    func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnySequence<Date> {
+        guard isRunning, anchor.rate > 0 else { return AnySequence([]) }
+        let anchor = anchor
+        let position = anchor.position(at: startDate)
+        let upcoming = tickSeconds[firstIndex(after: position)...]
+        return AnySequence(upcoming.lazy.compactMap { seconds in
+            anchor.date(forPosition: seconds)?.addingTimeInterval(Self.slack)
+        })
+    }
+
+    /// The index of the first tick strictly past the position, found by
+    /// binary search.
+    private func firstIndex(after position: Double) -> Int {
+        var low = 0
+        var high = tickSeconds.count
+        while low < high {
+            let mid = (low + high) / 2
+            if tickSeconds[mid] <= position {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        return low
     }
 }
 
