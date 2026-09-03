@@ -19,9 +19,8 @@ public struct BookView: View {
 
     @State private var filterQuery = ""
     @State private var isShowingTranscript = false
-    /// The spoken word's distance from the viewport's center at its last
-    /// report, for telling a glide in flight from a centering that stalled.
-    @State private var spokenWordOffCenter: CGFloat?
+    /// The handle the tracking button centers the transcript through.
+    @State private var transcriptController = TranscriptController()
     @State private var isHoveringJumpButton = false
     @State private var isHoveringTranscriptToggle = false
     @State private var isHoveringDownload = false
@@ -146,7 +145,7 @@ public struct BookView: View {
                         .opacity(isShowingTranscript ? 0 : 1)
                         .allowsHitTesting(!isShowingTranscript)
                     if hasTranscript {
-                        transcriptList(proxy)
+                        transcriptList
                             .opacity(isShowingTranscript ? 1 : 0)
                             .allowsHitTesting(isShowingTranscript)
                     }
@@ -200,16 +199,10 @@ public struct BookView: View {
     /// an animated scroll would glide across the whole list.
     private func centerOnTrackedPosition(_ proxy: ScrollViewProxy, animated: Bool = true) {
         guard player.isTrackingPosition else { return }
-        if animated {
-            withAnimation(Self.trackingScrollAnimation) { scrollToCurrentPosition(proxy) }
-        } else {
-            scrollToCurrentPosition(proxy)
-        }
-    }
-
-    private func scrollToCurrentPosition(_ proxy: ScrollViewProxy) {
         if isShowingTranscript {
-            scrollToSpokenWord(proxy)
+            transcriptController.centerOnSpokenWord(animated: animated)
+        } else if animated {
+            withAnimation { scrollToMarkedChapter(proxy) }
         } else {
             scrollToMarkedChapter(proxy)
         }
@@ -583,20 +576,16 @@ public struct BookView: View {
         book.hasLyrics == true || !model.lyrics.isEmpty
     }
 
-    /// Space between transcript lines, tight enough to read as running text.
-    private static let transcriptLineSpacing: CGFloat = 4
-
     /// The transcript, marked at the listener's position. The timeline fires
     /// exactly when playback reaches each word, projected through the playback
     /// anchor, so the word mark lands on the boundaries without a fast timer.
     /// The anchor moves on every playback event, rebuilding the schedule.
-    private func transcriptList(_ proxy: ScrollViewProxy) -> some View {
+    private var transcriptList: some View {
         TimelineView(transcriptTickSchedule) { context in
-            transcriptText(proxy, at: listeningPosition(at: context.date))
+            transcriptText(at: listeningPosition(at: context.date))
         }
         .task(id: book.id) {
             await model.fetchLyricsIfNeeded()
-            centerOnTrackedPosition(proxy, animated: false)
         }
     }
 
@@ -611,44 +600,26 @@ public struct BookView: View {
         )
     }
 
-    private func transcriptText(_ proxy: ScrollViewProxy, at positionSeconds: Double) -> some View {
-        let current = currentLineIndex(for: positionSeconds)
-        let titleLines = titleLineIndices
-        return ScrollView {
-            LazyVStack(alignment: .leading, spacing: Self.transcriptLineSpacing) {
-                ForEach(visibleLines) { line in
-                    LyricLineText(
-                        line: line,
-                        state: lyricRowState(for: line, current: current),
-                        isTitle: titleLines.contains(line.index),
-                        positionSeconds: line.index == current ? positionSeconds : nil,
-                        onWordTap: { cue in
-                            jumpToTranscriptPosition(cue.startSeconds)
-                        },
-                        onSpokenWordMoved: { offCenter in
-                            reconcileSpokenWord(offCenter: offCenter, proxy)
-                        }
-                    )
-                    .equatable()
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        handleLineTap(line)
-                    }
-                    .id(TranscriptLineID(index: line.index))
-                }
+    private func transcriptText(at positionSeconds: Double) -> some View {
+        TranscriptTextView(
+            lines: visibleLines,
+            titleLineIndices: titleLineIndices,
+            positionSeconds: positionSeconds,
+            isTracking: player.isTrackingPosition,
+            topInset: floatingBarZoneHeight + 6,
+            bottomInset: Self.bottomRestingInset,
+            horizontalPadding: Self.transcriptHorizontalPadding,
+            controller: transcriptController,
+            onWordTap: { cue in
+                jumpToTranscriptPosition(cue.startSeconds)
+            },
+            onLineTap: { line in
+                handleLineTap(line)
+            },
+            onUserScroll: {
+                player.isTrackingPosition = false
             }
-            .padding(.horizontal, Self.transcriptHorizontalPadding)
-        }
-        // While tracking scrolls the transcript, the indicator would flash
-        // on every followed row; it returns once the user scrolls themselves.
-        .scrollIndicators(player.isTrackingPosition ? .hidden : .automatic)
-        // Keeps the resting text clear of the floating filter bar.
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Color.clear.frame(height: floatingBarZoneHeight + 6)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear.frame(height: Self.bottomRestingInset)
-        }
+        )
         .overlay {
             if model.lyrics.isEmpty {
                 if model.isFetchingLyrics {
@@ -660,25 +631,6 @@ public struct BookView: View {
             } else if visibleLines.isEmpty {
                 ContentUnavailableView.search(text: filterQuery)
             }
-        }
-        .onUserScroll {
-            player.isTrackingPosition = false
-        }
-        // Realizes and roughly centers each new current line; the marker's
-        // geometry events then center the word exactly and keep it there.
-        .onChange(of: current) { _, newIndex in
-            guard player.isTrackingPosition, let newIndex,
-                  visibleLines.contains(where: { $0.index == newIndex }) else { return }
-            spokenWordOffCenter = nil
-            withAnimation(Self.trackingScrollAnimation) {
-                proxy.scrollTo(TranscriptLineID(index: newIndex), anchor: .center)
-            }
-        }
-        // Making the transcript visible re-asserts the centering, in case a
-        // scroll issued while it was hidden did not land.
-        .onChange(of: isShowingTranscript) { _, isShowing in
-            guard isShowing else { return }
-            centerOnTrackedPosition(proxy, animated: false)
         }
     }
 
@@ -710,18 +662,6 @@ public struct BookView: View {
         isLoaded ? player.projectedTime(at: date) : model.resumePositionSeconds
     }
 
-    private func currentLineIndex(at date: Date) -> Int? {
-        currentLineIndex(for: listeningPosition(at: date))
-    }
-
-    /// The transcript line containing a position. The comparison takes no
-    /// slack: the tick dates already land just past each boundary, and any
-    /// slack here flips a line to read while its last word is still spoken.
-    private func currentLineIndex(for positionSeconds: Double) -> Int? {
-        guard positionSeconds > 0 else { return nil }
-        return model.lyrics.last(where: { ($0.startSeconds ?? .infinity) <= positionSeconds })?.index
-    }
-
     /// A click beside the words falls back to the line's own start.
     /// Lines without timestamps have no position to go to.
     private func handleLineTap(_ line: LyricLine) {
@@ -738,57 +678,6 @@ public struct BookView: View {
         }
     }
 
-    /// Kicks the event-based row follow. The marker cannot be scrolled to
-    /// before the lazy stack realizes its row, so the line scroll runs first
-    /// to realize it. The marker's geometry events then center the word
-    /// exactly and keep re-centering until it holds.
-    private func scrollToSpokenWord(_ proxy: ScrollViewProxy) {
-        if let index = currentLineIndex(at: Date()),
-           visibleLines.contains(where: { $0.index == index }) {
-            proxy.scrollTo(TranscriptLineID(index: index), anchor: .center)
-        }
-        proxy.scrollTo(LyricLineText.spokenWordID, anchor: .center)
-        spokenWordOffCenter = nil
-    }
-
-    /// Row id of a transcript line. The chapter rows use bare indices, and
-    /// both lists share one scroll reader, so the ids must not collide.
-    private struct TranscriptLineID: Hashable {
-        let index: Int
-    }
-
-    /// Vertical distance from the viewport's center within which the spoken
-    /// word counts as centered.
-    private static let centeringTolerance: CGFloat = 2
-
-    /// The glide of every tracking scroll: a bounceless spring, slow enough
-    /// to read through.
-    private static let trackingScrollAnimation = Animation.smooth(duration: 0.5)
-
-    /// Recenters the spoken word whenever it sits off the viewport's center.
-    /// Every marker geometry event lands here, so a scroll that failed or
-    /// was shifted away re-triggers until the word is centered. Events with
-    /// a shrinking distance are a glide already closing in, and pass.
-    private func reconcileSpokenWord(offCenter: CGFloat, _ proxy: ScrollViewProxy) {
-        guard player.isTrackingPosition else {
-            spokenWordOffCenter = nil
-            return
-        }
-        let previous = spokenWordOffCenter
-        spokenWordOffCenter = offCenter
-        guard abs(offCenter) > Self.centeringTolerance else { return }
-        if let previous, abs(offCenter) < abs(previous) - Self.centeringTolerance { return }
-        withAnimation(Self.trackingScrollAnimation) {
-            proxy.scrollTo(LyricLineText.spokenWordID, anchor: .center)
-        }
-    }
-
-    private func lyricRowState(for line: LyricLine, current: Int?) -> LyricRowState {
-        guard let current else { return .upcoming }
-        if line.index < current { return .played }
-        if line.index > current { return .upcoming }
-        return .current
-    }
 }
 
 /// Fires at each transcript tick moment, projected through the playback
