@@ -189,8 +189,6 @@ public struct BookView: View {
         .buttonStyle(.plain)
         .onHover { isHoveringJumpButton = $0 }
         .help(player.isTrackingPosition ? "Stop following the listening position" : "Follow the listening position")
-        .disabled(jumpTargetIndex == nil)
-        .opacity(jumpTargetIndex == nil ? 0.4 : 1)
     }
 
     /// Centers the listener's position while tracking is on. Every centering
@@ -204,11 +202,6 @@ public struct BookView: View {
         } else {
             scrollToCurrentPosition(proxy)
         }
-    }
-
-    /// The row tracking centers on, in whichever list is showing.
-    private var jumpTargetIndex: Int? {
-        isShowingTranscript ? currentLineIndex(at: Date()) : markedChapterIndex
     }
 
     private func scrollToCurrentPosition(_ proxy: ScrollViewProxy) {
