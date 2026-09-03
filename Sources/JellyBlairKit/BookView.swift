@@ -801,21 +801,15 @@ private struct TranscriptTickSchedule: TimelineSchedule {
 
 private extension View {
     /// Runs the action when the user scrolls the view themselves. The
-    /// animating phase of programmatic centering does not count. Systems
-    /// without the phase API never report, so the action stays unrun there.
-    @ViewBuilder
+    /// animating phase of programmatic centering does not count.
     func onUserScroll(perform action: @escaping () -> Void) -> some View {
-        if #available(macOS 15.0, iOS 18.0, *) {
-            onScrollPhaseChange { _, newPhase in
-                switch newPhase {
-                case .tracking, .interacting:
-                    action()
-                default:
-                    break
-                }
+        onScrollPhaseChange { _, newPhase in
+            switch newPhase {
+            case .tracking, .interacting:
+                action()
+            default:
+                break
             }
-        } else {
-            self
         }
     }
 
