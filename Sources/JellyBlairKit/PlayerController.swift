@@ -84,6 +84,11 @@ public final class PlayerController {
     /// True after a start report was sent, so stop reports only follow real sessions.
     private var hasActiveSession = false
 
+    /// Seeks currently landing. Until the count returns to zero the timebase
+    /// still reads the pre-seek position, so reanchors wait and the anchor
+    /// stays pinned at the seek target.
+    private var seeksInFlight = 0
+
     /// Seconds between progress reports to the server.
     private static let progressReportInterval: TimeInterval = 10
 
@@ -311,8 +316,12 @@ public final class PlayerController {
         let target = max(0, min(seconds, duration))
         // The displays sit at the target while the seek lands.
         setAnchor(position: target, rate: 0)
+        seeksInFlight += 1
         let time = CMTime(seconds: target, preferredTimescale: Int32(ticksPerSecond))
         await player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+        seeksInFlight -= 1
+        // A superseded seek leaves the rest to the newest one.
+        guard seeksInFlight == 0 else { return }
         // Playing to the end zeroes the player's rate, so a seek away from the
         // end must re-assert it to keep the playing state truthful.
         if isPlaying {
@@ -373,6 +382,7 @@ public final class PlayerController {
     /// timebase rate is zero while the player primes or rebuffers, so the
     /// projection freezes and resumes with the audio.
     private func reanchorFromPlayer() {
+        guard seeksInFlight == 0 else { return }
         guard let timebase = player?.currentItem?.timebase else {
             setAnchor(position: anchor.position(), rate: 0)
             return
