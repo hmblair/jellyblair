@@ -117,9 +117,12 @@ public struct SeekBarView: View {
         let range = player.seekRange
         let span = max(range.upperBound - range.lowerBound, 0.001)
         let anchor = player.anchor
+        // The anchor can date from before this chapter, leaving the fraction
+        // negative. It must pass unclamped: the bar clamps only the projected
+        // value, so the projection still lands on the true position.
         let fraction = (anchor.positionSeconds - range.lowerBound) / span
         return ProgressAnchor(
-            fraction: min(1, max(0, fraction)),
+            fraction: fraction,
             fractionsPerSecond: anchor.rate / span,
             date: anchor.date
         )
