@@ -19,13 +19,9 @@ public struct BookView: View {
 
     @State private var filterQuery = ""
     @State private var isShowingTranscript = false
-    /// The spoken word's last reported height in the transcript content,
-    /// for scrolling only when the narration moves to a new wrapped row.
-    @State private var trackedWordY: CGFloat?
-    /// True while the marker's next report owes a centering scroll. Set on
-    /// each centering kick and on each move to a neighboring line, since the
-    /// new spoken word's marker is only placed once its frame is reported.
-    @State private var awaitsSpokenWordCentering = false
+    /// The spoken word's distance from the viewport's center at its last
+    /// report, for telling a glide in flight from a centering that stalled.
+    @State private var spokenWordOffCenter: CGFloat?
     @State private var isHoveringJumpButton = false
     @State private var isHoveringTranscriptToggle = false
     @State private var isHoveringDownload = false
@@ -141,11 +137,18 @@ public struct BookView: View {
     private var listSection: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .top) {
-                Group {
-                    if isShowingTranscript {
+                // Both lists stay alive; the toggle changes only which one
+                // shows. The hidden transcript keeps tracking the narration,
+                // so switching to it opens on the current word without any
+                // repositioning.
+                ZStack {
+                    chapterList(proxy)
+                        .opacity(isShowingTranscript ? 0 : 1)
+                        .allowsHitTesting(!isShowingTranscript)
+                    if hasTranscript {
                         transcriptList(proxy)
-                    } else {
-                        chapterList(proxy)
+                            .opacity(isShowingTranscript ? 1 : 0)
+                            .allowsHitTesting(isShowingTranscript)
                     }
                 }
                 .fadedUnderFloatingBar(fadesBottom: true)
@@ -198,7 +201,7 @@ public struct BookView: View {
     private func centerOnTrackedPosition(_ proxy: ScrollViewProxy, animated: Bool = true) {
         guard player.isTrackingPosition else { return }
         if animated {
-            withAnimation { scrollToCurrentPosition(proxy) }
+            withAnimation(Self.trackingScrollAnimation) { scrollToCurrentPosition(proxy) }
         } else {
             scrollToCurrentPosition(proxy)
         }
@@ -622,8 +625,8 @@ public struct BookView: View {
                         onWordTap: { cue in
                             jumpToTranscriptPosition(cue.startSeconds)
                         },
-                        onSpokenWordMoved: { midY in
-                            followSpokenWord(at: midY, proxy)
+                        onSpokenWordMoved: { offCenter in
+                            reconcileSpokenWord(offCenter: offCenter, proxy)
                         }
                     )
                     .equatable()
@@ -631,10 +634,9 @@ public struct BookView: View {
                     .onTapGesture {
                         handleLineTap(line)
                     }
-                    .id(line.index)
+                    .id(TranscriptLineID(index: line.index))
                 }
             }
-            .coordinateSpace(name: LyricLineText.contentSpaceName)
             .padding(.horizontal, Self.transcriptHorizontalPadding)
         }
         // While tracking scrolls the transcript, the indicator would flash
@@ -662,19 +664,21 @@ public struct BookView: View {
         .onUserScroll {
             player.isTrackingPosition = false
         }
-        // Centers on every current-line change, however far it moved. A move
-        // to a neighboring line skips the realizing line scroll: its row
-        // already borders the tracked one, and the line scroll's animation
-        // would swallow the marker's exact centering right behind it. The
-        // armed follow then centers the word in one glide. A distant jump
-        // needs the full kick, since its row may not be realized yet.
-        .onChange(of: current) { oldIndex, newIndex in
-            guard player.isTrackingPosition else { return }
-            if let oldIndex, let newIndex, abs(newIndex - oldIndex) == 1 {
-                awaitsSpokenWordCentering = true
-            } else {
-                centerOnTrackedPosition(proxy)
+        // Realizes and roughly centers each new current line; the marker's
+        // geometry events then center the word exactly and keep it there.
+        .onChange(of: current) { _, newIndex in
+            guard player.isTrackingPosition, let newIndex,
+                  visibleLines.contains(where: { $0.index == newIndex }) else { return }
+            spokenWordOffCenter = nil
+            withAnimation(Self.trackingScrollAnimation) {
+                proxy.scrollTo(TranscriptLineID(index: newIndex), anchor: .center)
             }
+        }
+        // Making the transcript visible re-asserts the centering, in case a
+        // scroll issued while it was hidden did not land.
+        .onChange(of: isShowingTranscript) { _, isShowing in
+            guard isShowing else { return }
+            centerOnTrackedPosition(proxy, animated: false)
         }
     }
 
@@ -736,27 +740,47 @@ public struct BookView: View {
 
     /// Kicks the event-based row follow. The marker cannot be scrolled to
     /// before the lazy stack realizes its row, so the line scroll runs first
-    /// to realize it. The kick then arms the follow, so the marker's next
-    /// report centers the word exactly instead of racing the line scroll.
+    /// to realize it. The marker's geometry events then center the word
+    /// exactly and keep re-centering until it holds.
     private func scrollToSpokenWord(_ proxy: ScrollViewProxy) {
         if let index = currentLineIndex(at: Date()),
            visibleLines.contains(where: { $0.index == index }) {
-            proxy.scrollTo(index, anchor: .center)
+            proxy.scrollTo(TranscriptLineID(index: index), anchor: .center)
         }
         proxy.scrollTo(LyricLineText.spokenWordID, anchor: .center)
-        awaitsSpokenWordCentering = true
+        spokenWordOffCenter = nil
     }
 
-    /// Follows the narration onto a new wrapped row. The spoken word reports
-    /// its height whenever it moves; words on one row share it, so tracking
-    /// scrolls once per wrapped row, not once per word. An armed kick makes
-    /// the next report center unconditionally.
-    private func followSpokenWord(at midY: CGFloat, _ proxy: ScrollViewProxy) {
-        let movedRows = abs((trackedWordY ?? -.infinity) - midY) > 1
-        trackedWordY = midY
-        guard player.isTrackingPosition, movedRows || awaitsSpokenWordCentering else { return }
-        awaitsSpokenWordCentering = false
-        withAnimation { proxy.scrollTo(LyricLineText.spokenWordID, anchor: .center) }
+    /// Row id of a transcript line. The chapter rows use bare indices, and
+    /// both lists share one scroll reader, so the ids must not collide.
+    private struct TranscriptLineID: Hashable {
+        let index: Int
+    }
+
+    /// Vertical distance from the viewport's center within which the spoken
+    /// word counts as centered.
+    private static let centeringTolerance: CGFloat = 2
+
+    /// The glide of every tracking scroll: a bounceless spring, slow enough
+    /// to read through.
+    private static let trackingScrollAnimation = Animation.smooth(duration: 0.5)
+
+    /// Recenters the spoken word whenever it sits off the viewport's center.
+    /// Every marker geometry event lands here, so a scroll that failed or
+    /// was shifted away re-triggers until the word is centered. Events with
+    /// a shrinking distance are a glide already closing in, and pass.
+    private func reconcileSpokenWord(offCenter: CGFloat, _ proxy: ScrollViewProxy) {
+        guard player.isTrackingPosition else {
+            spokenWordOffCenter = nil
+            return
+        }
+        let previous = spokenWordOffCenter
+        spokenWordOffCenter = offCenter
+        guard abs(offCenter) > Self.centeringTolerance else { return }
+        if let previous, abs(offCenter) < abs(previous) - Self.centeringTolerance { return }
+        withAnimation(Self.trackingScrollAnimation) {
+            proxy.scrollTo(LyricLineText.spokenWordID, anchor: .center)
+        }
     }
 
     private func lyricRowState(for line: LyricLine, current: Int?) -> LyricRowState {

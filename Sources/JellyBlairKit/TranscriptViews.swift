@@ -23,10 +23,9 @@ public struct LyricLineText: View, Equatable {
     let positionSeconds: Double?
     /// Called with the clicked word's cue.
     let onWordTap: ((LyricCue) -> Void)?
-    /// Called with the spoken word's vertical center, measured in the
-    /// transcript content's coordinate space, so scrolling does not move it.
-    /// Words on one wrapped row share the value; it steps when the narration
-    /// wraps onto the next row.
+    /// Called with the spoken word's vertical distance from the scroll
+    /// viewport's center whenever it changes: on word moves, scrolling,
+    /// and layout shifts alike.
     let onSpokenWordMoved: ((CGFloat) -> Void)?
 
     /// The spoken word's frame in the text's own coordinates, reported by
@@ -44,10 +43,6 @@ public struct LyricLineText: View, Equatable {
     /// The scroll id riding on the word being spoken, so tracking can center
     /// on the wrapped line that contains it.
     public static let spokenWordID = "spokenWord"
-
-    /// The coordinate space of the transcript content, for measuring the
-    /// spoken word independently of the scroll position.
-    public static let contentSpaceName = "transcriptContent"
 
     /// How long a word takes to fade between its colors.
     private static let colorFadeDuration: TimeInterval = 0.05
@@ -119,9 +114,10 @@ public struct LyricLineText: View, Equatable {
                 .frame(width: frame.width, height: frame.height)
                 .id(Self.spokenWordID)
                 .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.frame(in: .named(Self.contentSpaceName)).midY
-                } action: { midY in
-                    onSpokenWordMoved?(midY)
+                    guard let bounds = proxy.bounds(of: .scrollView) else { return 0 }
+                    return proxy.frame(in: .scrollView).midY - bounds.midY
+                } action: { offCenter in
+                    onSpokenWordMoved?(offCenter)
                 }
                 .padding(.leading, frame.minX)
                 .padding(.top, frame.minY)
