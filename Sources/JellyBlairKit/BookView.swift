@@ -22,6 +22,10 @@ public struct BookView: View {
     /// The spoken word's last reported height in the transcript content,
     /// for scrolling only when the narration moves to a new wrapped row.
     @State private var trackedWordY: CGFloat?
+    /// True while the marker's next report owes a centering scroll. Set on
+    /// each centering kick and on each move to a neighboring line, since the
+    /// new spoken word's marker is only placed once its frame is reported.
+    @State private var awaitsSpokenWordCentering = false
     @State private var isHoveringJumpButton = false
     @State private var isHoveringTranscriptToggle = false
     @State private var isHoveringDownload = false
@@ -665,11 +669,19 @@ public struct BookView: View {
         .onUserScroll {
             player.isTrackingPosition = false
         }
-        // Centers on every current-line change, however far it moved. The
-        // geometry-driven follow only reports from a realized row, so a
-        // distant jump must go through the realizing scroll.
-        .onChange(of: current) { _, _ in
-            centerOnTrackedPosition(proxy)
+        // Centers on every current-line change, however far it moved. A move
+        // to a neighboring line skips the realizing line scroll: its row
+        // already borders the tracked one, and the line scroll's animation
+        // would swallow the marker's exact centering right behind it. The
+        // armed follow then centers the word in one glide. A distant jump
+        // needs the full kick, since its row may not be realized yet.
+        .onChange(of: current) { oldIndex, newIndex in
+            guard player.isTrackingPosition else { return }
+            if let oldIndex, let newIndex, abs(newIndex - oldIndex) == 1 {
+                awaitsSpokenWordCentering = true
+            } else {
+                centerOnTrackedPosition(proxy)
+            }
         }
     }
 
@@ -731,24 +743,26 @@ public struct BookView: View {
 
     /// Kicks the event-based row follow. The marker cannot be scrolled to
     /// before the lazy stack realizes its row, so the line scroll runs first
-    /// to realize it; once the marker has a frame, its scroll wins and the
-    /// kick lands on the spoken row. On a fresh realization the marker's
-    /// first geometry report follows up with the exact centering.
+    /// to realize it. The kick then arms the follow, so the marker's next
+    /// report centers the word exactly instead of racing the line scroll.
     private func scrollToSpokenWord(_ proxy: ScrollViewProxy) {
         if let index = currentLineIndex(at: Date()),
            visibleLines.contains(where: { $0.index == index }) {
             proxy.scrollTo(index, anchor: .center)
         }
         proxy.scrollTo(LyricLineText.spokenWordID, anchor: .center)
+        awaitsSpokenWordCentering = true
     }
 
     /// Follows the narration onto a new wrapped row. The spoken word reports
     /// its height whenever it moves; words on one row share it, so tracking
-    /// scrolls once per wrapped row, not once per word.
+    /// scrolls once per wrapped row, not once per word. An armed kick makes
+    /// the next report center unconditionally.
     private func followSpokenWord(at midY: CGFloat, _ proxy: ScrollViewProxy) {
         let movedRows = abs((trackedWordY ?? -.infinity) - midY) > 1
         trackedWordY = midY
-        guard player.isTrackingPosition, movedRows else { return }
+        guard player.isTrackingPosition, movedRows || awaitsSpokenWordCentering else { return }
+        awaitsSpokenWordCentering = false
         withAnimation { proxy.scrollTo(LyricLineText.spokenWordID, anchor: .center) }
     }
 
