@@ -46,6 +46,9 @@ public struct TranscriptTextView {
     let positionSeconds: Double
     /// True while the view keeps the spoken word centered.
     let isTracking: Bool
+    /// False while another view covers the transcript; centering then lands
+    /// without animation, since nobody can watch the glide.
+    let isVisible: Bool
     /// The phrase whose occurrences color as search matches.
     let searchQuery: String
     /// Space kept clear at the top, under the floating filter bar.
@@ -67,6 +70,7 @@ public struct TranscriptTextView {
         chapters: [Chapter],
         positionSeconds: Double,
         isTracking: Bool,
+        isVisible: Bool,
         searchQuery: String,
         topInset: CGFloat,
         bottomInset: CGFloat,
@@ -80,6 +84,7 @@ public struct TranscriptTextView {
         self.chapters = chapters
         self.positionSeconds = positionSeconds
         self.isTracking = isTracking
+        self.isVisible = isVisible
         self.searchQuery = searchQuery
         self.topInset = topInset
         self.bottomInset = bottomInset
@@ -469,13 +474,14 @@ public final class TranscriptTextCoordinator: NSObject {
         let newLine = line ?? 0
         let low = min(oldLine, newLine)
         let high = max(oldLine, newLine)
+        let span = linesRange(from: low, to: high)
+        // Every crossed line lands on the same side of the new line, so one
+        // edit covers the span; the new line itself repaints separately.
+        let color = line == high ? Style.read : Style.unread
         storage.beginEditing()
-        for position in low...high where lineRanges.indices.contains(position) {
-            let read = line.map { position < $0 } ?? false
-            storage.addAttribute(.foregroundColor, value: read ? Style.read : Style.unread, range: lineRanges[position])
-        }
+        storage.addAttribute(.foregroundColor, value: color, range: span)
         paintSpokenLine(line, cue: cue)
-        repaintMatches(intersecting: linesRange(from: low, to: high))
+        repaintMatches(intersecting: span)
         storage.endEditing()
     }
 
@@ -715,7 +721,7 @@ public final class TranscriptTextCoordinator: NSObject {
         guard let targetY = frame(forStorageRange: range)?.midY else { return }
         if !forced, let centeredY, abs(targetY - centeredY) <= 1 { return }
         centeredY = targetY
-        scroll(toCenterY: targetY, animated: animated)
+        scroll(toCenterY: targetY, animated: animated && view?.isVisible != false)
     }
 
     /// The range's frame in text view coordinates, from the layout.

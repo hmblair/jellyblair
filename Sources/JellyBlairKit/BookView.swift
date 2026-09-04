@@ -676,6 +676,7 @@ public struct BookView: View {
             chapters: chapters,
             positionSeconds: positionSeconds,
             isTracking: player.isTrackingPosition,
+            isVisible: isShowingTranscript,
             // The hidden transcript does not search, so typing a chapter
             // query cannot scroll it or turn tracking off.
             searchQuery: isShowingTranscript ? trimmedQuery : "",
