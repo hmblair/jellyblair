@@ -5,11 +5,21 @@ import AppKit
 import UIKit
 #endif
 
-/// Reaches the transcript text view from SwiftUI controls, so the tracking
-/// button can center the spoken word on demand.
+/// The transcript's outward face: commands in, observable status out. The
+/// transcript owns its content work; controls read the status and send
+/// commands without knowing anything about the text.
+@Observable
 @MainActor
 public final class TranscriptController {
     fileprivate weak var coordinator: TranscriptTextCoordinator?
+
+    /// The position of the match the navigation stands on.
+    public fileprivate(set) var matchIndex = 0
+    public fileprivate(set) var matchCount = 0
+    /// True while a search runs in the background.
+    public fileprivate(set) var isSearching = false
+    /// True while the full layout pass runs.
+    public fileprivate(set) var isPreparingLayout = false
 
     public init() {}
 
@@ -18,9 +28,9 @@ public final class TranscriptController {
         coordinator?.centerOnSpokenWord(forced: true, animated: animated)
     }
 
-    /// Centers the search match at the given position.
-    public func center(onMatch index: Int, animated: Bool) {
-        coordinator?.center(onMatch: index, animated: animated)
+    /// Steps to the next or previous match, wrapping, and centers it.
+    public func stepMatch(by delta: Int) {
+        coordinator?.stepMatch(by: delta)
     }
 }
 
@@ -30,16 +40,14 @@ public final class TranscriptController {
 /// update as attribute edits on the spoken ranges.
 public struct TranscriptTextView {
     let lines: [LyricLine]
-    /// Indices of lines drawn as chapter headings.
-    let titleLineIndices: Set<Int>
+    /// The book's chapters, for styling their heading lines.
+    let chapters: [Chapter]
     /// The playback position the coloring and centering follow.
     let positionSeconds: Double
     /// True while the view keeps the spoken word centered.
     let isTracking: Bool
     /// The phrase whose occurrences color as search matches.
     let searchQuery: String
-    /// Called with the number of search matches whenever they recompute.
-    let onMatchCount: (Int) -> Void
     /// Space kept clear at the top, under the floating filter bar.
     let topInset: CGFloat
     /// Resting clearance under the last line.
@@ -51,16 +59,15 @@ public struct TranscriptTextView {
     let onWordTap: (LyricCue) -> Void
     /// Called when a click lands beside the words, on the line itself.
     let onLineTap: (LyricLine) -> Void
-    /// Called when the user scrolls the transcript themselves.
+    /// Called when the user scrolls or navigates the transcript themselves.
     let onUserScroll: () -> Void
 
     public init(
         lines: [LyricLine],
-        titleLineIndices: Set<Int>,
+        chapters: [Chapter],
         positionSeconds: Double,
         isTracking: Bool,
         searchQuery: String,
-        onMatchCount: @escaping (Int) -> Void,
         topInset: CGFloat,
         bottomInset: CGFloat,
         horizontalPadding: CGFloat,
@@ -70,11 +77,10 @@ public struct TranscriptTextView {
         onUserScroll: @escaping () -> Void
     ) {
         self.lines = lines
-        self.titleLineIndices = titleLineIndices
+        self.chapters = chapters
         self.positionSeconds = positionSeconds
         self.isTracking = isTracking
         self.searchQuery = searchQuery
-        self.onMatchCount = onMatchCount
         self.topInset = topInset
         self.bottomInset = bottomInset
         self.horizontalPadding = horizontalPadding
@@ -94,6 +100,7 @@ extension TranscriptTextView: NSViewRepresentable {
     public func makeNSView(context: Context) -> NSScrollView {
         let view = context.coordinator.makeScrollView()
         controller.coordinator = context.coordinator
+        context.coordinator.controller = controller
         return view
     }
 
@@ -111,6 +118,7 @@ extension TranscriptTextView: UIViewRepresentable {
     public func makeUIView(context: Context) -> UITextView {
         let view = context.coordinator.makeTextView()
         controller.coordinator = context.coordinator
+        context.coordinator.controller = controller
         return view
     }
 
@@ -126,7 +134,11 @@ extension TranscriptTextView: UIViewRepresentable {
 /// while tracking is on.
 @MainActor
 public final class TranscriptTextCoordinator: NSObject {
+    fileprivate weak var controller: TranscriptController?
+
     private var lines: [LyricLine] = []
+    private var chapters: [Chapter] = []
+    /// Indices of lines drawn as chapter headings, derived from the chapters.
     private var titleLineIndices: Set<Int> = []
     /// UTF-16 range of each line's text inside the storage.
     private var lineRanges: [NSRange] = []
@@ -139,8 +151,19 @@ public final class TranscriptTextCoordinator: NSObject {
     private var spokenCueIndex: Int?
     /// UTF-16 ranges of the search matches inside the storage, in order.
     private var matchRanges: [NSRange] = []
-    /// The query the stored matches were found with.
+    /// The position of the match the navigation stands on.
+    private var matchIndex = 0
+    /// The query whose search last started.
     private var appliedQuery = ""
+    /// The query whose matches finished and painted.
+    private var completedQuery = ""
+    /// The plain text of the storage, snapshotted for background searching.
+    private var searchText = ""
+    private var searchTask: Task<Void, Never>?
+    /// True once the whole document is laid out, so positions are exact.
+    private var isFullyLaidOut = false
+    /// Invalidates the running chunked layout pass when content changes.
+    private var layoutGeneration = 0
     /// The last vertical center the view scrolled to, so following scrolls
     /// once per visual line, not once per word.
     private var centeredY: CGFloat?
@@ -218,7 +241,7 @@ public final class TranscriptTextCoordinator: NSObject {
 
     func update(from view: TranscriptTextView) {
         // Array equality short-circuits on shared storage, so this is cheap per tick.
-        let contentChanged = view.lines != lines || view.titleLineIndices != titleLineIndices
+        let contentChanged = view.lines != lines || view.chapters != chapters
         self.view = view
         applyInsets()
         if contentChanged {
@@ -328,17 +351,20 @@ public final class TranscriptTextCoordinator: NSObject {
     private func rebuildContent() {
         guard let view else { return }
         lines = view.lines
-        titleLineIndices = view.titleLineIndices
+        chapters = view.chapters
+        titleLineIndices = Self.titleLineIndices(of: lines, chapters: chapters)
         lineRanges = []
         timedLines = []
         matchRanges = []
+        matchIndex = 0
+        completedQuery = ""
         currentLine = nil
         spokenCueIndex = nil
         centeredY = nil
 
         let content = NSMutableAttributedString()
         for (position, line) in lines.enumerated() {
-            let isTitle = view.titleLineIndices.contains(line.index)
+            let isTitle = titleLineIndices.contains(line.index)
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: isTitle ? Style.title : Style.body,
                 .foregroundColor: Style.unread,
@@ -352,17 +378,82 @@ public final class TranscriptTextCoordinator: NSObject {
             content.append(text)
         }
         storage?.setAttributedString(content)
-        ensureFullLayout()
+        searchText = content.string
+        startFullLayout()
     }
 
-    /// Lays out the whole document, so every measured position is exact.
-    /// Costs about a tenth of a second on the first pass over a book, and
-    /// nearly nothing once the layout is settled.
+    /// Indices of transcript lines that are chapter headings: the first line
+    /// at a chapter's start whose words are exactly the chapter's title,
+    /// compared without case. One walk covers both ordered lists.
+    private static func titleLineIndices(of lines: [LyricLine], chapters: [Chapter]) -> Set<Int> {
+        var indices: Set<Int> = []
+        var lineIndex = 0
+        for chapter in chapters {
+            while lineIndex < lines.count, (lines[lineIndex].startSeconds ?? -1) < chapter.startSeconds - 0.5 {
+                lineIndex += 1
+            }
+            guard lineIndex < lines.count else { break }
+            let line = lines[lineIndex]
+            let lineText = line.text.trimmingCharacters(in: .whitespaces)
+            let title = chapter.title.trimmingCharacters(in: .whitespaces)
+            if lineText.caseInsensitiveCompare(title) == .orderedSame {
+                indices.insert(line.index)
+            }
+        }
+        return indices
+    }
+
+    // MARK: - Full layout
+
+    /// Lays the document out in chunks between run-loop turns, so opening a
+    /// long transcript never blocks. Once every position is exact, reports
+    /// completion and recenters.
+    private func startFullLayout() {
+        layoutGeneration += 1
+        let generation = layoutGeneration
+        isFullyLaidOut = false
+        setPreparingLayout(true)
+        Task { @MainActor in
+            var position = 0
+            while generation == self.layoutGeneration, position < self.lineRanges.count {
+                self.layOutLines(from: position, count: Self.layoutChunkLines)
+                position += Self.layoutChunkLines
+                await Task.yield()
+            }
+            guard generation == self.layoutGeneration else { return }
+            self.isFullyLaidOut = true
+            self.setPreparingLayout(false)
+            if self.view?.isTracking == true {
+                self.centerOnSpokenWord(forced: true, animated: false)
+            }
+        }
+    }
+
+    /// Lines laid out per chunk of the layout pass.
+    private static let layoutChunkLines = 400
+
+    private func layOutLines(from position: Int, count: Int) {
+        let last = min(position + count, lineRanges.count) - 1
+        guard position <= last,
+              let layoutManager = textView.textLayoutManager,
+              let contentManager = layoutManager.textContentManager,
+              let textRange = textRange(from: linesRange(from: position, to: last), in: contentManager)
+        else { return }
+        layoutManager.ensureLayout(for: textRange)
+    }
+
+    /// Re-settles the whole document's layout. Nearly free while the full
+    /// pass has completed and little has been invalidated since.
     private func ensureFullLayout() {
         guard let layoutManager = textView.textLayoutManager,
               let contentManager = layoutManager.textContentManager
         else { return }
         layoutManager.ensureLayout(for: contentManager.documentRange)
+    }
+
+    /// Published outside the SwiftUI update this can run in.
+    private func setPreparingLayout(_ preparing: Bool) {
+        Task { @MainActor in self.controller?.isPreparingLayout = preparing }
     }
 
     private var storage: NSTextStorage? {
@@ -415,40 +506,171 @@ public final class TranscriptTextCoordinator: NSObject {
 
     // MARK: - Search
 
-    /// Finds the query's occurrences and repaints the text: positional
-    /// colors first, then the match color over each occurrence.
+    /// Starts a background search for the view's query, restarting any
+    /// search underway. A blank query clears the matches directly.
     private func applySearch() {
-        guard let view, let storage else { return }
-        appliedQuery = view.searchQuery
-        matchRanges = matches(of: appliedQuery, in: storage.string)
-        for position in lineRanges.indices {
-            let read = currentLine.map { position < $0 } ?? false
-            storage.addAttribute(.foregroundColor, value: read ? Style.read : Style.unread, range: lineRanges[position])
+        guard let view else { return }
+        let query = view.searchQuery
+        appliedQuery = query
+        searchTask?.cancel()
+        searchTask = nil
+        guard !query.isEmpty else {
+            if !matchRanges.isEmpty {
+                storage?.beginEditing()
+                unpaintMatches(matchRanges)
+                storage?.endEditing()
+                matchRanges = []
+            }
+            matchIndex = 0
+            completedQuery = ""
+            setSearching(false)
+            publishMatchState()
+            return
         }
-        paintSpokenLine(currentLine, cue: spokenCueIndex)
-        for range in matchRanges {
-            storage.addAttribute(.foregroundColor, value: Style.match, range: range)
+        setSearching(true)
+        let text = searchText
+        let narrowing = matchRanges.isEmpty ? nil : (query: completedQuery, ranges: matchRanges)
+        searchTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let ranges = Self.findMatches(of: query, in: text, narrowingFrom: narrowing)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { [weak self] in
+                self?.finishSearch(query: query, ranges: ranges)
+            }
         }
-        let count = matchRanges.count
-        let report = view.onMatchCount
-        // Reported outside the SwiftUI update this runs in.
-        Task { @MainActor in report(count) }
     }
 
-    /// Every occurrence of the query in the text, in order. Empty for a
-    /// blank query.
-    private func matches(of query: String, in text: String) -> [NSRange] {
-        guard !query.isEmpty else { return [] }
+    /// Installs a finished search: the old match colors revert, the new
+    /// matches paint in one batch, and a fresh query lands on the first
+    /// match at or past the spoken line, like find starting from a cursor.
+    private func finishSearch(query: String, ranges: [NSRange]) {
+        guard query == appliedQuery, let storage else { return }
+        let isFreshQuery = query != completedQuery
+        storage.beginEditing()
+        unpaintMatches(matchRanges)
+        matchRanges = ranges
+        for range in ranges {
+            storage.addAttribute(.foregroundColor, value: Style.match, range: range)
+        }
+        storage.endEditing()
+        completedQuery = query
+        if isFreshQuery {
+            matchIndex = nearestForwardMatch()
+            if !ranges.isEmpty {
+                center(onStorageRange: ranges[matchIndex], forced: true, animated: true)
+                view?.onUserScroll()
+            }
+        } else {
+            matchIndex = min(matchIndex, max(0, ranges.count - 1))
+        }
+        setSearching(false)
+        publishMatchState()
+    }
+
+    /// Steps to the next or previous match, wrapping, and centers it.
+    func stepMatch(by delta: Int) {
+        let count = matchRanges.count
+        guard count > 0 else { return }
+        matchIndex = ((matchIndex + delta) % count + count) % count
+        center(onStorageRange: matchRanges[matchIndex], forced: true, animated: true)
+        view?.onUserScroll()
+        publishMatchState()
+    }
+
+    /// The position of the first match at or after the spoken line, wrapping
+    /// to the first match overall.
+    private func nearestForwardMatch() -> Int {
+        guard !matchRanges.isEmpty else { return 0 }
+        let location = currentLine.flatMap { lineRanges.indices.contains($0) ? lineRanges[$0].location : nil } ?? 0
+        var low = 0
+        var high = matchRanges.count
+        while low < high {
+            let mid = (low + high) / 2
+            if matchRanges[mid].location < location {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        return low < matchRanges.count ? low : 0
+    }
+
+    /// Restores positional colors over the lines holding the given ranges.
+    private func unpaintMatches(_ ranges: [NSRange]) {
+        guard let storage, !ranges.isEmpty else { return }
+        var lastLine = -1
+        for range in ranges {
+            let line = lineIndex(containing: range.location)
+            guard line != lastLine, lineRanges.indices.contains(line) else { continue }
+            lastLine = line
+            let read = currentLine.map { line < $0 } ?? false
+            storage.addAttribute(.foregroundColor, value: read ? Style.read : Style.unread, range: lineRanges[line])
+        }
+        paintSpokenLine(currentLine, cue: spokenCueIndex)
+    }
+
+    /// The position of the line containing the storage location.
+    private func lineIndex(containing location: Int) -> Int {
+        var low = 0
+        var high = lineRanges.count
+        while low < high {
+            let mid = (low + high) / 2
+            if lineRanges[mid].location <= location {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        return low - 1
+    }
+
+    /// Upper bound on collected matches, so a one-letter query stays fast.
+    nonisolated private static let matchLimit = 10_000
+
+    /// Every occurrence of the query in the text, in order, up to the match
+    /// limit. When the finished previous query is a prefix of this one, only
+    /// the previous match starts are tested.
+    nonisolated private static func findMatches(of query: String, in text: String, narrowingFrom previous: (query: String, ranges: [NSRange])?) -> [NSRange] {
         let full = text as NSString
         var ranges: [NSRange] = []
+        if let previous, !previous.query.isEmpty,
+           query.lowercased().hasPrefix(previous.query.lowercased()) {
+            for candidate in previous.ranges {
+                let remaining = NSRange(location: candidate.location, length: full.length - candidate.location)
+                let match = full.range(of: query, options: [.caseInsensitive, .anchored], range: remaining)
+                if match.location != NSNotFound {
+                    ranges.append(match)
+                    if ranges.count >= matchLimit { break }
+                }
+            }
+            return ranges
+        }
         var start = 0
+        var steps = 0
         while start < full.length {
             let range = full.range(of: query, options: .caseInsensitive, range: NSRange(location: start, length: full.length - start))
             guard range.location != NSNotFound else { break }
             ranges.append(range)
+            if ranges.count >= matchLimit { break }
             start = range.location + max(range.length, 1)
+            steps += 1
+            if steps % 512 == 0, Task.isCancelled { break }
         }
         return ranges
+    }
+
+    /// Published outside the SwiftUI update this can run in.
+    private func setSearching(_ searching: Bool) {
+        Task { @MainActor in self.controller?.isSearching = searching }
+    }
+
+    /// Published outside the SwiftUI update this can run in.
+    private func publishMatchState() {
+        let index = matchIndex
+        let count = matchRanges.count
+        Task { @MainActor in
+            self.controller?.matchIndex = index
+            self.controller?.matchCount = count
+        }
     }
 
     /// Repaints the match color over the occurrences intersecting the range,
@@ -481,17 +703,13 @@ public final class TranscriptTextCoordinator: NSObject {
         center(onStorageRange: range, forced: forced, animated: animated)
     }
 
-    /// Centers the search match at the given position.
-    func center(onMatch index: Int, animated: Bool) {
-        guard matchRanges.indices.contains(index) else { return }
-        center(onStorageRange: matchRanges[index], forced: true, animated: animated)
-    }
-
     /// Scrolls the range's visual line to the viewport's center, unless it
     /// is centered already. The full-layout pass keeps the measurement exact
     /// even far into unvisited text.
     private func center(onStorageRange range: NSRange, forced: Bool, animated: Bool) {
-        ensureFullLayout()
+        if isFullyLaidOut {
+            ensureFullLayout()
+        }
         guard let targetY = frame(forStorageRange: range)?.midY else { return }
         if !forced, let centeredY, abs(targetY - centeredY) <= 1 { return }
         centeredY = targetY

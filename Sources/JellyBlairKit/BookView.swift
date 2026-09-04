@@ -25,13 +25,9 @@ public struct BookView: View {
     @State private var isHoveringTranscriptToggle = false
     @State private var isHoveringDownload = false
 
-    /// The position of the search match the arrows navigated to.
-    @State private var matchIndex = 0
-    /// Match count reported by the transcript view for the current query.
-    @State private var transcriptMatchCount = 0
-    /// True while a fresh query waits for its match count, so the first
-    /// match centers as soon as the matches are known.
-    @State private var pendingTranscriptJump = false
+    /// The position of the matching chapter the arrows navigated to. The
+    /// transcript's counterpart lives in its controller.
+    @State private var chapterMatchIndex = 0
 
     /// Removal asks once: the first tap shows a red question mark that
     /// reverts after a few seconds; a second tap within that window deletes.
@@ -167,38 +163,37 @@ public struct BookView: View {
                 #endif
             }
             .onChange(of: filterQuery) { _, _ in
-                matchIndex = 0
+                guard !isShowingTranscript else { return }
+                chapterMatchIndex = 0
                 guard !trimmedQuery.isEmpty else { return }
-                if isShowingTranscript {
-                    pendingTranscriptJump = true
-                } else {
-                    jumpToChapterMatch(0, proxy)
-                }
+                jumpToNearestChapterMatch(proxy)
             }
         }
     }
 
-    /// Jumps to the search match at the index, wrapping around the ends.
-    private func jumpToMatch(_ index: Int, _ proxy: ScrollViewProxy) {
+    /// Steps the showing view's search one match forward or backward.
+    private func stepMatch(by delta: Int, _ proxy: ScrollViewProxy) {
         if isShowingTranscript {
-            jumpToTranscriptMatch(index)
+            transcriptController.stepMatch(by: delta)
         } else {
-            jumpToChapterMatch(index, proxy)
+            jumpToChapterMatch(chapterMatchIndex + delta, proxy)
         }
     }
 
-    private func jumpToTranscriptMatch(_ index: Int) {
-        guard transcriptMatchCount > 0 else { return }
-        matchIndex = (index + transcriptMatchCount) % transcriptMatchCount
-        transcriptController.center(onMatch: matchIndex, animated: true)
-        player.isTrackingPosition = false
+    /// A fresh query lands on the first matching chapter at or past the
+    /// marked one, like find starting from a cursor.
+    private func jumpToNearestChapterMatch(_ proxy: ScrollViewProxy) {
+        let ids = matchingChapterIDs
+        guard !ids.isEmpty else { return }
+        let marked = markedChapterIndex ?? 0
+        jumpToChapterMatch(ids.firstIndex(where: { $0 >= marked }) ?? 0, proxy)
     }
 
     private func jumpToChapterMatch(_ index: Int, _ proxy: ScrollViewProxy) {
         let ids = matchingChapterIDs
         guard !ids.isEmpty else { return }
-        matchIndex = (index + ids.count) % ids.count
-        withAnimation { proxy.scrollTo(ids[matchIndex], anchor: .center) }
+        chapterMatchIndex = (index + ids.count) % ids.count
+        withAnimation { proxy.scrollTo(ids[chapterMatchIndex], anchor: .center) }
         player.isTrackingPosition = false
     }
 
@@ -274,31 +269,38 @@ public struct BookView: View {
             }
         }
         .onSubmit {
-            jumpToMatch(matchIndex + 1, proxy)
+            stepMatch(by: 1, proxy)
         }
     }
 
     /// Ghost find controls at the search field's right edge: the match
     /// position and arrows stepping through the matches.
     private func matchNavigator(_ proxy: ScrollViewProxy) -> some View {
-        let count = isShowingTranscript ? transcriptMatchCount : matchingChapterIDs.count
+        let count = isShowingTranscript ? transcriptController.matchCount : matchingChapterIDs.count
+        let index = isShowingTranscript ? transcriptController.matchIndex : chapterMatchIndex
+        let searching = isShowingTranscript && transcriptController.isSearching
         return HStack(spacing: 4) {
-            Text(count == 0 ? "0/0" : "\(matchIndex + 1)/\(count)")
-                .monospacedDigit()
+            if searching {
+                ProgressView()
+                    .controlSize(.mini)
+            } else {
+                Text(count == 0 ? "0/0" : "\(index + 1)/\(count)")
+                    .monospacedDigit()
+            }
             Button {
-                jumpToMatch(matchIndex - 1, proxy)
+                stepMatch(by: -1, proxy)
             } label: {
                 Image(systemName: "chevron.left")
             }
             .buttonStyle(.plain)
-            .disabled(count == 0)
+            .disabled(count == 0 || searching)
             Button {
-                jumpToMatch(matchIndex + 1, proxy)
+                stepMatch(by: 1, proxy)
             } label: {
                 Image(systemName: "chevron.right")
             }
             .buttonStyle(.plain)
-            .disabled(count == 0)
+            .disabled(count == 0 || searching)
         }
         .font(.caption)
         .foregroundStyle(.tertiary)
@@ -647,11 +649,10 @@ public struct BookView: View {
     /// anchor, so the word mark lands on the boundaries without a fast timer.
     /// The anchor moves on every playback event, rebuilding the schedule.
     private var transcriptList: some View {
-        // Computed outside the tick closure, so the per-line walks do not run per word.
-        let titleLineIndices = titleLineIndices
         let lines = model.lyrics
+        let chapters = chapters
         return TimelineView(transcriptTickSchedule) { context in
-            transcriptText(at: listeningPosition(at: context.date), lines: lines, titleLineIndices: titleLineIndices)
+            transcriptText(at: listeningPosition(at: context.date), lines: lines, chapters: chapters)
         }
         .task(id: book.id) {
             await model.fetchLyricsIfNeeded()
@@ -669,21 +670,15 @@ public struct BookView: View {
         )
     }
 
-    private func transcriptText(at positionSeconds: Double, lines: [LyricLine], titleLineIndices: Set<Int>) -> some View {
+    private func transcriptText(at positionSeconds: Double, lines: [LyricLine], chapters: [Chapter]) -> some View {
         TranscriptTextView(
             lines: lines,
-            titleLineIndices: titleLineIndices,
+            chapters: chapters,
             positionSeconds: positionSeconds,
             isTracking: player.isTrackingPosition,
-            searchQuery: trimmedQuery,
-            onMatchCount: { count in
-                transcriptMatchCount = count
-                matchIndex = min(matchIndex, max(0, count - 1))
-                if pendingTranscriptJump {
-                    pendingTranscriptJump = false
-                    jumpToTranscriptMatch(0)
-                }
-            },
+            // The hidden transcript does not search, so typing a chapter
+            // query cannot scroll it or turn tracking off.
+            searchQuery: isShowingTranscript ? trimmedQuery : "",
             topInset: floatingBarZoneHeight + 6,
             bottomInset: Self.bottomRestingInset,
             horizontalPadding: Self.transcriptHorizontalPadding,
@@ -706,30 +701,10 @@ public struct BookView: View {
                     Text("No transcript for this book")
                         .foregroundStyle(.secondary)
                 }
+            } else if transcriptController.isPreparingLayout {
+                ProgressView()
             }
         }
-    }
-
-    /// Indices of transcript lines that are chapter headings: the first line
-    /// at a chapter's start whose words are exactly the chapter's title,
-    /// compared without case. One walk covers both ordered lists.
-    private var titleLineIndices: Set<Int> {
-        var indices: Set<Int> = []
-        let lines = model.lyrics
-        var lineIndex = 0
-        for chapter in chapters {
-            while lineIndex < lines.count, (lines[lineIndex].startSeconds ?? -1) < chapter.startSeconds - 0.5 {
-                lineIndex += 1
-            }
-            guard lineIndex < lines.count else { break }
-            let line = lines[lineIndex]
-            let lineText = line.text.trimmingCharacters(in: .whitespaces)
-            let title = chapter.title.trimmingCharacters(in: .whitespaces)
-            if lineText.caseInsensitiveCompare(title) == .orderedSame {
-                indices.insert(line.index)
-            }
-        }
-        return indices
     }
 
     /// The listener's position: the playing position when loaded, or the
