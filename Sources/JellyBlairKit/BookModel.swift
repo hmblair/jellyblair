@@ -100,6 +100,17 @@ public final class BookModel: Identifiable {
         )
         self.downloader = downloader
         downloader.start(client.streamRequest(for: book))
+        Task { await fillOfflineCaches() }
+    }
+
+    /// Fetches the chapters and the transcript beside the file download, so
+    /// a downloaded book carries them offline even when the screen's own
+    /// fetches failed or never ran. Cheap when they are already cached.
+    private func fillOfflineCaches() async {
+        async let chapters: Void = fetchChaptersIfNeeded()
+        async let lyrics: Void = fetchLyricsIfNeeded()
+        await chapters
+        await lyrics
     }
 
     public func cancelDownload() {
