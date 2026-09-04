@@ -469,12 +469,14 @@ public final class TranscriptTextCoordinator: NSObject {
         let newLine = line ?? 0
         let low = min(oldLine, newLine)
         let high = max(oldLine, newLine)
+        storage.beginEditing()
         for position in low...high where lineRanges.indices.contains(position) {
             let read = line.map { position < $0 } ?? false
             storage.addAttribute(.foregroundColor, value: read ? Style.read : Style.unread, range: lineRanges[position])
         }
         paintSpokenLine(line, cue: cue)
         repaintMatches(intersecting: linesRange(from: low, to: high))
+        storage.endEditing()
     }
 
     /// Colors the given line's read part, spoken cue, and unread rest.
