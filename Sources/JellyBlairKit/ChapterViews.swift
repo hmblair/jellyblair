@@ -21,11 +21,14 @@ public struct ChapterRow: View {
     let chapter: Chapter
     let state: ChapterRowState
     let meter: AudioLevelMeter
+    /// The phrase whose occurrences in the title color as search matches.
+    let searchQuery: String
 
-    public init(chapter: Chapter, state: ChapterRowState, meter: AudioLevelMeter) {
+    public init(chapter: Chapter, state: ChapterRowState, meter: AudioLevelMeter, searchQuery: String) {
         self.chapter = chapter
         self.state = state
         self.meter = meter
+        self.searchQuery = searchQuery
     }
 
     private var isCurrent: Bool {
@@ -39,7 +42,7 @@ public struct ChapterRow: View {
         HStack {
             icon
                 .frame(width: 16)
-            Text(chapter.title)
+            Text(highlightedTitle)
                 .fontWeight(isCurrent ? .semibold : .regular)
                 .foregroundStyle(state == .played ? .secondary : .primary)
             Spacer()
@@ -62,6 +65,19 @@ public struct ChapterRow: View {
         )
         .onHover { isHovering = $0 }
         .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+    }
+
+    /// The title with the searched phrase in the match color.
+    private var highlightedTitle: AttributedString {
+        var title = AttributedString(chapter.title)
+        guard !searchQuery.isEmpty else { return title }
+        var searchStart = title.startIndex
+        while searchStart < title.endIndex,
+              let range = title[searchStart...].range(of: searchQuery, options: .caseInsensitive) {
+            title[range].foregroundColor = Color(PlatformColor.matchHighlight)
+            searchStart = range.upperBound
+        }
+        return title
     }
 
     @ViewBuilder

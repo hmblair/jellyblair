@@ -18,6 +18,8 @@ extension NSColor {
     static var secondaryLabel: NSColor { .secondaryLabelColor }
     static var label: NSColor { .labelColor }
     static var accent: NSColor { .controlAccentColor }
+    /// The color of search matches, everywhere search highlights text.
+    static var matchHighlight: NSColor { .systemRed }
 }
 #else
 import UIKit
@@ -34,6 +36,8 @@ typealias PlatformColor = UIColor
 /// The accent color under the same name as its NSColor counterpart.
 extension UIColor {
     static var accent: UIColor { .tintColor }
+    /// The color of search matches, everywhere search highlights text.
+    static var matchHighlight: UIColor { .systemRed }
 }
 #endif
 

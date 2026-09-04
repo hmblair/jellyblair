@@ -25,6 +25,14 @@ public struct BookView: View {
     @State private var isHoveringTranscriptToggle = false
     @State private var isHoveringDownload = false
 
+    /// The position of the search match the arrows navigated to.
+    @State private var matchIndex = 0
+    /// Match count reported by the transcript view for the current query.
+    @State private var transcriptMatchCount = 0
+    /// True while a fresh query waits for its match count, so the first
+    /// match centers as soon as the matches are known.
+    @State private var pendingTranscriptJump = false
+
     /// Removal asks once: the first tap shows a red question mark that
     /// reverts after a few seconds; a second tap within that window deletes.
     @State private var isConfirmingRemoval = false
@@ -51,19 +59,15 @@ public struct BookView: View {
         connection.isServerReachable || model.downloadState == .downloaded
     }
 
-    /// Chapters whose titles contain the query; all of them when it is empty.
-    /// Filtering only subsets the rows, so progress marks stay truthful.
-    private var visibleChapters: [Chapter] {
-        let trimmed = filterQuery.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return chapters }
-        return chapters.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+    /// The search phrase, without surrounding whitespace.
+    private var trimmedQuery: String {
+        filterQuery.trimmingCharacters(in: .whitespaces)
     }
 
-    /// Transcript lines whose text contains the query; all of them when it is empty.
-    private var visibleLines: [LyricLine] {
-        let trimmed = filterQuery.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return model.lyrics }
-        return model.lyrics.filter { $0.text.localizedCaseInsensitiveContains(trimmed) }
+    /// Ids of the chapters whose titles contain the query.
+    private var matchingChapterIDs: [Int] {
+        guard !trimmedQuery.isEmpty else { return [] }
+        return chapters.filter { $0.title.range(of: trimmedQuery, options: .caseInsensitive) != nil }.map(\.index)
     }
 
     public var body: some View {
@@ -152,7 +156,7 @@ public struct BookView: View {
                 }
                 .fadedUnderFloatingBar(fadesBottom: true)
                 HStack(spacing: 8) {
-                    filterField
+                    filterField(proxy)
                     if hasTranscript {
                         transcriptToggle
                     }
@@ -162,17 +166,49 @@ public struct BookView: View {
                 .padding(.horizontal, 20)
                 #endif
             }
+            .onChange(of: filterQuery) { _, _ in
+                matchIndex = 0
+                guard !trimmedQuery.isEmpty else { return }
+                if isShowingTranscript {
+                    pendingTranscriptJump = true
+                } else {
+                    jumpToChapterMatch(0, proxy)
+                }
+            }
         }
     }
 
+    /// Jumps to the search match at the index, wrapping around the ends.
+    private func jumpToMatch(_ index: Int, _ proxy: ScrollViewProxy) {
+        if isShowingTranscript {
+            jumpToTranscriptMatch(index)
+        } else {
+            jumpToChapterMatch(index, proxy)
+        }
+    }
+
+    private func jumpToTranscriptMatch(_ index: Int) {
+        guard transcriptMatchCount > 0 else { return }
+        matchIndex = (index + transcriptMatchCount) % transcriptMatchCount
+        transcriptController.center(onMatch: matchIndex, animated: true)
+        player.isTrackingPosition = false
+    }
+
+    private func jumpToChapterMatch(_ index: Int, _ proxy: ScrollViewProxy) {
+        let ids = matchingChapterIDs
+        guard !ids.isEmpty else { return }
+        matchIndex = (index + ids.count) % ids.count
+        withAnimation { proxy.scrollTo(ids[matchIndex], anchor: .center) }
+        player.isTrackingPosition = false
+    }
+
     /// Toggles tracking, which is on by default and shared across books.
-    /// Turning it on clears any filter that hides the position and centers
-    /// it right away. Scrolling the list by hand turns tracking off.
+    /// Turning it on centers the position right away. Scrolling the list by
+    /// hand or jumping to a search match turns tracking off.
     private func trackingButton(_ proxy: ScrollViewProxy) -> some View {
         Button {
             player.isTrackingPosition.toggle()
             guard player.isTrackingPosition else { return }
-            filterQuery = ""
             Task { @MainActor in
                 centerOnTrackedPosition(proxy)
             }
@@ -231,8 +267,41 @@ public struct BookView: View {
         .help(isShowingTranscript ? "Show the chapters" : "Show the transcript")
     }
 
-    private var filterField: some View {
-        CapsuleSearchField(isShowingTranscript ? "Search Transcript" : "Search Chapters", text: $filterQuery)
+    private func filterField(_ proxy: ScrollViewProxy) -> some View {
+        CapsuleSearchField(isShowingTranscript ? "Search Transcript" : "Search Chapters", text: $filterQuery) {
+            if !trimmedQuery.isEmpty {
+                matchNavigator(proxy)
+            }
+        }
+        .onSubmit {
+            jumpToMatch(matchIndex + 1, proxy)
+        }
+    }
+
+    /// Ghost find controls at the search field's right edge: the match
+    /// position and arrows stepping through the matches.
+    private func matchNavigator(_ proxy: ScrollViewProxy) -> some View {
+        let count = isShowingTranscript ? transcriptMatchCount : matchingChapterIDs.count
+        return HStack(spacing: 4) {
+            Text(count == 0 ? "0/0" : "\(matchIndex + 1)/\(count)")
+                .monospacedDigit()
+            Button {
+                jumpToMatch(matchIndex - 1, proxy)
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .buttonStyle(.plain)
+            .disabled(count == 0)
+            Button {
+                jumpToMatch(matchIndex + 1, proxy)
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.plain)
+            .disabled(count == 0)
+        }
+        .font(.caption)
+        .foregroundStyle(.tertiary)
     }
 
     // MARK: - Header
@@ -469,11 +538,12 @@ public struct BookView: View {
         // Computed once per pass: a long book realizes over a thousand rows,
         // so per-row work must stay constant-time.
         let marked = markedChapterIndex
-        return List(visibleChapters) { chapter in
+        return List(chapters) { chapter in
                 ChapterRow(
                     chapter: chapter,
                     state: rowState(for: chapter, marked: marked),
-                    meter: player.audioMeter
+                    meter: player.audioMeter,
+                    searchQuery: trimmedQuery
                 )
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -500,8 +570,6 @@ public struct BookView: View {
                         Text("No chapters in this file")
                             .foregroundStyle(.secondary)
                     }
-                } else if visibleChapters.isEmpty {
-                    ContentUnavailableView.search(text: filterQuery)
                 }
             }
             // One trigger for centering: fires on appear and whenever the
@@ -552,9 +620,7 @@ public struct BookView: View {
     /// Centers the list on the marked chapter shortly after opening,
     /// then disarms so playback does not move a list being browsed.
     private func scrollToMarkedChapter(_ proxy: ScrollViewProxy) {
-        guard let index = markedChapterIndex,
-              visibleChapters.contains(where: { $0.index == index })
-        else { return }
+        guard let index = markedChapterIndex else { return }
         proxy.scrollTo(index, anchor: .center)
     }
 
@@ -583,9 +649,9 @@ public struct BookView: View {
     private var transcriptList: some View {
         // Computed outside the tick closure, so the per-line walks do not run per word.
         let titleLineIndices = titleLineIndices
-        let visibleLines = visibleLines
+        let lines = model.lyrics
         return TimelineView(transcriptTickSchedule) { context in
-            transcriptText(at: listeningPosition(at: context.date), lines: visibleLines, titleLineIndices: titleLineIndices)
+            transcriptText(at: listeningPosition(at: context.date), lines: lines, titleLineIndices: titleLineIndices)
         }
         .task(id: book.id) {
             await model.fetchLyricsIfNeeded()
@@ -609,6 +675,15 @@ public struct BookView: View {
             titleLineIndices: titleLineIndices,
             positionSeconds: positionSeconds,
             isTracking: player.isTrackingPosition,
+            searchQuery: trimmedQuery,
+            onMatchCount: { count in
+                transcriptMatchCount = count
+                matchIndex = min(matchIndex, max(0, count - 1))
+                if pendingTranscriptJump {
+                    pendingTranscriptJump = false
+                    jumpToTranscriptMatch(0)
+                }
+            },
             topInset: floatingBarZoneHeight + 6,
             bottomInset: Self.bottomRestingInset,
             horizontalPadding: Self.transcriptHorizontalPadding,
@@ -631,8 +706,6 @@ public struct BookView: View {
                     Text("No transcript for this book")
                         .foregroundStyle(.secondary)
                 }
-            } else if lines.isEmpty {
-                ContentUnavailableView.search(text: filterQuery)
             }
         }
     }

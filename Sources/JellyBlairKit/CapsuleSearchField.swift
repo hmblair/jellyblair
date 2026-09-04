@@ -1,14 +1,16 @@
 import SwiftUI
 
-/// The app's search field: a slim capsule with a magnifier and a clear
-/// button, used by the library and chapter lists.
-public struct CapsuleSearchField: View {
+/// The app's search field: a slim capsule with a magnifier, a clear button,
+/// and room for a trailing accessory, used by the library and chapter lists.
+public struct CapsuleSearchField<Accessory: View>: View {
     let prompt: String
     @Binding var text: String
+    let accessory: Accessory
 
-    public init(_ prompt: String, text: Binding<String>) {
+    public init(_ prompt: String, text: Binding<String>, @ViewBuilder accessory: () -> Accessory) {
         self.prompt = prompt
         _text = text
+        self.accessory = accessory()
     }
 
     public var body: some View {
@@ -19,6 +21,7 @@ public struct CapsuleSearchField: View {
             TextField(prompt, text: $text)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
+            accessory
             if !text.isEmpty {
                 Button {
                     text = ""
@@ -35,5 +38,11 @@ public struct CapsuleSearchField: View {
             Capsule()
                 .fill(Color.primary.opacity(0.06))
         )
+    }
+}
+
+public extension CapsuleSearchField where Accessory == EmptyView {
+    init(_ prompt: String, text: Binding<String>) {
+        self.init(prompt, text: text) { EmptyView() }
     }
 }

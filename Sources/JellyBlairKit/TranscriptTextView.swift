@@ -17,6 +17,11 @@ public final class TranscriptController {
     public func centerOnSpokenWord(animated: Bool) {
         coordinator?.centerOnSpokenWord(forced: true, animated: animated)
     }
+
+    /// Centers the search match at the given position.
+    public func center(onMatch index: Int, animated: Bool) {
+        coordinator?.center(onMatch: index, animated: animated)
+    }
 }
 
 /// The transcript as one native text view. The text system lays the whole
@@ -31,6 +36,10 @@ public struct TranscriptTextView {
     let positionSeconds: Double
     /// True while the view keeps the spoken word centered.
     let isTracking: Bool
+    /// The phrase whose occurrences color as search matches.
+    let searchQuery: String
+    /// Called with the number of search matches whenever they recompute.
+    let onMatchCount: (Int) -> Void
     /// Space kept clear at the top, under the floating filter bar.
     let topInset: CGFloat
     /// Resting clearance under the last line.
@@ -50,6 +59,8 @@ public struct TranscriptTextView {
         titleLineIndices: Set<Int>,
         positionSeconds: Double,
         isTracking: Bool,
+        searchQuery: String,
+        onMatchCount: @escaping (Int) -> Void,
         topInset: CGFloat,
         bottomInset: CGFloat,
         horizontalPadding: CGFloat,
@@ -62,6 +73,8 @@ public struct TranscriptTextView {
         self.titleLineIndices = titleLineIndices
         self.positionSeconds = positionSeconds
         self.isTracking = isTracking
+        self.searchQuery = searchQuery
+        self.onMatchCount = onMatchCount
         self.topInset = topInset
         self.bottomInset = bottomInset
         self.horizontalPadding = horizontalPadding
@@ -124,6 +137,10 @@ public final class TranscriptTextCoordinator: NSObject {
     private var view: TranscriptTextView?
     private var currentLine: Int?
     private var spokenCueIndex: Int?
+    /// UTF-16 ranges of the search matches inside the storage, in order.
+    private var matchRanges: [NSRange] = []
+    /// The query the stored matches were found with.
+    private var appliedQuery = ""
     /// The last vertical center the view scrolled to, so following scrolls
     /// once per visual line, not once per word.
     private var centeredY: CGFloat?
@@ -207,6 +224,9 @@ public final class TranscriptTextCoordinator: NSObject {
         if contentChanged {
             rebuildContent()
         }
+        if contentChanged || view.searchQuery != appliedQuery {
+            applySearch()
+        }
         followPosition(recentered: contentChanged)
     }
 
@@ -286,6 +306,7 @@ public final class TranscriptTextCoordinator: NSObject {
         static var read: PlatformColor { .secondaryLabel }
         static var unread: PlatformColor { .label }
         static var spoken: PlatformColor { .accent }
+        static var match: PlatformColor { .matchHighlight }
 
         static var paragraph: NSParagraphStyle {
             let style = NSMutableParagraphStyle()
@@ -310,6 +331,7 @@ public final class TranscriptTextCoordinator: NSObject {
         titleLineIndices = view.titleLineIndices
         lineRanges = []
         timedLines = []
+        matchRanges = []
         currentLine = nil
         spokenCueIndex = nil
         centeredY = nil
@@ -349,16 +371,24 @@ public final class TranscriptTextCoordinator: NSObject {
 
     /// Recolors from the stored line and cue to the given ones: whole lines
     /// take their read or unread color, and the current line colors its read
-    /// part, spoken cue, and unread rest.
+    /// part, spoken cue, and unread rest. Search matches repaint on top.
     private func recolor(fromLine previousLine: Int?, toLine line: Int?, cue: Int?) {
         guard let storage else { return }
         let oldLine = previousLine ?? 0
         let newLine = line ?? 0
-        for position in min(oldLine, newLine)...max(oldLine, newLine) where lineRanges.indices.contains(position) {
+        let low = min(oldLine, newLine)
+        let high = max(oldLine, newLine)
+        for position in low...high where lineRanges.indices.contains(position) {
             let read = line.map { position < $0 } ?? false
             storage.addAttribute(.foregroundColor, value: read ? Style.read : Style.unread, range: lineRanges[position])
         }
-        guard let line, lineRanges.indices.contains(line) else { return }
+        paintSpokenLine(line, cue: cue)
+        repaintMatches(intersecting: linesRange(from: low, to: high))
+    }
+
+    /// Colors the given line's read part, spoken cue, and unread rest.
+    private func paintSpokenLine(_ line: Int?, cue: Int?) {
+        guard let storage, let line, lineRanges.indices.contains(line) else { return }
         let range = lineRanges[line]
         storage.addAttribute(.foregroundColor, value: Style.unread, range: range)
         guard let cue else { return }
@@ -374,6 +404,73 @@ public final class TranscriptTextCoordinator: NSObject {
         }
     }
 
+    /// The storage range spanning the given line positions, clamped to the
+    /// known lines.
+    private func linesRange(from low: Int, to high: Int) -> NSRange {
+        guard let first = lineRanges.indices.contains(low) ? lineRanges[low] : lineRanges.first,
+              let last = lineRanges.indices.contains(high) ? lineRanges[high] : lineRanges.last
+        else { return NSRange(location: 0, length: 0) }
+        return NSRange(location: first.location, length: last.location + last.length - first.location)
+    }
+
+    // MARK: - Search
+
+    /// Finds the query's occurrences and repaints the text: positional
+    /// colors first, then the match color over each occurrence.
+    private func applySearch() {
+        guard let view, let storage else { return }
+        appliedQuery = view.searchQuery
+        matchRanges = matches(of: appliedQuery, in: storage.string)
+        for position in lineRanges.indices {
+            let read = currentLine.map { position < $0 } ?? false
+            storage.addAttribute(.foregroundColor, value: read ? Style.read : Style.unread, range: lineRanges[position])
+        }
+        paintSpokenLine(currentLine, cue: spokenCueIndex)
+        for range in matchRanges {
+            storage.addAttribute(.foregroundColor, value: Style.match, range: range)
+        }
+        let count = matchRanges.count
+        let report = view.onMatchCount
+        // Reported outside the SwiftUI update this runs in.
+        Task { @MainActor in report(count) }
+    }
+
+    /// Every occurrence of the query in the text, in order. Empty for a
+    /// blank query.
+    private func matches(of query: String, in text: String) -> [NSRange] {
+        guard !query.isEmpty else { return [] }
+        let full = text as NSString
+        var ranges: [NSRange] = []
+        var start = 0
+        while start < full.length {
+            let range = full.range(of: query, options: .caseInsensitive, range: NSRange(location: start, length: full.length - start))
+            guard range.location != NSNotFound else { break }
+            ranges.append(range)
+            start = range.location + max(range.length, 1)
+        }
+        return ranges
+    }
+
+    /// Repaints the match color over the occurrences intersecting the range,
+    /// found by binary search.
+    private func repaintMatches(intersecting range: NSRange) {
+        guard let storage, !matchRanges.isEmpty else { return }
+        var low = 0
+        var high = matchRanges.count
+        while low < high {
+            let mid = (low + high) / 2
+            if matchRanges[mid].location + matchRanges[mid].length <= range.location {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        while low < matchRanges.count, matchRanges[low].location < range.location + range.length {
+            storage.addAttribute(.foregroundColor, value: Style.match, range: matchRanges[low])
+            low += 1
+        }
+    }
+
     // MARK: - Centering
 
     /// Scrolls the spoken word's visual line to the viewport's center. The
@@ -382,6 +479,12 @@ public final class TranscriptTextCoordinator: NSObject {
     func centerOnSpokenWord(forced: Bool, animated: Bool) {
         guard let range = spokenTargetRange() else { return }
         center(onStorageRange: range, forced: forced, animated: animated)
+    }
+
+    /// Centers the search match at the given position.
+    func center(onMatch index: Int, animated: Bool) {
+        guard matchRanges.indices.contains(index) else { return }
+        center(onStorageRange: matchRanges[index], forced: true, animated: animated)
     }
 
     /// Scrolls the range's visual line to the viewport's center, unless it
