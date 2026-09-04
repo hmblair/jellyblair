@@ -259,6 +259,12 @@ public struct BookView: View {
         .onSubmit {
             stepMatch(by: 1, proxy)
         }
+        // Shift-return steps backward; plain return falls through to onSubmit.
+        .onKeyPress(keys: [.return]) { press in
+            guard press.modifiers.contains(.shift) else { return .ignored }
+            stepMatch(by: -1, proxy)
+            return .handled
+        }
     }
 
     /// Ghost find controls at the search field's right edge: the match
