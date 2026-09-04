@@ -12,12 +12,10 @@ struct LibraryView: View {
     @Environment(PlayerController.self) private var player
     @Environment(BookCatalog.self) private var catalog
 
-    @State private var searchQuery = ""
-    @State private var showDownloadedOnly = false
-    @State private var showInProgressOnly = false
+    @State private var filters = LibraryFilters()
 
     private var visibleGroups: [BookGroup] {
-        library.visibleGroups(matching: searchQuery, downloadedOnly: showDownloadedOnly, inProgressOnly: showInProgressOnly, catalog: catalog)
+        library.visibleGroups(filters: filters, catalog: catalog)
     }
 
     var body: some View {
@@ -25,12 +23,7 @@ struct LibraryView: View {
             bookList
                 .fadedUnderFloatingBar()
 
-            LibraryFilterBar(
-                searchQuery: $searchQuery,
-                showDownloadedOnly: $showDownloadedOnly,
-                showInProgressOnly: $showInProgressOnly,
-                showsGroupToggle: scope == nil
-            )
+            LibraryFilterBar(filters: $filters, showsGroupToggle: scope == nil)
             .padding(.horizontal, 10)
         }
         .navigationTitle("Audiobooks")
@@ -40,7 +33,7 @@ struct LibraryView: View {
         List(selection: $selection) {
             if let scope {
                 Section {
-                    ForEach(library.visibleBooks(in: scope, matching: searchQuery, downloadedOnly: showDownloadedOnly, inProgressOnly: showInProgressOnly, catalog: catalog)) { book in
+                    ForEach(library.visibleBooks(in: scope, filters: filters, catalog: catalog)) { book in
                         row(for: book)
                     }
                 } header: {
@@ -67,7 +60,7 @@ struct LibraryView: View {
             Color.clear.frame(height: floatingBarZoneHeight + 6)
         }
         .overlay {
-            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleGroups.isEmpty, searchQuery: searchQuery)
+            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleGroups.isEmpty, searchQuery: filters.searchQuery)
         }
     }
 
@@ -77,13 +70,13 @@ struct LibraryView: View {
     }
 
     private func enterScope(_ group: BookGroup) {
-        searchQuery = ""
+        filters.searchQuery = ""
         // The clicked group can be a filtered subset; scope to the full one.
         scope = library.fullGroup(matching: group) ?? group
     }
 
     private func exitScope() {
-        searchQuery = ""
+        filters.searchQuery = ""
         scope = nil
     }
 }

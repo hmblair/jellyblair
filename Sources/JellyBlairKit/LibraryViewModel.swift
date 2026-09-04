@@ -52,6 +52,16 @@ public struct BookGroup: Identifiable, Hashable {
 
 }
 
+/// The library list's filters, threaded whole from the filter bar to the
+/// visibility functions, so a new filter touches neither platform's screen.
+public struct LibraryFilters: Equatable {
+    public var searchQuery = ""
+    public var downloadedOnly = false
+    public var inProgressOnly = false
+
+    public init() {}
+}
+
 /// Holds the audiobook list and its sidebar grouping by author.
 @MainActor
 @Observable
@@ -136,23 +146,23 @@ public final class LibraryViewModel {
 
     /// Groups of the active kind matching the query, keeping only the books
     /// that pass the active filters.
-    public func visibleGroups(matching query: String, downloadedOnly: Bool, inProgressOnly: Bool, catalog: BookCatalog) -> [BookGroup] {
-        groups(matching: query).compactMap { group in
-            group.keeping { passesFilters($0, downloadedOnly: downloadedOnly, inProgressOnly: inProgressOnly, catalog: catalog) }
+    public func visibleGroups(filters: LibraryFilters, catalog: BookCatalog) -> [BookGroup] {
+        groups(matching: filters.searchQuery).compactMap { group in
+            group.keeping { passesFilters($0, filters: filters, catalog: catalog) }
         }
     }
 
     /// One group's books matching the query, keeping only the books that
     /// pass the active filters.
-    public func visibleBooks(in group: BookGroup, matching query: String, downloadedOnly: Bool, inProgressOnly: Bool, catalog: BookCatalog) -> [Book] {
-        books(in: group, matching: query)
-            .filter { passesFilters($0, downloadedOnly: downloadedOnly, inProgressOnly: inProgressOnly, catalog: catalog) }
+    public func visibleBooks(in group: BookGroup, filters: LibraryFilters, catalog: BookCatalog) -> [Book] {
+        books(in: group, matching: filters.searchQuery)
+            .filter { passesFilters($0, filters: filters, catalog: catalog) }
     }
 
     /// True when the book passes every filter that is on.
-    private func passesFilters(_ book: Book, downloadedOnly: Bool, inProgressOnly: Bool, catalog: BookCatalog) -> Bool {
-        (!downloadedOnly || catalog.isDownloaded(book))
-            && (!inProgressOnly || catalog.isInProgress(book))
+    private func passesFilters(_ book: Book, filters: LibraryFilters, catalog: BookCatalog) -> Bool {
+        (!filters.downloadedOnly || catalog.isDownloaded(book))
+            && (!filters.inProgressOnly || catalog.isInProgress(book))
     }
 
     /// One group's books, filtered by the query when it is not empty.

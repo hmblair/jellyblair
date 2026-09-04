@@ -15,11 +15,10 @@ struct LibraryScreen: View {
     @Environment(\.openGenre) private var openGenre
 
     @State private var isShowingSettings = false
-    @State private var searchQuery = ""
-    @State private var showDownloadedOnly = false
+    @State private var filters = LibraryFilters()
 
     private var visibleGroups: [BookGroup] {
-        library.visibleGroups(matching: searchQuery, downloadedOnly: showDownloadedOnly, catalog: catalog)
+        library.visibleGroups(filters: filters, catalog: catalog)
     }
 
     var body: some View {
@@ -27,11 +26,7 @@ struct LibraryScreen: View {
             bookList
                 .fadedUnderFloatingBar()
 
-            LibraryFilterBar(
-                searchQuery: $searchQuery,
-                showDownloadedOnly: $showDownloadedOnly,
-                showsGroupToggle: scope == nil
-            )
+            LibraryFilterBar(filters: $filters, showsGroupToggle: scope == nil)
             .padding(.horizontal, 20)
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -53,7 +48,7 @@ struct LibraryScreen: View {
         List {
             if let scope {
                 Section {
-                    ForEach(library.visibleBooks(in: scope, matching: searchQuery, downloadedOnly: showDownloadedOnly, catalog: catalog)) { book in
+                    ForEach(library.visibleBooks(in: scope, filters: filters, catalog: catalog)) { book in
                         BookRowLink(book: book)
                     }
                 } header: {
@@ -80,7 +75,7 @@ struct LibraryScreen: View {
             await library.load()
         }
         .overlay {
-            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleGroups.isEmpty, searchQuery: searchQuery)
+            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleGroups.isEmpty, searchQuery: filters.searchQuery)
         }
     }
 

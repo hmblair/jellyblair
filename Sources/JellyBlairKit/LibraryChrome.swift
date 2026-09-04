@@ -36,17 +36,13 @@ public extension View {
 /// The floating bar over a library list: the search field, the grouping
 /// toggle when the list is unscoped, and the downloaded-only filter.
 public struct LibraryFilterBar: View {
-    @Binding var searchQuery: String
-    @Binding var showDownloadedOnly: Bool
-    @Binding var showInProgressOnly: Bool
+    @Binding var filters: LibraryFilters
     let showsGroupToggle: Bool
 
     @Environment(LibraryViewModel.self) private var library
 
-    public init(searchQuery: Binding<String>, showDownloadedOnly: Binding<Bool>, showInProgressOnly: Binding<Bool>, showsGroupToggle: Bool) {
-        _searchQuery = searchQuery
-        _showDownloadedOnly = showDownloadedOnly
-        _showInProgressOnly = showInProgressOnly
+    public init(filters: Binding<LibraryFilters>, showsGroupToggle: Bool) {
+        _filters = filters
         self.showsGroupToggle = showsGroupToggle
     }
 
@@ -54,7 +50,7 @@ public struct LibraryFilterBar: View {
         // The bar's height comes from the search field; the capsule
         // buttons stretch to match it exactly.
         HStack(spacing: 8) {
-            CapsuleSearchField("Search", text: $searchQuery)
+            CapsuleSearchField("Search", text: $filters.searchQuery)
             if showsGroupToggle {
                 groupToggle
             }
@@ -74,10 +70,10 @@ public struct LibraryFilterBar: View {
     private var inProgressToggle: some View {
         CapsuleIconButton(
             "bookmark.fill",
-            isOn: showInProgressOnly,
-            help: showInProgressOnly ? "Show all books" : "Show only books in progress"
+            isOn: filters.inProgressOnly,
+            help: filters.inProgressOnly ? "Show all books" : "Show only books in progress"
         ) {
-            showInProgressOnly.toggle()
+            filters.inProgressOnly.toggle()
         }
     }
 
@@ -85,10 +81,10 @@ public struct LibraryFilterBar: View {
         CapsuleIconButton(
             "arrow.down",
             weight: .semibold,
-            isOn: showDownloadedOnly,
-            help: showDownloadedOnly ? "Show all books" : "Show only downloaded books"
+            isOn: filters.downloadedOnly,
+            help: filters.downloadedOnly ? "Show all books" : "Show only downloaded books"
         ) {
-            showDownloadedOnly.toggle()
+            filters.downloadedOnly.toggle()
         }
     }
 }
