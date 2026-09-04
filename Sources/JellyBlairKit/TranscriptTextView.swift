@@ -178,7 +178,7 @@ public final class TranscriptTextCoordinator: NSObject {
     private static let scrollDuration: TimeInterval = 0.4
 
     #if canImport(AppKit)
-    private var scrollView: NSScrollView!
+    private var scrollView: MomentumCancellingScrollView!
     private var textView: NSTextView!
     private var scrollObserver: NSObjectProtocol?
     #else
@@ -197,7 +197,7 @@ public final class TranscriptTextCoordinator: NSObject {
         textView.autoresizingMask = [.width]
         self.textView = textView
 
-        let scrollView = NSScrollView()
+        let scrollView = MomentumCancellingScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
@@ -827,10 +827,12 @@ public final class TranscriptTextCoordinator: NSObject {
     }
 
     /// Scrolls so the given document y sits at the center of the region
-    /// between the insets.
+    /// between the insets. Leftover momentum from a user scroll dies here,
+    /// so it cannot pull the view off the target afterwards.
     private func scroll(toCenterY y: CGFloat, animated: Bool) {
         guard let view else { return }
         #if canImport(AppKit)
+        scrollView.dropsMomentum = true
         let clip = scrollView.contentView
         let visible = clip.bounds.height - view.topInset - view.bottomInset
         let limit = max(-view.topInset, textView.frame.height - clip.bounds.height + view.bottomInset)
@@ -847,6 +849,9 @@ public final class TranscriptTextCoordinator: NSObject {
             scrollView.reflectScrolledClipView(clip)
         }
         #else
+        if textView.isDecelerating {
+            textView.setContentOffset(textView.contentOffset, animated: false)
+        }
         let inset = textView.contentInset
         let visible = textView.bounds.height - inset.top - inset.bottom
         let limit = max(-inset.top, textView.contentSize.height - textView.bounds.height + inset.bottom)
@@ -919,6 +924,23 @@ public final class TranscriptTextCoordinator: NSObject {
 extension TranscriptTextCoordinator: UITextViewDelegate {
     public func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         view?.onUserScroll()
+    }
+}
+#else
+/// A scroll view that swallows the tail of a momentum scroll after a
+/// programmatic centering, so leftover momentum cannot pull the view off
+/// the target. A fresh user gesture scrolls normally and clears the flag.
+final class MomentumCancellingScrollView: NSScrollView {
+    /// Set by each programmatic scroll.
+    var dropsMomentum = false
+
+    override func scrollWheel(with event: NSEvent) {
+        if event.momentumPhase == [] {
+            dropsMomentum = false
+        } else if dropsMomentum {
+            return
+        }
+        super.scrollWheel(with: event)
     }
 }
 #endif
