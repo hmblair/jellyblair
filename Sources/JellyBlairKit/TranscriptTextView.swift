@@ -514,23 +514,7 @@ public final class TranscriptTextCoordinator: NSObject {
     }
 }
 
-#if canImport(AppKit)
-private typealias PlatformFont = NSFont
-private typealias PlatformColor = NSColor
-
-private extension NSColor {
-    static var secondaryLabel: NSColor { .secondaryLabelColor }
-    static var label: NSColor { .labelColor }
-    static var accent: NSColor { .controlAccentColor }
-}
-#else
-private typealias PlatformFont = UIFont
-private typealias PlatformColor = UIColor
-
-private extension UIColor {
-    static var accent: UIColor { .tintColor }
-}
-
+#if !canImport(AppKit)
 extension TranscriptTextCoordinator: UITextViewDelegate {
     public func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         view?.onUserScroll()

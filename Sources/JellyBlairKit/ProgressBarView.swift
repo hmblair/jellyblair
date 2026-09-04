@@ -43,12 +43,6 @@ extension AnimatedProgressBar: UIViewRepresentable {
 }
 #endif
 
-#if canImport(AppKit)
-typealias PlatformNativeView = NSView
-#else
-typealias PlatformNativeView = UIView
-#endif
-
 /// The layer-backed platform view behind AnimatedProgressBar.
 final class ProgressBarLayerView: PlatformNativeView {
     private static let barHeight: CGFloat = 7
