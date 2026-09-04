@@ -16,6 +16,7 @@ struct ChapterListPane: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var query = ""
+    @State private var isCaseSensitive = false
     /// The position of the matching chapter the arrows navigated to.
     @State private var matchIndex = 0
     /// Whether the list follows the marked chapter. On by default; scrolling
@@ -30,7 +31,9 @@ struct ChapterListPane: View {
     /// Ids of the chapters whose titles contain the query.
     private var matchingChapterIDs: [Int] {
         guard !trimmedQuery.isEmpty else { return [] }
-        return chapters.filter { $0.title.range(of: trimmedQuery, options: .caseInsensitive) != nil }.map(\.index)
+        return chapters
+            .filter { !findOccurrences(of: trimmedQuery, in: $0.title as NSString, caseSensitive: isCaseSensitive, limit: 1).isEmpty }
+            .map(\.index)
     }
 
     var body: some View {
@@ -41,9 +44,10 @@ struct ChapterListPane: View {
                     trackingButton(proxy)
                 }
                 .onChange(of: query) { _, _ in
-                    matchIndex = 0
-                    guard !trimmedQuery.isEmpty else { return }
-                    jumpToNearestMatch(proxy)
+                    restartSearch(proxy)
+                }
+                .onChange(of: isCaseSensitive) { _, _ in
+                    restartSearch(proxy)
                 }
         }
     }
@@ -54,7 +58,8 @@ struct ChapterListPane: View {
                     chapter: chapter,
                     state: rowState(for: chapter),
                     meter: player.audioMeter,
-                    searchQuery: trimmedQuery
+                    searchQuery: trimmedQuery,
+                    searchIsCaseSensitive: isCaseSensitive
                 )
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -133,7 +138,7 @@ struct ChapterListPane: View {
     private func searchField(_ proxy: ScrollViewProxy) -> some View {
         CapsuleSearchField("Search Chapters", text: $query) {
             if !trimmedQuery.isEmpty {
-                MatchNavigator(count: matchingChapterIDs.count, index: matchIndex, isSearching: false) { delta in
+                MatchNavigator(isCaseSensitive: $isCaseSensitive, count: matchingChapterIDs.count, index: matchIndex, isSearching: false) { delta in
                     step(by: delta, proxy)
                 }
             }
@@ -151,6 +156,13 @@ struct ChapterListPane: View {
 
     private func step(by delta: Int, _ proxy: ScrollViewProxy) {
         jump(to: matchIndex + delta, proxy)
+    }
+
+    /// Restarts the match position after the query or its sensitivity changes.
+    private func restartSearch(_ proxy: ScrollViewProxy) {
+        matchIndex = 0
+        guard !trimmedQuery.isEmpty else { return }
+        jumpToNearestMatch(proxy)
     }
 
     /// A fresh query lands on the first matching chapter at or past the

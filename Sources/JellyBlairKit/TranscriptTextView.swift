@@ -51,6 +51,8 @@ public struct TranscriptTextView {
     let isVisible: Bool
     /// The phrase whose occurrences color as search matches.
     let searchQuery: String
+    /// True when the search matches case exactly.
+    let searchIsCaseSensitive: Bool
     /// Space kept clear at the top, under the floating filter bar.
     let topInset: CGFloat
     /// Resting clearance under the last line.
@@ -70,6 +72,7 @@ public struct TranscriptTextView {
         isTracking: Bool,
         isVisible: Bool,
         searchQuery: String,
+        searchIsCaseSensitive: Bool,
         topInset: CGFloat,
         bottomInset: CGFloat,
         horizontalPadding: CGFloat,
@@ -83,6 +86,7 @@ public struct TranscriptTextView {
         self.isTracking = isTracking
         self.isVisible = isVisible
         self.searchQuery = searchQuery
+        self.searchIsCaseSensitive = searchIsCaseSensitive
         self.topInset = topInset
         self.bottomInset = bottomInset
         self.horizontalPadding = horizontalPadding
@@ -154,10 +158,12 @@ public final class TranscriptTextCoordinator: NSObject {
     private var matchRanges: [NSRange] = []
     /// The position of the match the navigation stands on.
     private var matchIndex = 0
-    /// The query whose search last started.
+    /// The query whose search last started, and its case sensitivity.
     private var appliedQuery = ""
-    /// The query whose matches finished and painted.
+    private var appliedCaseSensitive = false
+    /// The query whose matches finished and painted, and its case sensitivity.
     private var completedQuery = ""
+    private var completedCaseSensitive = false
     /// The plain text of the storage, snapshotted for background searching.
     private var searchText = ""
     private var searchTask: Task<Void, Never>?
@@ -255,7 +261,7 @@ public final class TranscriptTextCoordinator: NSObject {
         } else if textView.bounds.width != laidOutWidth {
             startFullLayout()
         }
-        if contentChanged || view.searchQuery != appliedQuery {
+        if contentChanged || view.searchQuery != appliedQuery || view.searchIsCaseSensitive != appliedCaseSensitive {
             applySearch()
         }
         followPosition(recentered: contentChanged)
@@ -577,7 +583,9 @@ public final class TranscriptTextCoordinator: NSObject {
     private func applySearch() {
         guard let view else { return }
         let query = view.searchQuery
+        let caseSensitive = view.searchIsCaseSensitive
         appliedQuery = query
+        appliedCaseSensitive = caseSensitive
         searchTask?.cancel()
         searchTask = nil
         guard !query.isEmpty else {
@@ -596,15 +604,17 @@ public final class TranscriptTextCoordinator: NSObject {
         setSearching(true)
         let text = searchText
         // A result that hit the match limit covers only the document's start,
-        // so narrowing from it would lose every match past the cutoff.
-        let narrowing = matchRanges.isEmpty || matchRanges.count >= Self.matchLimit
+        // so narrowing from it would lose every match past the cutoff. A
+        // result of a different sensitivity does not contain this search's
+        // match starts at all.
+        let narrowing = matchRanges.isEmpty || matchRanges.count >= Self.matchLimit || completedCaseSensitive != caseSensitive
             ? nil
             : (query: completedQuery, ranges: matchRanges)
         searchTask = Task.detached(priority: .userInitiated) { [weak self] in
-            let ranges = Self.findMatches(of: query, in: text, narrowingFrom: narrowing)
+            let ranges = Self.findMatches(of: query, in: text, caseSensitive: caseSensitive, narrowingFrom: narrowing)
             guard !Task.isCancelled else { return }
             await MainActor.run { [weak self] in
-                self?.finishSearch(query: query, ranges: ranges)
+                self?.finishSearch(query: query, caseSensitive: caseSensitive, ranges: ranges)
             }
         }
     }
@@ -612,9 +622,9 @@ public final class TranscriptTextCoordinator: NSObject {
     /// Installs a finished search: the old match colors revert, the new
     /// matches paint in one batch, and a fresh query lands on the first
     /// match at or past the spoken line, like find starting from a cursor.
-    private func finishSearch(query: String, ranges: [NSRange]) {
-        guard query == appliedQuery, let storage else { return }
-        let isFreshQuery = query != completedQuery
+    private func finishSearch(query: String, caseSensitive: Bool, ranges: [NSRange]) {
+        guard query == appliedQuery, caseSensitive == appliedCaseSensitive, let storage else { return }
+        let isFreshQuery = query != completedQuery || caseSensitive != completedCaseSensitive
         storage.beginEditing()
         unpaintMatches(matchRanges)
         matchRanges = ranges
@@ -623,6 +633,7 @@ public final class TranscriptTextCoordinator: NSObject {
         }
         storage.endEditing()
         completedQuery = query
+        completedCaseSensitive = caseSensitive
         if isFreshQuery {
             matchIndex = nearestForwardMatch()
             if !ranges.isEmpty {
@@ -699,33 +710,30 @@ public final class TranscriptTextCoordinator: NSObject {
     /// Every occurrence of the query in the text, in order, up to the match
     /// limit. When the finished previous query is a prefix of this one, only
     /// the previous match starts are tested.
-    nonisolated private static func findMatches(of query: String, in text: String, narrowingFrom previous: (query: String, ranges: [NSRange])?) -> [NSRange] {
+    nonisolated private static func findMatches(of query: String, in text: String, caseSensitive: Bool, narrowingFrom previous: (query: String, ranges: [NSRange])?) -> [NSRange] {
         let full = text as NSString
-        var ranges: [NSRange] = []
-        if let previous, !previous.query.isEmpty,
-           query.lowercased().hasPrefix(previous.query.lowercased()) {
-            for candidate in previous.ranges {
-                let remaining = NSRange(location: candidate.location, length: full.length - candidate.location)
-                let match = full.range(of: query, options: [.caseInsensitive, .anchored], range: remaining)
-                if match.location != NSNotFound {
-                    ranges.append(match)
-                    if ranges.count >= matchLimit { break }
-                }
-            }
-            return ranges
+        guard let previous, !previous.query.isEmpty,
+              extends(previous.query, to: query, caseSensitive: caseSensitive)
+        else {
+            return findOccurrences(of: query, in: full, caseSensitive: caseSensitive, limit: matchLimit) { Task.isCancelled }
         }
-        var start = 0
-        var steps = 0
-        while start < full.length {
-            let range = full.range(of: query, options: .caseInsensitive, range: NSRange(location: start, length: full.length - start))
-            guard range.location != NSNotFound else { break }
-            ranges.append(range)
-            if ranges.count >= matchLimit { break }
-            start = range.location + max(range.length, 1)
-            steps += 1
-            if steps % 512 == 0, Task.isCancelled { break }
+        let options = searchCompareOptions(caseSensitive: caseSensitive).union(.anchored)
+        var ranges: [NSRange] = []
+        for candidate in previous.ranges {
+            let remaining = NSRange(location: candidate.location, length: full.length - candidate.location)
+            let match = full.range(of: query, options: options, range: remaining)
+            if match.location != NSNotFound {
+                ranges.append(match)
+                if ranges.count >= matchLimit { break }
+            }
         }
         return ranges
+    }
+
+    /// True when the new query extends the old, so every new match starts at
+    /// an old match's start.
+    nonisolated private static func extends(_ old: String, to new: String, caseSensitive: Bool) -> Bool {
+        caseSensitive ? new.hasPrefix(old) : new.lowercased().hasPrefix(old.lowercased())
     }
 
     /// Published outside the SwiftUI update this can run in.

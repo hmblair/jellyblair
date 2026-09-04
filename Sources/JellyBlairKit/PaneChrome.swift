@@ -54,9 +54,10 @@ extension View {
     }
 }
 
-/// Ghost find controls at a search field's right edge: the match position
-/// and arrows stepping through the matches.
+/// Ghost find controls at a search field's right edge: a case-sensitivity
+/// toggle, the match position, and arrows stepping through the matches.
 struct MatchNavigator: View {
+    @Binding var isCaseSensitive: Bool
     let count: Int
     let index: Int
     let isSearching: Bool
@@ -64,6 +65,14 @@ struct MatchNavigator: View {
 
     var body: some View {
         HStack(spacing: 4) {
+            Button {
+                isCaseSensitive.toggle()
+            } label: {
+                Image(systemName: "textformat")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(isCaseSensitive ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary))
+            .help(isCaseSensitive ? "Match any case" : "Match case exactly")
             if isSearching {
                 ProgressView()
                     .controlSize(.mini)

@@ -16,6 +16,7 @@ struct TranscriptPane: View {
     @Environment(PlayerController.self) private var player
 
     @State private var query = ""
+    @State private var isCaseSensitive = false
     /// Whether the transcript follows the spoken word. On by default;
     /// scrolling by hand or jumping to a search match turns it off.
     @State private var isTracking = true
@@ -76,6 +77,7 @@ struct TranscriptPane: View {
             isTracking: isTracking,
             isVisible: isVisible,
             searchQuery: trimmedQuery,
+            searchIsCaseSensitive: isCaseSensitive,
             topInset: floatingBarZoneHeight + 6,
             bottomInset: PaneLayout.bottomRestingInset,
             horizontalPadding: PaneLayout.transcriptHorizontalPadding,
@@ -121,7 +123,7 @@ struct TranscriptPane: View {
     private var searchField: some View {
         CapsuleSearchField("Search Transcript", text: $query) {
             if !trimmedQuery.isEmpty {
-                MatchNavigator(count: controller.matchCount, index: controller.matchIndex, isSearching: controller.isSearching) { delta in
+                MatchNavigator(isCaseSensitive: $isCaseSensitive, count: controller.matchCount, index: controller.matchIndex, isSearching: controller.isSearching) { delta in
                     controller.stepMatch(by: delta)
                 }
             }

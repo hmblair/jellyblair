@@ -23,12 +23,14 @@ public struct ChapterRow: View {
     let meter: AudioLevelMeter
     /// The phrase whose occurrences in the title color as search matches.
     let searchQuery: String
+    let searchIsCaseSensitive: Bool
 
-    public init(chapter: Chapter, state: ChapterRowState, meter: AudioLevelMeter, searchQuery: String) {
+    public init(chapter: Chapter, state: ChapterRowState, meter: AudioLevelMeter, searchQuery: String, searchIsCaseSensitive: Bool) {
         self.chapter = chapter
         self.state = state
         self.meter = meter
         self.searchQuery = searchQuery
+        self.searchIsCaseSensitive = searchIsCaseSensitive
     }
 
     private var isCurrent: Bool {
@@ -70,12 +72,9 @@ public struct ChapterRow: View {
     /// The title with the searched phrase in the match color.
     private var highlightedTitle: AttributedString {
         var title = AttributedString(chapter.title)
-        guard !searchQuery.isEmpty else { return title }
-        var searchStart = title.startIndex
-        while searchStart < title.endIndex,
-              let range = title[searchStart...].range(of: searchQuery, options: .caseInsensitive) {
+        for nsRange in findOccurrences(of: searchQuery, in: chapter.title as NSString, caseSensitive: searchIsCaseSensitive) {
+            guard let range = Range(nsRange, in: title) else { continue }
             title[range].foregroundColor = Color(PlatformColor.matchHighlight)
-            searchStart = range.upperBound
         }
         return title
     }
