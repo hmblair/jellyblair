@@ -60,8 +60,6 @@ public struct TranscriptTextView {
     let controller: TranscriptController
     /// Called with the clicked word's cue.
     let onWordTap: (LyricCue) -> Void
-    /// Called when a click lands beside the words, on the line itself.
-    let onLineTap: (LyricLine) -> Void
     /// Called when the user scrolls or navigates the transcript themselves.
     let onUserScroll: () -> Void
 
@@ -77,7 +75,6 @@ public struct TranscriptTextView {
         horizontalPadding: CGFloat,
         controller: TranscriptController,
         onWordTap: @escaping (LyricCue) -> Void,
-        onLineTap: @escaping (LyricLine) -> Void,
         onUserScroll: @escaping () -> Void
     ) {
         self.lines = lines
@@ -91,7 +88,6 @@ public struct TranscriptTextView {
         self.horizontalPadding = horizontalPadding
         self.controller = controller
         self.onWordTap = onWordTap
-        self.onLineTap = onLineTap
         self.onUserScroll = onUserScroll
     }
 }
@@ -881,18 +877,14 @@ public final class TranscriptTextCoordinator: NSObject {
     }
     #endif
 
-    /// Routes a click to the word's cue, or to the line when it lands on
-    /// whitespace or beside the words.
+    /// Routes a click to the word's cue. Clicks on whitespace or beside the
+    /// words do nothing.
     private func handleTap(atUTF16Index index: Int) {
         guard let position = lineRanges.firstIndex(where: { index >= $0.location && index <= $0.location + $0.length }) else { return }
         let line = lines[position]
         let local = characterOffset(ofUTF16: index - lineRanges[position].location, in: line.text)
-        guard let view else { return }
-        if let cue = cue(atCharacter: local, in: line) {
-            view.onWordTap(cue)
-        } else {
-            view.onLineTap(line)
-        }
+        guard let view, let cue = cue(atCharacter: local, in: line) else { return }
+        view.onWordTap(cue)
     }
 
     /// The cue of the word containing the character: the first cue that

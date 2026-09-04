@@ -667,9 +667,6 @@ public struct BookView: View {
             onWordTap: { cue in
                 jumpToTranscriptPosition(cue.startSeconds)
             },
-            onLineTap: { line in
-                handleLineTap(line)
-            },
             onUserScroll: {
                 player.isTrackingPosition = false
             }
@@ -692,13 +689,6 @@ public struct BookView: View {
     /// resume position in a preview.
     private func listeningPosition(at date: Date) -> Double {
         isLoaded ? player.projectedTime(at: date) : model.resumePositionSeconds
-    }
-
-    /// A click beside the words falls back to the line's own start.
-    /// Lines without timestamps have no position to go to.
-    private func handleLineTap(_ line: LyricLine) {
-        guard let start = line.startSeconds else { return }
-        jumpToTranscriptPosition(start)
     }
 
     /// Seeks a loaded book to the position, or starts playback there in a preview.
