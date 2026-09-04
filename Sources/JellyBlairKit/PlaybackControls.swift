@@ -153,10 +153,10 @@ public struct SeekBarView: View {
     private func timeText(at date: Date) -> String {
         let position = displayedPosition(at: date)
         guard let chapter = player.currentChapter else {
-            return "\(formatTime(position)) / \(formatTime(player.duration))"
+            return formatTimePair(elapsed: position, total: player.duration)
         }
         let elapsed = max(0, min(position, chapter.endSeconds) - chapter.startSeconds)
-        return "\(formatTime(elapsed)) / \(formatTime(chapter.durationSeconds))"
+        return formatTimePair(elapsed: elapsed, total: chapter.durationSeconds)
     }
 
     /// The position the time text shows: the scrub target while dragging,
