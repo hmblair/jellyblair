@@ -163,7 +163,6 @@ public struct LyricLine: Identifiable, Hashable, Codable {
 /// character range it covers in the line's text.
 public struct LyricCue: Hashable, Codable {
     public let startSeconds: Double
-    public let endSeconds: Double
     public let startPosition: Int
     public let endPosition: Int
 }
@@ -192,13 +191,11 @@ struct LyricsResponseCue: Decodable {
     let position: Int
     let endPosition: Int?
     let startTicks: Int64
-    let endTicks: Int64?
 
     enum CodingKeys: String, CodingKey {
         case position = "Position"
         case endPosition = "EndPosition"
         case startTicks = "Start"
-        case endTicks = "End"
     }
 }
 

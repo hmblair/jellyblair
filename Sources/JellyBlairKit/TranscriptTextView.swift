@@ -178,8 +178,7 @@ public final class TranscriptTextCoordinator: NSObject {
         textView.isEditable = false
         textView.isSelectable = false
         textView.backgroundColor = .clear
-        // The centering math reads contentInset back, so the system must not
-        // add safe-area adjustments on top of it.
+        // The centering math reads contentInset back, so the system must not adjust it.
         textView.contentInsetAdjustmentBehavior = .never
         textView.delegate = self
         self.textView = textView
@@ -201,9 +200,7 @@ public final class TranscriptTextCoordinator: NSObject {
     // MARK: - Updates
 
     func update(from view: TranscriptTextView) {
-        // Array equality short-circuits on shared storage, so the unfiltered
-        // per-tick check costs nothing. Comparing the values, not just the
-        // indices, catches refreshed text and late-arriving headings.
+        // Array equality short-circuits on shared storage, so this is cheap per tick.
         let contentChanged = view.lines != lines || view.titleLineIndices != titleLineIndices
         self.view = view
         applyInsets()
@@ -264,8 +261,7 @@ public final class TranscriptTextCoordinator: NSObject {
         return low > 0 ? timedLines[low - 1].position : nil
     }
 
-    /// The index of the cue spoken at the position. During a gap between
-    /// cues the last spoken cue stays marked, so the mark never blinks off.
+    /// The index of the last cue starting at or before the position.
     private func spokenCueIndex(in line: LyricLine, at seconds: Double) -> Int? {
         line.cues.lastIndex(where: { $0.startSeconds <= seconds })
     }

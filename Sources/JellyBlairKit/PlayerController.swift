@@ -43,8 +43,8 @@ public final class PlayerController {
     /// by hand turns it off, the tracking button turns it back on.
     public var isTrackingPosition = true
 
-    /// The position anchor, written on playback events: play, pause, seek,
-    /// speed change, chapter boundary, and the periodic progress report.
+    /// The position anchor, written on playback events: open, seek, pause,
+    /// playback end, and every effective timebase rate change.
     public private(set) var anchor = PlaybackAnchor(positionSeconds: 0, date: .distantPast, rate: 0)
 
     public private(set) var duration: Double = 0

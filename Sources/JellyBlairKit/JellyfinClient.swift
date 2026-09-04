@@ -166,7 +166,6 @@ public final class JellyfinClient {
                 cues: (line.cues ?? []).map { cue in
                     LyricCue(
                         startSeconds: Double(cue.startTicks) / ticksPerSecond,
-                        endSeconds: Double(cue.endTicks ?? cue.startTicks) / ticksPerSecond,
                         startPosition: cue.position,
                         endPosition: cue.endPosition ?? line.text.count
                     )

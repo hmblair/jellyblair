@@ -581,10 +581,7 @@ public struct BookView: View {
     /// anchor, so the word mark lands on the boundaries without a fast timer.
     /// The anchor moves on every playback event, rebuilding the schedule.
     private var transcriptList: some View {
-        // Computed here, outside the tick closure: the walks cover every
-        // line and chapter, so they must not run on each word tick. The
-        // stable lines array also lets the coordinator's content compare
-        // short-circuit on shared storage across ticks.
+        // Computed outside the tick closure, so the per-line walks do not run per word.
         let titleLineIndices = titleLineIndices
         let visibleLines = visibleLines
         return TimelineView(transcriptTickSchedule) { context in
