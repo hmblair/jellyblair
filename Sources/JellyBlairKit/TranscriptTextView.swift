@@ -235,13 +235,18 @@ public final class TranscriptTextCoordinator: NSObject {
         let line = lineIndex(at: view.positionSeconds)
         let cue = line.flatMap { spokenCueIndex(in: lines[$0], at: view.positionSeconds) }
         let moved = line != currentLine || cue != spokenCueIndex
+        guard moved || recentered else { return }
+        let previousLine = currentLine
+        currentLine = line
+        spokenCueIndex = cue
+        // Measured before the recolor, whose attribute edits invalidate the
+        // layout the frame is read from.
+        let target = view.isTracking ? spokenWordFrame() : nil
         if moved {
-            recolor(toLine: line, cue: cue)
-            currentLine = line
-            spokenCueIndex = cue
+            recolor(fromLine: previousLine, toLine: line, cue: cue)
         }
-        if view.isTracking, moved || recentered {
-            centerOnSpokenWord(forced: recentered, animated: !recentered)
+        if view.isTracking, let target {
+            center(on: target, forced: recentered, animated: !recentered)
         }
     }
 
@@ -337,9 +342,9 @@ public final class TranscriptTextCoordinator: NSObject {
     /// Recolors from the stored line and cue to the given ones: whole lines
     /// take their read or unread color, and the current line colors its read
     /// part, spoken cue, and unread rest.
-    private func recolor(toLine line: Int?, cue: Int?) {
+    private func recolor(fromLine previousLine: Int?, toLine line: Int?, cue: Int?) {
         guard let storage else { return }
-        let oldLine = currentLine ?? 0
+        let oldLine = previousLine ?? 0
         let newLine = line ?? 0
         for position in min(oldLine, newLine)...max(oldLine, newLine) where lineRanges.indices.contains(position) {
             let read = line.map { position < $0 } ?? false
@@ -368,6 +373,12 @@ public final class TranscriptTextCoordinator: NSObject {
     /// tracking steps once per line of text.
     func centerOnSpokenWord(forced: Bool, animated: Bool) {
         guard let target = spokenWordFrame() else { return }
+        center(on: target, forced: forced, animated: animated)
+    }
+
+    /// Scrolls the given spoken-word frame to the viewport's center, unless
+    /// its visual line is centered already.
+    private func center(on target: CGRect, forced: Bool, animated: Bool) {
         let targetY = target.midY
         if !forced, let centeredY, abs(targetY - centeredY) <= 1 { return }
         centeredY = targetY
