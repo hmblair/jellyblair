@@ -165,13 +165,18 @@ public final class TranscriptTextCoordinator: NSObject {
     /// The plain text of the storage, snapshotted for background searching.
     private var searchText = ""
     private var searchTask: Task<Void, Never>?
-    /// True once the whole document is laid out, so positions are exact.
-    private var isFullyLaidOut = false
     /// Invalidates the running chunked layout pass when content changes.
     private var layoutGeneration = 0
+    /// The text width the full layout pass last ran at. A resize invalidates
+    /// the layout, so the pass reruns to keep positions exact.
+    private var laidOutWidth: CGFloat = 0
     /// The last vertical center the view scrolled to, so following scrolls
     /// once per visual line, not once per word.
     private var centeredY: CGFloat?
+    /// The union of the storage ranges whose colors changed since the last
+    /// centering measurement. Color edits invalidate layout over their range,
+    /// so the measurement re-lays this range out to keep positions exact.
+    private var dirtyColorRange: NSRange?
 
     /// How long a tracking scroll glides.
     private static let scrollDuration: TimeInterval = 0.4
@@ -251,6 +256,8 @@ public final class TranscriptTextCoordinator: NSObject {
         applyInsets()
         if contentChanged {
             rebuildContent()
+        } else if textView.bounds.width != laidOutWidth {
+            startFullLayout()
         }
         if contentChanged || view.searchQuery != appliedQuery {
             applySearch()
@@ -366,6 +373,7 @@ public final class TranscriptTextCoordinator: NSObject {
         currentLine = nil
         spokenCueIndex = nil
         centeredY = nil
+        dirtyColorRange = nil
 
         let content = NSMutableAttributedString()
         for (position, line) in lines.enumerated() {
@@ -416,7 +424,7 @@ public final class TranscriptTextCoordinator: NSObject {
     private func startFullLayout() {
         layoutGeneration += 1
         let generation = layoutGeneration
-        isFullyLaidOut = false
+        laidOutWidth = textView.bounds.width
         setPreparingLayout(true)
         Task { @MainActor in
             var position = 0
@@ -426,7 +434,6 @@ public final class TranscriptTextCoordinator: NSObject {
                 await Task.yield()
             }
             guard generation == self.layoutGeneration else { return }
-            self.isFullyLaidOut = true
             self.setPreparingLayout(false)
             if self.view?.isTracking == true {
                 self.centerOnSpokenWord(forced: true, animated: false)
@@ -445,15 +452,6 @@ public final class TranscriptTextCoordinator: NSObject {
               let textRange = textRange(from: linesRange(from: position, to: last), in: contentManager)
         else { return }
         layoutManager.ensureLayout(for: textRange)
-    }
-
-    /// Re-settles the whole document's layout. Nearly free while the full
-    /// pass has completed and little has been invalidated since.
-    private func ensureFullLayout() {
-        guard let layoutManager = textView.textLayoutManager,
-              let contentManager = layoutManager.textContentManager
-        else { return }
-        layoutManager.ensureLayout(for: contentManager.documentRange)
     }
 
     /// Published outside the SwiftUI update this can run in.
@@ -479,7 +477,7 @@ public final class TranscriptTextCoordinator: NSObject {
         // edit covers the span; the new line itself repaints separately.
         let color = line == high ? Style.read : Style.unread
         storage.beginEditing()
-        storage.addAttribute(.foregroundColor, value: color, range: span)
+        paint(color, range: span)
         paintSpokenLine(line, cue: cue)
         repaintMatches(intersecting: span)
         storage.endEditing()
@@ -487,20 +485,51 @@ public final class TranscriptTextCoordinator: NSObject {
 
     /// Colors the given line's read part, spoken cue, and unread rest.
     private func paintSpokenLine(_ line: Int?, cue: Int?) {
-        guard let storage, let line, lineRanges.indices.contains(line) else { return }
+        guard let line, lineRanges.indices.contains(line) else { return }
         let range = lineRanges[line]
-        storage.addAttribute(.foregroundColor, value: Style.unread, range: range)
+        paint(Style.unread, range: range)
         guard let cue else { return }
         let spoken = lines[line].cues[cue]
         let text = lines[line].text
         let readEnd = utf16Offset(ofCharacter: spoken.startPosition, in: text)
         let spokenEnd = utf16Offset(ofCharacter: spoken.endPosition, in: text)
         if readEnd > 0 {
-            storage.addAttribute(.foregroundColor, value: Style.read, range: NSRange(location: range.location, length: readEnd))
+            paint(Style.read, range: NSRange(location: range.location, length: readEnd))
         }
         if spokenEnd > readEnd {
-            storage.addAttribute(.foregroundColor, value: Style.spoken, range: NSRange(location: range.location + readEnd, length: spokenEnd - readEnd))
+            paint(Style.spoken, range: NSRange(location: range.location + readEnd, length: spokenEnd - readEnd))
         }
+    }
+
+    /// Applies one color edit and widens the dirty range it invalidates.
+    private func paint(_ color: PlatformColor, range: NSRange) {
+        guard range.length > 0 else { return }
+        storage?.addAttribute(.foregroundColor, value: color, range: range)
+        markColorsDirty(range)
+    }
+
+    /// Widens the dirty range to cover the given storage range.
+    private func markColorsDirty(_ range: NSRange) {
+        guard let dirty = dirtyColorRange else {
+            dirtyColorRange = range
+            return
+        }
+        let location = min(dirty.location, range.location)
+        let end = max(dirty.location + dirty.length, range.location + range.length)
+        dirtyColorRange = NSRange(location: location, length: end - location)
+    }
+
+    /// Re-lays out the range the color edits invalidated, so measured
+    /// positions are exact again. Bounded by the recolored span, not the
+    /// document.
+    private func ensureDirtyLayout() {
+        guard let dirty = dirtyColorRange else { return }
+        dirtyColorRange = nil
+        guard let layoutManager = textView.textLayoutManager,
+              let contentManager = layoutManager.textContentManager,
+              let textRange = textRange(from: dirty, in: contentManager)
+        else { return }
+        layoutManager.ensureLayout(for: textRange)
     }
 
     /// The storage range spanning the given line positions, clamped to the
@@ -557,7 +586,7 @@ public final class TranscriptTextCoordinator: NSObject {
         unpaintMatches(matchRanges)
         matchRanges = ranges
         for range in ranges {
-            storage.addAttribute(.foregroundColor, value: Style.match, range: range)
+            paint(Style.match, range: range)
         }
         storage.endEditing()
         completedQuery = query
@@ -604,14 +633,14 @@ public final class TranscriptTextCoordinator: NSObject {
 
     /// Restores positional colors over the lines holding the given ranges.
     private func unpaintMatches(_ ranges: [NSRange]) {
-        guard let storage, !ranges.isEmpty else { return }
+        guard !ranges.isEmpty else { return }
         var lastLine = -1
         for range in ranges {
             let line = lineIndex(containing: range.location)
             guard line != lastLine, lineRanges.indices.contains(line) else { continue }
             lastLine = line
             let read = currentLine.map { line < $0 } ?? false
-            storage.addAttribute(.foregroundColor, value: read ? Style.read : Style.unread, range: lineRanges[line])
+            paint(read ? Style.read : Style.unread, range: lineRanges[line])
         }
         paintSpokenLine(currentLine, cue: spokenCueIndex)
     }
@@ -684,7 +713,7 @@ public final class TranscriptTextCoordinator: NSObject {
     /// Repaints the match color over the occurrences intersecting the range,
     /// found by binary search.
     private func repaintMatches(intersecting range: NSRange) {
-        guard let storage, !matchRanges.isEmpty else { return }
+        guard !matchRanges.isEmpty else { return }
         var low = 0
         var high = matchRanges.count
         while low < high {
@@ -696,7 +725,7 @@ public final class TranscriptTextCoordinator: NSObject {
             }
         }
         while low < matchRanges.count, matchRanges[low].location < range.location + range.length {
-            storage.addAttribute(.foregroundColor, value: Style.match, range: matchRanges[low])
+            paint(Style.match, range: matchRanges[low])
             low += 1
         }
     }
@@ -715,9 +744,7 @@ public final class TranscriptTextCoordinator: NSObject {
     /// is centered already. The full-layout pass keeps the measurement exact
     /// even far into unvisited text.
     private func center(onStorageRange range: NSRange, forced: Bool, animated: Bool) {
-        if isFullyLaidOut {
-            ensureFullLayout()
-        }
+        ensureDirtyLayout()
         guard let targetY = frame(forStorageRange: range)?.midY else { return }
         if !forced, let centeredY, abs(targetY - centeredY) <= 1 { return }
         centeredY = targetY
