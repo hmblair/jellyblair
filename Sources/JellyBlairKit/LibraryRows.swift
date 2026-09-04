@@ -33,11 +33,6 @@ public struct BookRow: View {
 
             Spacer()
 
-            if catalog.model(for: book).downloadState == .downloaded {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(Color.green)
-            }
             if isLoaded {
                 AudioBarsView(meter: player.audioMeter, isPlaying: player.isPlaying)
             }
