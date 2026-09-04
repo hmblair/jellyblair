@@ -581,8 +581,14 @@ public struct BookView: View {
     /// anchor, so the word mark lands on the boundaries without a fast timer.
     /// The anchor moves on every playback event, rebuilding the schedule.
     private var transcriptList: some View {
-        TimelineView(transcriptTickSchedule) { context in
-            transcriptText(at: listeningPosition(at: context.date))
+        // Computed here, outside the tick closure: the walks cover every
+        // line and chapter, so they must not run on each word tick. The
+        // stable lines array also lets the coordinator's content compare
+        // short-circuit on shared storage across ticks.
+        let titleLineIndices = titleLineIndices
+        let visibleLines = visibleLines
+        return TimelineView(transcriptTickSchedule) { context in
+            transcriptText(at: listeningPosition(at: context.date), lines: visibleLines, titleLineIndices: titleLineIndices)
         }
         .task(id: book.id) {
             await model.fetchLyricsIfNeeded()
@@ -600,9 +606,9 @@ public struct BookView: View {
         )
     }
 
-    private func transcriptText(at positionSeconds: Double) -> some View {
+    private func transcriptText(at positionSeconds: Double, lines: [LyricLine], titleLineIndices: Set<Int>) -> some View {
         TranscriptTextView(
-            lines: visibleLines,
+            lines: lines,
             titleLineIndices: titleLineIndices,
             positionSeconds: positionSeconds,
             isTracking: player.isTrackingPosition,
@@ -628,7 +634,7 @@ public struct BookView: View {
                     Text("No transcript for this book")
                         .foregroundStyle(.secondary)
                 }
-            } else if visibleLines.isEmpty {
+            } else if lines.isEmpty {
                 ContentUnavailableView.search(text: filterQuery)
             }
         }

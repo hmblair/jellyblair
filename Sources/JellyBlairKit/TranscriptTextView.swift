@@ -114,6 +114,7 @@ extension TranscriptTextView: UIViewRepresentable {
 @MainActor
 public final class TranscriptTextCoordinator: NSObject {
     private var lines: [LyricLine] = []
+    private var titleLineIndices: Set<Int> = []
     /// UTF-16 range of each line's text inside the storage.
     private var lineRanges: [NSRange] = []
     /// Start times of the timed lines with their array positions, in order,
@@ -177,6 +178,9 @@ public final class TranscriptTextCoordinator: NSObject {
         textView.isEditable = false
         textView.isSelectable = false
         textView.backgroundColor = .clear
+        // The centering math reads contentInset back, so the system must not
+        // add safe-area adjustments on top of it.
+        textView.contentInsetAdjustmentBehavior = .never
         textView.delegate = self
         self.textView = textView
 
@@ -197,7 +201,10 @@ public final class TranscriptTextCoordinator: NSObject {
     // MARK: - Updates
 
     func update(from view: TranscriptTextView) {
-        let contentChanged = view.lines.map(\.index) != lines.map(\.index)
+        // Array equality short-circuits on shared storage, so the unfiltered
+        // per-tick check costs nothing. Comparing the values, not just the
+        // indices, catches refreshed text and late-arriving headings.
+        let contentChanged = view.lines != lines || view.titleLineIndices != titleLineIndices
         self.view = view
         applyInsets()
         if contentChanged {
@@ -302,6 +309,7 @@ public final class TranscriptTextCoordinator: NSObject {
     private func rebuildContent() {
         guard let view else { return }
         lines = view.lines
+        titleLineIndices = view.titleLineIndices
         lineRanges = []
         timedLines = []
         currentLine = nil
