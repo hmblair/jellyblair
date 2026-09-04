@@ -379,10 +379,25 @@ public final class TranscriptTextCoordinator: NSObject {
     /// Scrolls the given spoken-word frame to the viewport's center, unless
     /// its visual line is centered already.
     private func center(on target: CGRect, forced: Bool, animated: Bool) {
-        let targetY = target.midY
+        prepareLayout(around: target.midY)
+        let targetY = spokenWordFrame()?.midY ?? target.midY
         if !forced, let centeredY, abs(targetY - centeredY) <= 1 { return }
         centeredY = targetY
         scroll(toCenterY: targetY, animated: animated)
+    }
+
+    /// Lays out the text around the given document y before a scroll, so the
+    /// glide moves through settled geometry instead of refining estimates on
+    /// every animation frame.
+    private func prepareLayout(around y: CGFloat) {
+        guard let layoutManager = textView.textLayoutManager else { return }
+        #if canImport(AppKit)
+        let viewportHeight = scrollView.contentView.bounds.height
+        #else
+        let viewportHeight = textView.bounds.height
+        #endif
+        let corridor = CGRect(x: 0, y: y - viewportHeight * 2, width: textView.bounds.width, height: viewportHeight * 4)
+        layoutManager.ensureLayout(for: corridor)
     }
 
     /// The spoken word's frame in text view coordinates, from the layout.
