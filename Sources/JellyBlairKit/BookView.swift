@@ -98,6 +98,14 @@ public struct BookView: View {
                 bookActionsMenu
             }
         }
+        .keepsScreenAwake(keepsScreenAwake, reason: "The transcript follows the narration")
+    }
+
+    /// The screen stays awake while the playing transcript follows the
+    /// narration; a paused or previewed book lets it sleep, since its
+    /// transcript does not move.
+    private var keepsScreenAwake: Bool {
+        isShowingTranscript && player.isTrackingPosition && isLoaded && player.isPlaying
     }
 
     /// Actions on this book, in its title bar so it is clear which book
