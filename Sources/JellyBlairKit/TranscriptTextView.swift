@@ -595,7 +595,11 @@ public final class TranscriptTextCoordinator: NSObject {
         }
         setSearching(true)
         let text = searchText
-        let narrowing = matchRanges.isEmpty ? nil : (query: completedQuery, ranges: matchRanges)
+        // A result that hit the match limit covers only the document's start,
+        // so narrowing from it would lose every match past the cutoff.
+        let narrowing = matchRanges.isEmpty || matchRanges.count >= Self.matchLimit
+            ? nil
+            : (query: completedQuery, ranges: matchRanges)
         searchTask = Task.detached(priority: .userInitiated) { [weak self] in
             let ranges = Self.findMatches(of: query, in: text, narrowingFrom: narrowing)
             guard !Task.isCancelled else { return }
