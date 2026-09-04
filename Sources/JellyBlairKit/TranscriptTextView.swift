@@ -328,8 +328,8 @@ public final class TranscriptTextCoordinator: NSObject {
     /// The text styles, from the platform's semantic fonts and colors so the
     /// view follows the system appearance.
     private enum Style {
-        static var body: PlatformFont { .preferredFont(forTextStyle: .title2) }
-        static var title: PlatformFont {
+        static let body: PlatformFont = .preferredFont(forTextStyle: .title2)
+        static let title: PlatformFont = {
             let base = PlatformFont.preferredFont(forTextStyle: .title1)
             #if canImport(AppKit)
             return NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask)
@@ -337,24 +337,36 @@ public final class TranscriptTextCoordinator: NSObject {
             guard let descriptor = base.fontDescriptor.withSymbolicTraits(.traitBold) else { return base }
             return UIFont(descriptor: descriptor, size: 0)
             #endif
-        }
-        static var read: PlatformColor { .secondaryLabel }
-        static var unread: PlatformColor { .label }
-        static var spoken: PlatformColor { .accent }
-        static var match: PlatformColor { .matchHighlight }
+        }()
+        static let read: PlatformColor = .secondaryLabel
+        static let unread: PlatformColor = .label
+        static let spoken: PlatformColor = .accent
+        static let match: PlatformColor = .matchHighlight
 
-        static var paragraph: NSParagraphStyle {
+        static let paragraph: NSParagraphStyle = {
             let style = NSMutableParagraphStyle()
             style.paragraphSpacing = 4
             return style
-        }
+        }()
 
-        static var titleParagraph: NSParagraphStyle {
+        static let titleParagraph: NSParagraphStyle = {
             let style = NSMutableParagraphStyle()
             style.paragraphSpacing = 4
             style.paragraphSpacingBefore = 12
             return style
-        }
+        }()
+
+        static let bodyAttributes: [NSAttributedString.Key: Any] = [
+            .font: body,
+            .foregroundColor: unread,
+            .paragraphStyle: paragraph,
+        ]
+
+        static let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: title,
+            .foregroundColor: unread,
+            .paragraphStyle: titleParagraph,
+        ]
     }
 
     /// Builds the storage from the lines: one paragraph per line, chapter
@@ -378,11 +390,7 @@ public final class TranscriptTextCoordinator: NSObject {
         let content = NSMutableAttributedString()
         for (position, line) in lines.enumerated() {
             let isTitle = titleLineIndices.contains(line.index)
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: isTitle ? Style.title : Style.body,
-                .foregroundColor: Style.unread,
-                .paragraphStyle: isTitle ? Style.titleParagraph : Style.paragraph,
-            ]
+            let attributes = isTitle ? Style.titleAttributes : Style.bodyAttributes
             let text = NSAttributedString(string: line.text + "\n", attributes: attributes)
             lineRanges.append(NSRange(location: content.length, length: (line.text as NSString).length))
             if let start = line.startSeconds {
