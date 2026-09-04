@@ -239,14 +239,11 @@ public final class TranscriptTextCoordinator: NSObject {
         let previousLine = currentLine
         currentLine = line
         spokenCueIndex = cue
-        // Measured before the recolor, whose attribute edits invalidate the
-        // layout the frame is read from.
-        let target = view.isTracking ? spokenWordFrame() : nil
         if moved {
             recolor(fromLine: previousLine, toLine: line, cue: cue)
         }
-        if view.isTracking, let target {
-            center(on: target, forced: recentered, animated: !recentered)
+        if view.isTracking {
+            centerOnSpokenWord(forced: recentered, animated: !recentered)
         }
     }
 
@@ -333,6 +330,17 @@ public final class TranscriptTextCoordinator: NSObject {
             content.append(text)
         }
         storage?.setAttributedString(content)
+        ensureFullLayout()
+    }
+
+    /// Lays out the whole document, so every measured position is exact.
+    /// Costs about a tenth of a second on the first pass over a book, and
+    /// nearly nothing once the layout is settled.
+    private func ensureFullLayout() {
+        guard let layoutManager = textView.textLayoutManager,
+              let contentManager = layoutManager.textContentManager
+        else { return }
+        layoutManager.ensureLayout(for: contentManager.documentRange)
     }
 
     private var storage: NSTextStorage? {
@@ -372,39 +380,25 @@ public final class TranscriptTextCoordinator: NSObject {
     /// unforced form skips targets on the already-centered visual line, so
     /// tracking steps once per line of text.
     func centerOnSpokenWord(forced: Bool, animated: Bool) {
-        guard let target = spokenWordFrame() else { return }
-        center(on: target, forced: forced, animated: animated)
+        guard let range = spokenTargetRange() else { return }
+        center(onStorageRange: range, forced: forced, animated: animated)
     }
 
-    /// Scrolls the given spoken-word frame to the viewport's center, unless
-    /// its visual line is centered already.
-    private func center(on target: CGRect, forced: Bool, animated: Bool) {
-        prepareLayout(around: target.midY)
-        let targetY = spokenWordFrame()?.midY ?? target.midY
+    /// Scrolls the range's visual line to the viewport's center, unless it
+    /// is centered already. The full-layout pass keeps the measurement exact
+    /// even far into unvisited text.
+    private func center(onStorageRange range: NSRange, forced: Bool, animated: Bool) {
+        ensureFullLayout()
+        guard let targetY = frame(forStorageRange: range)?.midY else { return }
         if !forced, let centeredY, abs(targetY - centeredY) <= 1 { return }
         centeredY = targetY
         scroll(toCenterY: targetY, animated: animated)
     }
 
-    /// Lays out the text around the given document y before a scroll, so the
-    /// glide moves through settled geometry instead of refining estimates on
-    /// every animation frame.
-    private func prepareLayout(around y: CGFloat) {
-        guard let layoutManager = textView.textLayoutManager else { return }
-        #if canImport(AppKit)
-        let viewportHeight = scrollView.contentView.bounds.height
-        #else
-        let viewportHeight = textView.bounds.height
-        #endif
-        let corridor = CGRect(x: 0, y: y - viewportHeight * 2, width: textView.bounds.width, height: viewportHeight * 4)
-        layoutManager.ensureLayout(for: corridor)
-    }
-
-    /// The spoken word's frame in text view coordinates, from the layout.
-    private func spokenWordFrame() -> CGRect? {
+    /// The range's frame in text view coordinates, from the layout.
+    private func frame(forStorageRange range: NSRange) -> CGRect? {
         guard let layoutManager = textView.textLayoutManager,
               let contentManager = layoutManager.textContentManager,
-              let range = spokenTargetRange(),
               let textRange = textRange(from: range, in: contentManager)
         else { return nil }
         layoutManager.ensureLayout(for: textRange)
