@@ -38,13 +38,15 @@ public extension View {
 public struct LibraryFilterBar: View {
     @Binding var searchQuery: String
     @Binding var showDownloadedOnly: Bool
+    @Binding var showInProgressOnly: Bool
     let showsGroupToggle: Bool
 
     @Environment(LibraryViewModel.self) private var library
 
-    public init(searchQuery: Binding<String>, showDownloadedOnly: Binding<Bool>, showsGroupToggle: Bool) {
+    public init(searchQuery: Binding<String>, showDownloadedOnly: Binding<Bool>, showInProgressOnly: Binding<Bool>, showsGroupToggle: Bool) {
         _searchQuery = searchQuery
         _showDownloadedOnly = showDownloadedOnly
+        _showInProgressOnly = showInProgressOnly
         self.showsGroupToggle = showsGroupToggle
     }
 
@@ -56,6 +58,7 @@ public struct LibraryFilterBar: View {
             if showsGroupToggle {
                 groupToggle
             }
+            inProgressToggle
             filterToggle
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -65,6 +68,16 @@ public struct LibraryFilterBar: View {
     private var groupToggle: some View {
         CapsuleIconButton(library.groupKind.iconName, help: "Change the grouping") {
             library.groupKind = library.groupKind.next
+        }
+    }
+
+    private var inProgressToggle: some View {
+        CapsuleIconButton(
+            "bookmark.fill",
+            isOn: showInProgressOnly,
+            help: showInProgressOnly ? "Show all books" : "Show only books in progress"
+        ) {
+            showInProgressOnly.toggle()
         }
     }
 

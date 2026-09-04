@@ -46,6 +46,12 @@ public final class BookCatalog {
         model(for: book).downloadState == .downloaded
     }
 
+    /// True when the book has a resume position: the same check that makes
+    /// the play button offer Resume.
+    public func isInProgress(_ book: Book) -> Bool {
+        model(for: book).resumePositionSeconds > 0
+    }
+
     public func coverURL(for book: Book) -> URL {
         client.imageURL(for: book)
     }

@@ -134,20 +134,25 @@ public final class LibraryViewModel {
         groups(ofKind: group.kind).first { $0.id == group.id }
     }
 
-    /// Groups of the active kind matching the query, keeping only downloaded
-    /// books when the filter is on.
-    public func visibleGroups(matching query: String, downloadedOnly: Bool, catalog: BookCatalog) -> [BookGroup] {
+    /// Groups of the active kind matching the query, keeping only the books
+    /// that pass the active filters.
+    public func visibleGroups(matching query: String, downloadedOnly: Bool, inProgressOnly: Bool, catalog: BookCatalog) -> [BookGroup] {
         groups(matching: query).compactMap { group in
-            downloadedOnly ? group.keeping { catalog.isDownloaded($0) } : group
+            group.keeping { passesFilters($0, downloadedOnly: downloadedOnly, inProgressOnly: inProgressOnly, catalog: catalog) }
         }
     }
 
-    /// One group's books matching the query, keeping only downloaded books
-    /// when the filter is on.
-    public func visibleBooks(in group: BookGroup, matching query: String, downloadedOnly: Bool, catalog: BookCatalog) -> [Book] {
-        let matches = books(in: group, matching: query)
-        guard downloadedOnly else { return matches }
-        return matches.filter { catalog.isDownloaded($0) }
+    /// One group's books matching the query, keeping only the books that
+    /// pass the active filters.
+    public func visibleBooks(in group: BookGroup, matching query: String, downloadedOnly: Bool, inProgressOnly: Bool, catalog: BookCatalog) -> [Book] {
+        books(in: group, matching: query)
+            .filter { passesFilters($0, downloadedOnly: downloadedOnly, inProgressOnly: inProgressOnly, catalog: catalog) }
+    }
+
+    /// True when the book passes every filter that is on.
+    private func passesFilters(_ book: Book, downloadedOnly: Bool, inProgressOnly: Bool, catalog: BookCatalog) -> Bool {
+        (!downloadedOnly || catalog.isDownloaded(book))
+            && (!inProgressOnly || catalog.isInProgress(book))
     }
 
     /// One group's books, filtered by the query when it is not empty.
