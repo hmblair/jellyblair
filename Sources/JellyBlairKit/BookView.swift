@@ -21,8 +21,6 @@ public struct BookView: View {
     @State private var isShowingTranscript = false
     /// The handle the tracking button centers the transcript through.
     @State private var transcriptController = TranscriptController()
-    @State private var isHoveringJumpButton = false
-    @State private var isHoveringTranscriptToggle = false
     @State private var isHoveringDownload = false
 
     /// The position of the matching chapter the arrows navigated to. The
@@ -151,6 +149,8 @@ public struct BookView: View {
                     }
                 }
                 .fadedUnderFloatingBar(fadesBottom: true)
+                // The bar's height comes from the search field; the capsule
+                // buttons stretch to match it exactly.
                 HStack(spacing: 8) {
                     filterField(proxy)
                     if hasTranscript {
@@ -158,6 +158,7 @@ public struct BookView: View {
                     }
                     trackingButton(proxy)
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 #if os(iOS)
                 .padding(.horizontal, 20)
                 #endif
@@ -201,27 +202,17 @@ public struct BookView: View {
     /// Turning it on centers the position right away. Scrolling the list by
     /// hand or jumping to a search match turns tracking off.
     private func trackingButton(_ proxy: ScrollViewProxy) -> some View {
-        Button {
+        CapsuleIconButton(
+            "scope",
+            isOn: player.isTrackingPosition,
+            help: player.isTrackingPosition ? "Stop following the listening position" : "Follow the listening position"
+        ) {
             player.isTrackingPosition.toggle()
             guard player.isTrackingPosition else { return }
             Task { @MainActor in
                 centerOnTrackedPosition(proxy)
             }
-        } label: {
-            Image(systemName: "scope")
-                .font(.callout)
-                .foregroundStyle(player.isTrackingPosition ? Color.white : Color.secondary)
-                .padding(.vertical, 5)
-                .padding(.horizontal, 8)
-                .background(
-                    Capsule()
-                        .fill(player.isTrackingPosition ? Color.accentColor : Color.primary.opacity(isHoveringJumpButton ? 0.12 : 0.06))
-                        .animation(.easeOut(duration: 0.1), value: isHoveringJumpButton)
-                )
         }
-        .buttonStyle(.plain)
-        .onHover { isHoveringJumpButton = $0 }
-        .help(player.isTrackingPosition ? "Stop following the listening position" : "Follow the listening position")
     }
 
     /// Centers the listener's position while tracking is on. Every centering
@@ -242,24 +233,13 @@ public struct BookView: View {
     /// Swaps the list below between the chapters and the transcript.
     /// The icon shows the view the button switches to.
     private var transcriptToggle: some View {
-        Button {
+        CapsuleIconButton(
+            isShowingTranscript ? "list.bullet" : "text.quote",
+            help: isShowingTranscript ? "Show the chapters" : "Show the transcript"
+        ) {
             filterQuery = ""
             isShowingTranscript.toggle()
-        } label: {
-            Image(systemName: isShowingTranscript ? "list.bullet" : "text.quote")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 5)
-                .padding(.horizontal, 8)
-                .background(
-                    Capsule()
-                        .fill(Color.primary.opacity(isHoveringTranscriptToggle ? 0.12 : 0.06))
-                        .animation(.easeOut(duration: 0.1), value: isHoveringTranscriptToggle)
-                )
         }
-        .buttonStyle(.plain)
-        .onHover { isHoveringTranscriptToggle = $0 }
-        .help(isShowingTranscript ? "Show the chapters" : "Show the transcript")
     }
 
     private func filterField(_ proxy: ScrollViewProxy) -> some View {

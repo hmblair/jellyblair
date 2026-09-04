@@ -46,3 +46,44 @@ public extension CapsuleSearchField where Accessory == EmptyView {
         self.init(prompt, text: text) { EmptyView() }
     }
 }
+
+/// A capsule icon button beside a CapsuleSearchField in a floating bar.
+/// The capsule stretches to the bar's height, which the search field sets;
+/// the bar's stack needs .fixedSize(horizontal: false, vertical: true) so
+/// that height reaches the button. When on, the capsule fills with the
+/// accent color.
+public struct CapsuleIconButton: View {
+    let iconName: String
+    let iconWeight: Font.Weight
+    let isOn: Bool
+    let helpText: String
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    public init(_ iconName: String, weight: Font.Weight = .regular, isOn: Bool = false, help: String, action: @escaping () -> Void) {
+        self.iconName = iconName
+        iconWeight = weight
+        self.isOn = isOn
+        helpText = help
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Image(systemName: iconName)
+                .font(.callout.weight(iconWeight))
+                .foregroundStyle(isOn ? Color.white : Color.secondary)
+                .frame(maxHeight: .infinity)
+                .padding(.horizontal, 8)
+                .background(
+                    Capsule()
+                        .fill(isOn ? Color.accentColor : Color.primary.opacity(isHovering ? 0.12 : 0.06))
+                        .animation(.easeOut(duration: 0.1), value: isHovering)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(helpText)
+    }
+}

@@ -42,15 +42,6 @@ public struct LibraryFilterBar: View {
 
     @Environment(LibraryViewModel.self) private var library
 
-    @State private var isHoveringGroupToggle = false
-    @State private var isHoveringFilter = false
-
-    #if os(macOS)
-    private static let filterIconSize: CGFloat = 24
-    #else
-    private static let filterIconSize: CGFloat = 27
-    #endif
-
     public init(searchQuery: Binding<String>, showDownloadedOnly: Binding<Bool>, showsGroupToggle: Bool) {
         _searchQuery = searchQuery
         _showDownloadedOnly = showDownloadedOnly
@@ -58,6 +49,8 @@ public struct LibraryFilterBar: View {
     }
 
     public var body: some View {
+        // The bar's height comes from the search field; the capsule
+        // buttons stretch to match it exactly.
         HStack(spacing: 8) {
             CapsuleSearchField("Search", text: $searchQuery)
             if showsGroupToggle {
@@ -65,47 +58,25 @@ public struct LibraryFilterBar: View {
             }
             filterToggle
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     /// Cycles the library grouping through author, narrator, and genre.
     private var groupToggle: some View {
-        Button {
+        CapsuleIconButton(library.groupKind.iconName, help: "Change the grouping") {
             library.groupKind = library.groupKind.next
-        } label: {
-            Image(systemName: library.groupKind.iconName)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 5)
-                .padding(.horizontal, 8)
-                .background(
-                    Capsule()
-                        .fill(Color.primary.opacity(isHoveringGroupToggle ? 0.12 : 0.06))
-                        .animation(.easeOut(duration: 0.1), value: isHoveringGroupToggle)
-                )
         }
-        .buttonStyle(.plain)
-        .onHover { isHoveringGroupToggle = $0 }
-        .help("Change the grouping")
     }
 
     private var filterToggle: some View {
-        Button {
+        CapsuleIconButton(
+            "arrow.down",
+            weight: .semibold,
+            isOn: showDownloadedOnly,
+            help: showDownloadedOnly ? "Show all books" : "Show only downloaded books"
+        ) {
             showDownloadedOnly.toggle()
-        } label: {
-            // Unselected, the icon wears the search capsule's own tone,
-            // with the arrow in the capsule's placeholder gray.
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.system(size: Self.filterIconSize))
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(
-                    showDownloadedOnly ? Color.white : Color.secondary,
-                    showDownloadedOnly ? Color.green : Color.primary.opacity(isHoveringFilter ? 0.12 : 0.06)
-                )
-                .animation(.easeOut(duration: 0.1), value: isHoveringFilter)
         }
-        .buttonStyle(.plain)
-        .onHover { isHoveringFilter = $0 }
-        .help(showDownloadedOnly ? "Show all books" : "Show only downloaded books")
     }
 }
 
