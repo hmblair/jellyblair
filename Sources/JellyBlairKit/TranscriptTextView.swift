@@ -370,8 +370,8 @@ public final class TranscriptTextCoordinator: NSObject {
     }
 
     /// Builds the storage from the lines: one paragraph per line, chapter
-    /// headings in the title style, everything in the unread color. The
-    /// position coloring follows separately.
+    /// headings in the title style, and the colors of the view's position
+    /// baked in, so no recolor follows the build.
     private func rebuildContent() {
         guard let view else { return }
         lines = view.lines
@@ -382,8 +382,6 @@ public final class TranscriptTextCoordinator: NSObject {
         matchRanges = []
         matchIndex = 0
         completedQuery = ""
-        currentLine = nil
-        spokenCueIndex = nil
         centeredY = nil
         dirtyColorRange = nil
 
@@ -398,9 +396,27 @@ public final class TranscriptTextCoordinator: NSObject {
             }
             content.append(text)
         }
+        currentLine = lineIndex(at: view.positionSeconds)
+        spokenCueIndex = currentLine.flatMap { spokenCueIndex(in: lines[$0], at: view.positionSeconds) }
+        applyPositionColors(to: content)
         storage?.setAttributedString(content)
         searchText = content.string
         startFullLayout()
+    }
+
+    /// Colors the content for the stored position: the lines before the
+    /// current one in the read color, and the current line split around its
+    /// spoken cue. Runs before the storage ingests the content, so the
+    /// coloring invalidates no layout.
+    private func applyPositionColors(to content: NSMutableAttributedString) {
+        guard let currentLine, lineRanges.indices.contains(currentLine) else { return }
+        let readRegion = NSRange(location: 0, length: lineRanges[currentLine].location)
+        if readRegion.length > 0 {
+            content.addAttribute(.foregroundColor, value: Style.read, range: readRegion)
+        }
+        for segment in spokenLineSegments(currentLine, cue: spokenCueIndex) {
+            content.addAttribute(.foregroundColor, value: segment.color, range: segment.range)
+        }
     }
 
     /// Indices of transcript lines that are chapter headings: the first line
@@ -494,19 +510,28 @@ public final class TranscriptTextCoordinator: NSObject {
     /// Colors the given line's read part, spoken cue, and unread rest.
     private func paintSpokenLine(_ line: Int?, cue: Int?) {
         guard let line, lineRanges.indices.contains(line) else { return }
+        for segment in spokenLineSegments(line, cue: cue) {
+            paint(segment.color, range: segment.range)
+        }
+    }
+
+    /// The color runs of the given line, in paint order: the whole line
+    /// unread, then its read part and spoken cue on top.
+    private func spokenLineSegments(_ line: Int, cue: Int?) -> [(color: PlatformColor, range: NSRange)] {
         let range = lineRanges[line]
-        paint(Style.unread, range: range)
-        guard let cue else { return }
+        var segments: [(color: PlatformColor, range: NSRange)] = [(Style.unread, range)]
+        guard let cue else { return segments }
         let spoken = lines[line].cues[cue]
         let text = lines[line].text
         let readEnd = utf16Offset(ofCharacter: spoken.startPosition, in: text)
         let spokenEnd = utf16Offset(ofCharacter: spoken.endPosition, in: text)
         if readEnd > 0 {
-            paint(Style.read, range: NSRange(location: range.location, length: readEnd))
+            segments.append((Style.read, NSRange(location: range.location, length: readEnd)))
         }
         if spokenEnd > readEnd {
-            paint(Style.spoken, range: NSRange(location: range.location + readEnd, length: spokenEnd - readEnd))
+            segments.append((Style.spoken, NSRange(location: range.location + readEnd, length: spokenEnd - readEnd)))
         }
+        return segments
     }
 
     /// Applies one color edit and widens the dirty range it invalidates.
