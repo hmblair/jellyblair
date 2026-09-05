@@ -23,16 +23,11 @@ struct ChapterListPane: View {
     /// by hand or jumping to a search match turns it off.
     @State private var isTracking = true
 
-    /// The search phrase, without surrounding whitespace.
-    private var trimmedQuery: String {
-        query.trimmingCharacters(in: .whitespaces)
-    }
-
     /// Ids of the chapters whose titles contain the query.
     private var matchingChapterIDs: [Int] {
-        guard !trimmedQuery.isEmpty else { return [] }
+        guard !query.isEmpty else { return [] }
         return chapters
-            .filter { !findOccurrences(of: trimmedQuery, in: $0.title as NSString, caseSensitive: isCaseSensitive, limit: 1).isEmpty }
+            .filter { !findOccurrences(of: query, in: $0.title as NSString, caseSensitive: isCaseSensitive, limit: 1).isEmpty }
             .map(\.index)
     }
 
@@ -58,7 +53,7 @@ struct ChapterListPane: View {
                     chapter: chapter,
                     state: rowState(for: chapter),
                     meter: player.audioMeter,
-                    searchQuery: trimmedQuery,
+                    searchQuery: query,
                     searchIsCaseSensitive: isCaseSensitive
                 )
                 .contentShape(Rectangle())
@@ -137,20 +132,14 @@ struct ChapterListPane: View {
 
     private func searchField(_ proxy: ScrollViewProxy) -> some View {
         CapsuleSearchField("Search Chapters", text: $query) {
-            if !trimmedQuery.isEmpty {
+            if !query.isEmpty {
                 MatchNavigator(isCaseSensitive: $isCaseSensitive, count: matchingChapterIDs.count, index: matchIndex, isSearching: false) { delta in
                     step(by: delta, proxy)
                 }
             }
         }
-        .onSubmit {
-            step(by: 1, proxy)
-        }
-        // Shift-return steps backward; plain return falls through to onSubmit.
-        .onKeyPress(keys: [.return]) { press in
-            guard press.modifiers.contains(.shift) else { return .ignored }
-            step(by: -1, proxy)
-            return .handled
+        .stepsMatchesOnSubmit { delta in
+            step(by: delta, proxy)
         }
     }
 
@@ -161,7 +150,7 @@ struct ChapterListPane: View {
     /// Restarts the match position after the query or its sensitivity changes.
     private func restartSearch(_ proxy: ScrollViewProxy) {
         matchIndex = 0
-        guard !trimmedQuery.isEmpty else { return }
+        guard !query.isEmpty else { return }
         jumpToNearestMatch(proxy)
     }
 

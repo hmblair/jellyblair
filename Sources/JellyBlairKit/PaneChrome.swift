@@ -40,6 +40,19 @@ extension View {
         }
     }
 
+    /// Steps a search's matches from the keyboard: return steps forward,
+    /// and shift-return steps backward.
+    func stepsMatchesOnSubmit(_ step: @escaping (Int) -> Void) -> some View {
+        onSubmit {
+            step(1)
+        }
+        .onKeyPress(keys: [.return]) { press in
+            guard press.modifiers.contains(.shift) else { return .ignored }
+            step(-1)
+            return .handled
+        }
+    }
+
     /// Runs the action when the user scrolls the view themselves. The
     /// animating phase of programmatic centering does not count.
     func onUserScroll(perform action: @escaping () -> Void) -> some View {

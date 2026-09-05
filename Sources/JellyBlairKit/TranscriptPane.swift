@@ -23,11 +23,6 @@ struct TranscriptPane: View {
     /// The handle the pane centers and searches the transcript through.
     @State private var controller = TranscriptController()
 
-    /// The search phrase, without surrounding whitespace.
-    private var trimmedQuery: String {
-        query.trimmingCharacters(in: .whitespaces)
-    }
-
     var body: some View {
         transcript
             .floatingSearchBar {
@@ -76,7 +71,7 @@ struct TranscriptPane: View {
             positionSeconds: positionSeconds,
             isTracking: isTracking,
             isVisible: isVisible,
-            searchQuery: trimmedQuery,
+            searchQuery: query,
             searchIsCaseSensitive: isCaseSensitive,
             topInset: floatingBarZoneHeight + 6,
             bottomInset: PaneLayout.bottomRestingInset,
@@ -122,20 +117,14 @@ struct TranscriptPane: View {
 
     private var searchField: some View {
         CapsuleSearchField("Search Transcript", text: $query) {
-            if !trimmedQuery.isEmpty {
+            if !query.isEmpty {
                 MatchNavigator(isCaseSensitive: $isCaseSensitive, count: controller.matchCount, index: controller.matchIndex, isSearching: controller.isSearching) { delta in
                     controller.stepMatch(by: delta)
                 }
             }
         }
-        .onSubmit {
-            controller.stepMatch(by: 1)
-        }
-        // Shift-return steps backward; plain return falls through to onSubmit.
-        .onKeyPress(keys: [.return]) { press in
-            guard press.modifiers.contains(.shift) else { return .ignored }
-            controller.stepMatch(by: -1)
-            return .handled
+        .stepsMatchesOnSubmit { delta in
+            controller.stepMatch(by: delta)
         }
     }
 
