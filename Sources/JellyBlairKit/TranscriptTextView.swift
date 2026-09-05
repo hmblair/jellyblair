@@ -297,7 +297,7 @@ public final class TranscriptTextCoordinator: NSObject {
         currentLine = line
         spokenCueIndex = cue
         if moved {
-            recolor(fromLine: previousLine, toLine: line, cue: cue)
+            recolor(fromLine: previousLine, toLine: line)
         }
         if view.isTracking {
             centerOnSpokenWord(forced: recentered, animated: !recentered)
@@ -406,17 +406,11 @@ public final class TranscriptTextCoordinator: NSObject {
         startFullLayout()
     }
 
-    /// Colors the content for the stored position: the lines before the
-    /// current one in the read color, and the current line split around its
-    /// spoken cue. Runs before the storage ingests the content, so the
-    /// coloring invalidates no layout.
+    /// Colors the content for the stored position, from the same segments
+    /// the resolver paints. Runs before the storage ingests the content, so
+    /// the coloring invalidates no layout.
     private func applyPositionColors(to content: NSMutableAttributedString) {
-        guard let currentLine, lineRanges.indices.contains(currentLine) else { return }
-        let readRegion = NSRange(location: 0, length: lineRanges[currentLine].location)
-        if readRegion.length > 0 {
-            content.addAttribute(.foregroundColor, value: Style.read, range: readRegion)
-        }
-        for segment in spokenLineSegments(currentLine, cue: spokenCueIndex) {
+        for segment in baseSegments(for: NSRange(location: 0, length: content.length)) {
             content.addAttribute(.foregroundColor, value: segment.color, range: segment.range)
         }
     }
@@ -489,34 +483,48 @@ public final class TranscriptTextCoordinator: NSObject {
         textView.textStorage
     }
 
-    /// Recolors from the stored line and cue to the given ones: whole lines
-    /// take their read or unread color, and the current line colors its read
-    /// part, spoken cue, and unread rest. Search matches repaint on top,
-    /// except inside the spoken cue, which keeps the spoken color.
-    private func recolor(fromLine previousLine: Int?, toLine line: Int?, cue: Int?) {
+    /// Recolors the span of lines between the stored position and the given
+    /// one through the resolver, so the crossed lines take their new
+    /// positional colors and the matches on them repaint.
+    private func recolor(fromLine previousLine: Int?, toLine line: Int?) {
         guard let storage else { return }
         let oldLine = previousLine ?? 0
         let newLine = line ?? 0
-        let low = min(oldLine, newLine)
-        let high = max(oldLine, newLine)
-        let span = linesRange(from: low, to: high)
-        // Every crossed line lands on the same side of the new line, so one
-        // edit covers the span; the new line itself repaints separately.
-        let color = line == high ? Style.read : Style.unread
+        let span = linesRange(from: min(oldLine, newLine), to: max(oldLine, newLine))
         storage.beginEditing()
-        paint(color, range: span)
-        paintSpokenLine(line, cue: cue)
-        repaintMatches(intersecting: span)
-        repaintSpokenCue(line, cue: cue)
+        repaintResolved(span)
         storage.endEditing()
     }
 
-    /// Colors the given line's read part, spoken cue, and unread rest.
-    private func paintSpokenLine(_ line: Int?, cue: Int?) {
-        guard let line, lineRanges.indices.contains(line) else { return }
-        for segment in spokenLineSegments(line, cue: cue) {
+    /// Paints the final colors over the range: the positional base, then the
+    /// matches, which never paint over the spoken cue. Every storage repaint
+    /// funnels through this or paints matches clipped against the cue, so
+    /// the spoken word wins over matches by construction.
+    private func repaintResolved(_ range: NSRange) {
+        for segment in baseSegments(for: range) {
             paint(segment.color, range: segment.range)
         }
+        repaintMatches(intersecting: range)
+    }
+
+    /// The positional color runs over the range, in paint order: the read
+    /// region, the unread region, and the current line's runs on top.
+    private func baseSegments(for range: NSRange) -> [(color: PlatformColor, range: NSRange)] {
+        var segments: [(color: PlatformColor, range: NSRange)] = []
+        let readEnd = currentLine.flatMap { lineRanges.indices.contains($0) ? lineRanges[$0].location : nil } ?? 0
+        let end = range.location + range.length
+        if readEnd > range.location {
+            segments.append((Style.read, NSRange(location: range.location, length: min(readEnd, end) - range.location)))
+        }
+        let unreadStart = max(readEnd, range.location)
+        if end > unreadStart {
+            segments.append((Style.unread, NSRange(location: unreadStart, length: end - unreadStart)))
+        }
+        if let currentLine, lineRanges.indices.contains(currentLine),
+           NSIntersectionRange(range, lineRanges[currentLine]).length > 0 {
+            segments += spokenLineSegments(currentLine, cue: spokenCueIndex)
+        }
+        return segments
     }
 
     /// The color runs of the given line, in paint order: the whole line
@@ -545,13 +553,6 @@ public final class TranscriptTextCoordinator: NSObject {
         let spokenEnd = utf16Offset(ofCharacter: spoken.endPosition, in: text)
         guard spokenEnd > readEnd else { return nil }
         return NSRange(location: lineRanges[line].location + readEnd, length: spokenEnd - readEnd)
-    }
-
-    /// Repaints the spoken color over the cue, so the spoken word shows over
-    /// any search match inside it.
-    private func repaintSpokenCue(_ line: Int?, cue: Int?) {
-        guard let range = spokenCueRange(line, cue: cue) else { return }
-        paint(Style.spoken, range: range)
     }
 
     /// Applies one color edit and widens the dirty range it invalidates.
@@ -608,10 +609,11 @@ public final class TranscriptTextCoordinator: NSObject {
         searchTask = nil
         guard !query.isEmpty else {
             if !matchRanges.isEmpty {
-                storage?.beginEditing()
-                unpaintMatches(matchRanges)
-                storage?.endEditing()
+                let previous = matchRanges
                 matchRanges = []
+                storage?.beginEditing()
+                repaintBase(ofLinesHolding: previous)
+                storage?.endEditing()
             }
             matchIndex = 0
             completedQuery = ""
@@ -643,13 +645,14 @@ public final class TranscriptTextCoordinator: NSObject {
     private func finishSearch(query: String, caseSensitive: Bool, ranges: [NSRange]) {
         guard query == appliedQuery, caseSensitive == appliedCaseSensitive, let storage else { return }
         let isFreshQuery = query != completedQuery || caseSensitive != completedCaseSensitive
-        storage.beginEditing()
-        unpaintMatches(matchRanges)
+        let previous = matchRanges
         matchRanges = ranges
+        storage.beginEditing()
+        repaintBase(ofLinesHolding: previous)
+        let cue = spokenCueRange(currentLine, cue: spokenCueIndex)
         for range in ranges {
-            paint(Style.match, range: range)
+            paintMatch(range, clippedBy: cue)
         }
-        repaintSpokenCue(currentLine, cue: spokenCueIndex)
         storage.endEditing()
         completedQuery = query
         completedCaseSensitive = caseSensitive
@@ -694,18 +697,18 @@ public final class TranscriptTextCoordinator: NSObject {
         return low < matchRanges.count ? low : 0
     }
 
-    /// Restores positional colors over the lines holding the given ranges.
-    private func unpaintMatches(_ ranges: [NSRange]) {
-        guard !ranges.isEmpty else { return }
+    /// Restores the positional colors over the lines holding the given
+    /// ranges.
+    private func repaintBase(ofLinesHolding ranges: [NSRange]) {
         var lastLine = -1
         for range in ranges {
             let line = lineIndex(containing: range.location)
             guard line != lastLine, lineRanges.indices.contains(line) else { continue }
             lastLine = line
-            let read = currentLine.map { line < $0 } ?? false
-            paint(read ? Style.read : Style.unread, range: lineRanges[line])
+            for segment in baseSegments(for: lineRanges[line]) {
+                paint(segment.color, range: segment.range)
+            }
         }
-        paintSpokenLine(currentLine, cue: spokenCueIndex)
     }
 
     /// The position of the line containing the storage location.
@@ -774,6 +777,7 @@ public final class TranscriptTextCoordinator: NSObject {
     /// found by binary search.
     private func repaintMatches(intersecting range: NSRange) {
         guard !matchRanges.isEmpty else { return }
+        let cue = spokenCueRange(currentLine, cue: spokenCueIndex)
         var low = 0
         var high = matchRanges.count
         while low < high {
@@ -785,8 +789,26 @@ public final class TranscriptTextCoordinator: NSObject {
             }
         }
         while low < matchRanges.count, matchRanges[low].location < range.location + range.length {
-            paint(Style.match, range: matchRanges[low])
+            paintMatch(matchRanges[low], clippedBy: cue)
             low += 1
+        }
+    }
+
+    /// Paints the match color over the range, minus the cue, so a match
+    /// paint can never cover the spoken word.
+    private func paintMatch(_ match: NSRange, clippedBy cue: NSRange?) {
+        guard let cue else {
+            paint(Style.match, range: match)
+            return
+        }
+        let end = match.location + match.length
+        let cueEnd = cue.location + cue.length
+        if cue.location > match.location {
+            paint(Style.match, range: NSRange(location: match.location, length: min(cue.location, end) - match.location))
+        }
+        if end > cueEnd {
+            let start = max(cueEnd, match.location)
+            paint(Style.match, range: NSRange(location: start, length: end - start))
         }
     }
 
