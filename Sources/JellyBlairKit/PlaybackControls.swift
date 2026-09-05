@@ -1,8 +1,10 @@
 import SwiftUI
 
 /// Shows the listening time left in the book at the current speed.
-/// A half-second timeline drives the text, since the position anchor itself
-/// only changes on playback events.
+/// A periodic timeline drives the text, since the position anchor itself
+/// only changes on playback events. The readout is speed-adjusted time,
+/// which advances one displayed second per wall second at any speed, so
+/// one tick per second always covers it.
 public struct RemainingTimeView: View {
     @Environment(PlayerController.self) private var player
 
@@ -11,7 +13,7 @@ public struct RemainingTimeView: View {
     public var body: some View {
         // Inherits the font from its context, so it always matches the
         // total length displayed beside it.
-        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+        TimelineView(.periodic(from: .now, by: 1.0)) { context in
             Text(text(at: context.date))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
@@ -28,7 +30,8 @@ public struct RemainingTimeView: View {
 
 /// The seek bar and time readout. The bar's motion is a Core Animation
 /// animation projected from the position anchor, and the time text ticks
-/// twice per second, so playback drives no frequent view updates.
+/// once per elapsed second at the playback speed, so playback drives no
+/// frequent view updates.
 public struct SeekBarView: View {
     @Environment(PlayerController.self) private var player
 
@@ -86,7 +89,7 @@ public struct SeekBarView: View {
                     )
                     .onHover { isHoveringSpeed = $0 }
                     .animation(.easeOut(duration: 0.1), value: isHoveringSpeed)
-                TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                TimelineView(.periodic(from: .now, by: tickInterval)) { context in
                     Text(timeText(at: context.date))
                         .font(.callout.monospacedDigit())
                         .foregroundStyle(.secondary)
@@ -147,6 +150,14 @@ public struct SeekBarView: View {
 
     private func fraction(at x: CGFloat, width: CGFloat) -> Double {
         min(1, max(0, x / max(width, 1)))
+    }
+
+    /// One tick per displayed second: the elapsed readout advances at the
+    /// playback speed, so faster speeds cross second boundaries more often.
+    /// Reading the speed here keeps it observed, so a speed change replaces
+    /// the schedule.
+    private var tickInterval: TimeInterval {
+        1.0 / max(player.playbackSpeed, 0.25)
     }
 
     /// Elapsed and total time within the current chapter, or within the book when there are no chapters.
