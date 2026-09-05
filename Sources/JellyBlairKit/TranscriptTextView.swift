@@ -184,11 +184,6 @@ public final class TranscriptTextCoordinator: NSObject {
     /// The last vertical center the view scrolled to, so following scrolls
     /// once per visual line, not once per word.
     private var centeredY: CGFloat?
-    /// The union of the storage ranges whose colors changed since the last
-    /// centering measurement. Color edits invalidate layout over their range,
-    /// so the measurement re-lays this range out to keep positions exact.
-    private var dirtyColorRange: NSRange?
-
     /// Wakes the coordinator at the next line or cue boundary.
     private var tickTimer: Timer?
 
@@ -469,7 +464,6 @@ public final class TranscriptTextCoordinator: NSObject {
         matchIndex = 0
         completedQuery = ""
         centeredY = nil
-        dirtyColorRange = nil
 
         let content = NSMutableAttributedString()
         for (position, line) in lines.enumerated() {
@@ -571,13 +565,54 @@ public final class TranscriptTextCoordinator: NSObject {
     /// Repaints the span of lines between the stored position and the given
     /// one through the resolver.
     private func recolor(fromLine previousLine: Int?, toLine line: Int?) {
-        guard let storage else { return }
         let oldLine = previousLine ?? 0
         let newLine = line ?? 0
         let span = linesRange(from: min(oldLine, newLine), to: max(oldLine, newLine))
+        paintKeepingViewport {
+            repaintResolved(span)
+        }
+    }
+
+    /// Runs the paints in one storage batch and keeps the text at the top
+    /// of the viewport in place. An attribute edit invalidates layout over
+    /// its range, and heights re-estimated above the viewport would
+    /// otherwise slide the content under the fixed scroll offset.
+    private func paintKeepingViewport(_ paints: () -> Void) {
+        guard let storage else { return }
+        let anchor = viewportAnchorRange()
+        let before = anchor.flatMap { frame(forStorageRange: $0)?.minY }
         storage.beginEditing()
-        repaintResolved(span)
+        paints()
         storage.endEditing()
+        guard let anchor, let before, let after = frame(forStorageRange: anchor)?.minY else { return }
+        shiftScroll(by: after - before)
+    }
+
+    /// A zero-length range at the start of the viewport's text, whose frame
+    /// anchors offset corrections.
+    private func viewportAnchorRange() -> NSRange? {
+        guard let layoutManager = textView.textLayoutManager,
+              let contentManager = layoutManager.textContentManager,
+              let viewport = layoutManager.textViewportLayoutController.viewportRange
+        else { return nil }
+        let start = contentManager.offset(from: contentManager.documentRange.location, to: viewport.location)
+        return NSRange(location: start, length: 0)
+    }
+
+    /// Moves the scroll offset by the delta without animation, so content
+    /// that shifted in document coordinates stays put on screen.
+    private func shiftScroll(by delta: CGFloat) {
+        guard abs(delta) > 0.5 else { return }
+        #if canImport(AppKit)
+        let clip = scrollView.contentView
+        clip.setBoundsOrigin(NSPoint(x: clip.bounds.origin.x, y: clip.bounds.origin.y + delta))
+        scrollView.reflectScrolledClipView(clip)
+        #else
+        textView.contentOffset.y += delta
+        #endif
+        if let centeredY {
+            self.centeredY = centeredY + delta
+        }
     }
 
     /// Paints the range's final colors: the positional base, then the
@@ -637,35 +672,10 @@ public final class TranscriptTextCoordinator: NSObject {
         return NSRange(location: lineRanges[line].location + readEnd, length: spokenEnd - readEnd)
     }
 
-    /// Applies one color edit and widens the dirty range it invalidates.
+    /// Applies one color edit.
     private func paint(_ color: PlatformColor, range: NSRange) {
         guard range.length > 0 else { return }
         storage?.addAttribute(.foregroundColor, value: color, range: range)
-        markColorsDirty(range)
-    }
-
-    /// Widens the dirty range to cover the given storage range.
-    private func markColorsDirty(_ range: NSRange) {
-        guard let dirty = dirtyColorRange else {
-            dirtyColorRange = range
-            return
-        }
-        let location = min(dirty.location, range.location)
-        let end = max(dirty.location + dirty.length, range.location + range.length)
-        dirtyColorRange = NSRange(location: location, length: end - location)
-    }
-
-    /// Re-lays out the range the color edits invalidated, so measured
-    /// positions are exact again. Bounded by the recolored span, not the
-    /// document.
-    private func ensureDirtyLayout() {
-        guard let dirty = dirtyColorRange else { return }
-        dirtyColorRange = nil
-        guard let layoutManager = textView.textLayoutManager,
-              let contentManager = layoutManager.textContentManager,
-              let textRange = textRange(from: dirty, in: contentManager)
-        else { return }
-        layoutManager.ensureLayout(for: textRange)
     }
 
     /// The storage range spanning the given line positions, clamped to the
@@ -693,9 +703,9 @@ public final class TranscriptTextCoordinator: NSObject {
             if !matchRanges.isEmpty {
                 let previous = matchRanges
                 matchRanges = []
-                storage?.beginEditing()
-                repaintBase(ofLinesHolding: previous)
-                storage?.endEditing()
+                paintKeepingViewport {
+                    repaintBase(ofLinesHolding: previous)
+                }
             }
             matchIndex = 0
             completedQuery = ""
@@ -725,17 +735,17 @@ public final class TranscriptTextCoordinator: NSObject {
     /// matches paint in one batch, and a fresh query lands on the first
     /// match at or past the spoken line, like find starting from a cursor.
     private func finishSearch(query: String, caseSensitive: Bool, ranges: [NSRange]) {
-        guard query == appliedQuery, caseSensitive == appliedCaseSensitive, let storage else { return }
+        guard query == appliedQuery, caseSensitive == appliedCaseSensitive else { return }
         let isFreshQuery = query != completedQuery || caseSensitive != completedCaseSensitive
         let previous = matchRanges
         matchRanges = ranges
-        storage.beginEditing()
-        repaintBase(ofLinesHolding: previous)
-        let cue = spokenCueRange(currentLine, cue: spokenCueIndex)
-        for range in ranges {
-            paintMatch(range, clippedBy: cue)
+        paintKeepingViewport {
+            repaintBase(ofLinesHolding: previous)
+            let cue = spokenCueRange(currentLine, cue: spokenCueIndex)
+            for range in ranges {
+                paintMatch(range, clippedBy: cue)
+            }
         }
-        storage.endEditing()
         completedQuery = query
         completedCaseSensitive = caseSensitive
         if isFreshQuery {
@@ -904,14 +914,44 @@ public final class TranscriptTextCoordinator: NSObject {
     }
 
     /// Scrolls the range's visual line to the viewport's center, unless it
-    /// is centered already. The full-layout pass keeps the measurement exact
-    /// even far into unvisited text.
+    /// is centered already. The corridor between the viewport and the target
+    /// lays out first, so the measured distance to the target is exact even
+    /// where estimated heights elsewhere are not.
     private func center(onStorageRange range: NSRange, forced: Bool, animated: Bool) {
-        ensureDirtyLayout()
+        layOutCorridor(to: range)
         guard let targetY = frame(forStorageRange: range)?.midY else { return }
         if !forced, let centeredY, abs(targetY - centeredY) <= 1 { return }
         centeredY = targetY
         scroll(toCenterY: targetY, animated: animated && view?.isVisible != false)
+    }
+
+    /// Lays out everything between the viewport and the target, keeping the
+    /// viewport's text in place when refinement above it moves the content.
+    private func layOutCorridor(to target: NSRange) {
+        guard let layoutManager = textView.textLayoutManager,
+              let contentManager = layoutManager.textContentManager,
+              let anchor = viewportAnchorRange()
+        else { return }
+        let before = frame(forStorageRange: anchor)?.minY
+        let start = min(anchor.location, target.location)
+        let end = max(anchor.location, target.location + target.length)
+        guard let corridor = textRange(from: NSRange(location: start, length: end - start), in: contentManager) else { return }
+        layoutManager.ensureLayout(for: corridor)
+        updateContentGeometry()
+        guard let before, let after = frame(forStorageRange: anchor)?.minY else { return }
+        shiftScroll(by: after - before)
+    }
+
+    /// Pushes the laid-out extent into the view, so the scroll limit and
+    /// the clip constraint see the corridor's true size right away instead
+    /// of the stale document height.
+    private func updateContentGeometry() {
+        #if canImport(AppKit)
+        textView.needsLayout = true
+        textView.layoutSubtreeIfNeeded()
+        #else
+        textView.layoutIfNeeded()
+        #endif
     }
 
     /// The range's frame in text view coordinates, from the layout.
