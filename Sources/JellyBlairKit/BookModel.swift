@@ -17,9 +17,6 @@ public final class BookModel: Identifiable {
     public private(set) var isFetchingChapters = false
 
     public private(set) var lyrics: [LyricLine] = []
-    /// Every line and cue start of the transcript, sorted without
-    /// duplicates. Computed once when the transcript loads, so the tick
-    /// schedule never walks the lines again.
     public private(set) var isFetchingLyrics = false
     private let lyricsStore = LyricsStore()
 
@@ -193,7 +190,7 @@ public final class BookModel: Identifiable {
         defer { isFetchingLyrics = false }
         let cached = lyricsStore.load(bookID: book.id)
         guard cached.isEmpty else {
-            setLyrics(cached)
+            lyrics = cached
             return
         }
         await fetchLyricsFromServer()
@@ -210,12 +207,8 @@ public final class BookModel: Identifiable {
 
     private func fetchLyricsFromServer() async {
         guard let loaded = try? await client.fetchLyrics(bookID: book.id), !loaded.isEmpty else { return }
-        setLyrics(loaded)
+        lyrics = loaded
         lyricsStore.save(loaded, for: book.id)
-    }
-
-    private func setLyrics(_ lines: [LyricLine]) {
-        lyrics = lines
     }
 
     // MARK: - Chapter reading
