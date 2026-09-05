@@ -42,8 +42,10 @@ public struct TranscriptTextView {
     let lines: [LyricLine]
     /// The book's chapters, for styling their heading lines.
     let chapters: [Chapter]
-    /// The playback position the coloring and centering follow.
-    let positionSeconds: Double
+    /// The anchor the coloring and centering project the listening position
+    /// from. The coordinator wakes itself at each word boundary, so a moving
+    /// anchor needs no per-word view updates.
+    let anchor: PlaybackAnchor
     /// True while the view keeps the spoken word centered.
     let isTracking: Bool
     /// False while another view covers the transcript; centering then lands
@@ -68,7 +70,7 @@ public struct TranscriptTextView {
     public init(
         lines: [LyricLine],
         chapters: [Chapter],
-        positionSeconds: Double,
+        anchor: PlaybackAnchor,
         isTracking: Bool,
         isVisible: Bool,
         searchQuery: String,
@@ -82,7 +84,7 @@ public struct TranscriptTextView {
     ) {
         self.lines = lines
         self.chapters = chapters
-        self.positionSeconds = positionSeconds
+        self.anchor = anchor
         self.isTracking = isTracking
         self.isVisible = isVisible
         self.searchQuery = searchQuery
@@ -113,6 +115,10 @@ extension TranscriptTextView: NSViewRepresentable {
         controller.coordinator = context.coordinator
         context.coordinator.update(from: self)
     }
+
+    public static func dismantleNSView(_ view: NSScrollView, coordinator: TranscriptTextCoordinator) {
+        coordinator.cancelTick()
+    }
 }
 #else
 extension TranscriptTextView: UIViewRepresentable {
@@ -130,6 +136,10 @@ extension TranscriptTextView: UIViewRepresentable {
     public func updateUIView(_ view: UITextView, context: Context) {
         controller.coordinator = context.coordinator
         context.coordinator.update(from: self)
+    }
+
+    public static func dismantleUIView(_ view: UITextView, coordinator: TranscriptTextCoordinator) {
+        coordinator.cancelTick()
     }
 }
 #endif
@@ -179,6 +189,10 @@ public final class TranscriptTextCoordinator: NSObject {
     /// centering measurement. Color edits invalidate layout over their range,
     /// so the measurement re-lays this range out to keep positions exact.
     private var dirtyColorRange: NSRange?
+
+    /// Wakes the coordinator when playback crosses the next line or cue
+    /// boundary, so following the narration needs no per-word view updates.
+    private var tickTimer: Timer?
 
     /// How long a tracking scroll glides.
     private static let scrollDuration: TimeInterval = 0.4
@@ -242,11 +256,18 @@ public final class TranscriptTextCoordinator: NSObject {
     #endif
 
     deinit {
+        tickTimer?.invalidate()
         #if canImport(AppKit)
         if let scrollObserver {
             NotificationCenter.default.removeObserver(scrollObserver)
         }
         #endif
+    }
+
+    /// Stops the boundary timer when the view leaves the hierarchy.
+    func cancelTick() {
+        tickTimer?.invalidate()
+        tickTimer = nil
     }
 
     // MARK: - Updates
@@ -265,6 +286,73 @@ public final class TranscriptTextCoordinator: NSObject {
             applySearch()
         }
         followPosition(recentered: contentChanged)
+        scheduleNextTick()
+    }
+
+    /// The listening position the anchor projects to now.
+    private func projectedPosition() -> Double {
+        view?.anchor.position(at: Date()) ?? 0
+    }
+
+    /// Delay after each boundary, keeping the recolor just past it so the
+    /// projected position always covers the word.
+    private static let tickSlack: TimeInterval = 0.005
+
+    /// Schedules the wakeup for the next boundary the anchor will cross. A
+    /// still anchor, or one past the last boundary, leaves no timer.
+    private func scheduleNextTick() {
+        tickTimer?.invalidate()
+        tickTimer = nil
+        guard let anchor = view?.anchor, anchor.rate > 0,
+              let next = nextBoundarySeconds(after: anchor.position(at: Date())),
+              let date = anchor.date(forPosition: next)
+        else { return }
+        let timer = Timer(fire: date.addingTimeInterval(Self.tickSlack), interval: 0, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.tick()
+            }
+        }
+        timer.tolerance = 0
+        RunLoop.main.add(timer, forMode: .common)
+        tickTimer = timer
+    }
+
+    /// One boundary wakeup: recolors for the new position and schedules the
+    /// next boundary.
+    private func tick() {
+        followPosition(recentered: false)
+        scheduleNextTick()
+    }
+
+    /// The next moment the current line or spoken cue changes: the first cue
+    /// of the current line past the position, or the next timed line's
+    /// start, whichever comes first.
+    private func nextBoundarySeconds(after seconds: Double) -> Double? {
+        var next: Double?
+        if let currentLine, lines.indices.contains(currentLine),
+           let cue = lines[currentLine].cues.first(where: { $0.startSeconds > seconds }) {
+            next = cue.startSeconds
+        }
+        if let lineStart = nextTimedLineStart(after: seconds), lineStart < next ?? .infinity {
+            next = lineStart
+        }
+        return next
+    }
+
+    /// The start of the first timed line strictly past the position, by
+    /// binary search.
+    private func nextTimedLineStart(after seconds: Double) -> Double? {
+        var low = 0
+        var high = timedLines.count
+        while low < high {
+            let mid = (low + high) / 2
+            if timedLines[mid].start <= seconds {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        return low < timedLines.count ? timedLines[low].start : nil
     }
 
     /// The insets last applied, so the per-tick update skips the setters:
@@ -289,8 +377,9 @@ public final class TranscriptTextCoordinator: NSObject {
     /// current line and spoken cue are unchanged.
     private func followPosition(recentered: Bool) {
         guard let view else { return }
-        let line = lineIndex(at: view.positionSeconds)
-        let cue = line.flatMap { spokenCueIndex(in: lines[$0], at: view.positionSeconds) }
+        let seconds = projectedPosition()
+        let line = lineIndex(at: seconds)
+        let cue = line.flatMap { spokenCueIndex(in: lines[$0], at: seconds) }
         let moved = line != currentLine || cue != spokenCueIndex
         guard moved || recentered else { return }
         let previousLine = currentLine
@@ -398,8 +487,9 @@ public final class TranscriptTextCoordinator: NSObject {
             }
             content.append(text)
         }
-        currentLine = lineIndex(at: view.positionSeconds)
-        spokenCueIndex = currentLine.flatMap { spokenCueIndex(in: lines[$0], at: view.positionSeconds) }
+        let seconds = projectedPosition()
+        currentLine = lineIndex(at: seconds)
+        spokenCueIndex = currentLine.flatMap { spokenCueIndex(in: lines[$0], at: seconds) }
         applyPositionColors(to: content)
         storage?.setAttributedString(content)
         searchText = content.string

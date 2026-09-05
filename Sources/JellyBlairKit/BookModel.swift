@@ -20,7 +20,6 @@ public final class BookModel: Identifiable {
     /// Every line and cue start of the transcript, sorted without
     /// duplicates. Computed once when the transcript loads, so the tick
     /// schedule never walks the lines again.
-    public private(set) var transcriptTickSeconds: [Double] = []
     public private(set) var isFetchingLyrics = false
     private let lyricsStore = LyricsStore()
 
@@ -215,30 +214,8 @@ public final class BookModel: Identifiable {
         lyricsStore.save(loaded, for: book.id)
     }
 
-    /// Stores the transcript together with its derived tick moments.
     private func setLyrics(_ lines: [LyricLine]) {
         lyrics = lines
-        transcriptTickSeconds = Self.tickSeconds(of: lines)
-    }
-
-    /// Flattens every line and cue start into one sorted list without
-    /// duplicates.
-    private static func tickSeconds(of lines: [LyricLine]) -> [Double] {
-        var seconds: [Double] = []
-        for line in lines {
-            if let start = line.startSeconds {
-                seconds.append(start)
-            }
-            for cue in line.cues {
-                seconds.append(cue.startSeconds)
-            }
-        }
-        seconds.sort()
-        var result: [Double] = []
-        for value in seconds where value != result.last {
-            result.append(value)
-        }
-        return result
     }
 
     // MARK: - Chapter reading

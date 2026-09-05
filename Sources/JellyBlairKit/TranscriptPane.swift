@@ -38,37 +38,30 @@ struct TranscriptPane: View {
             )
     }
 
-    /// The transcript, marked at the listener's position. The timeline fires
-    /// exactly when playback reaches each word, projected through the playback
-    /// anchor, so the word mark lands on the boundaries without a fast timer.
-    /// The anchor moves on every playback event, rebuilding the schedule.
+    /// The transcript, marked at the listener's position. The coordinator
+    /// behind the view projects the position from the anchor and wakes
+    /// itself at each word boundary, so the view only updates on playback
+    /// events, not per word. Reading the anchor here keeps it observed.
     private var transcript: some View {
-        let lines = model.lyrics
-        let chapters = chapters
-        return TimelineView(tickSchedule) { context in
-            transcriptText(at: listeningPosition(at: context.date), lines: lines, chapters: chapters)
-        }
-        .task(id: book.id) {
-            await model.fetchLyricsIfNeeded()
-        }
+        transcriptText(anchor: listeningAnchor, lines: model.lyrics, chapters: chapters)
+            .task(id: book.id) {
+                await model.fetchLyricsIfNeeded()
+            }
     }
 
-    /// The transcript's redraw schedule, rebuilt whenever the anchor moves.
-    /// Reading the anchor and playing state here keeps them observed, so a
-    /// playback event re-evaluates the body and replaces the schedule.
-    private var tickSchedule: TranscriptTickSchedule {
-        TranscriptTickSchedule(
-            tickSeconds: model.transcriptTickSeconds,
-            anchor: player.anchor,
-            isRunning: isLoaded && player.isPlaying
-        )
+    /// The anchor the transcript follows: the player's while the book is
+    /// loaded, or a still anchor at the resume position in a preview.
+    private var listeningAnchor: PlaybackAnchor {
+        isLoaded
+            ? player.anchor
+            : PlaybackAnchor(positionSeconds: model.resumePositionSeconds, date: .distantPast, rate: 0)
     }
 
-    private func transcriptText(at positionSeconds: Double, lines: [LyricLine], chapters: [Chapter]) -> some View {
+    private func transcriptText(anchor: PlaybackAnchor, lines: [LyricLine], chapters: [Chapter]) -> some View {
         TranscriptTextView(
             lines: lines,
             chapters: chapters,
-            positionSeconds: positionSeconds,
+            anchor: anchor,
             isTracking: isTracking,
             isVisible: isVisible,
             searchQuery: query,
@@ -96,12 +89,6 @@ struct TranscriptPane: View {
                 ProgressView()
             }
         }
-    }
-
-    /// The listener's position: the playing position when loaded, or the
-    /// resume position in a preview.
-    private func listeningPosition(at date: Date) -> Double {
-        isLoaded ? player.projectedTime(at: date) : model.resumePositionSeconds
     }
 
     /// Seeks a loaded book to the position, or starts playback there in a preview.
@@ -141,47 +128,5 @@ struct TranscriptPane: View {
             guard isTracking else { return }
             controller.centerOnSpokenWord(animated: true)
         }
-    }
-}
-
-/// Fires at each transcript tick moment, projected through the playback
-/// anchor, with a few milliseconds of slack placing each redraw just past
-/// its boundary so the projected position always covers the word. Entries
-/// generate lazily on demand, so replacing the schedule after an anchor
-/// change allocates nothing per remaining cue. Empty while nothing moves,
-/// so a paused transcript never redraws.
-private struct TranscriptTickSchedule: TimelineSchedule {
-    /// The tick moments as positions, sorted without duplicates.
-    let tickSeconds: [Double]
-    let anchor: PlaybackAnchor
-    let isRunning: Bool
-
-    /// Delay after each boundary, keeping the redraw just past it.
-    private static let slack: TimeInterval = 0.005
-
-    func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnySequence<Date> {
-        guard isRunning, anchor.rate > 0 else { return AnySequence([]) }
-        let anchor = anchor
-        let position = anchor.position(at: startDate)
-        let upcoming = tickSeconds[firstIndex(after: position)...]
-        return AnySequence(upcoming.lazy.compactMap { seconds in
-            anchor.date(forPosition: seconds)?.addingTimeInterval(Self.slack)
-        })
-    }
-
-    /// The index of the first tick strictly past the position, found by
-    /// binary search.
-    private func firstIndex(after position: Double) -> Int {
-        var low = 0
-        var high = tickSeconds.count
-        while low < high {
-            let mid = (low + high) / 2
-            if tickSeconds[mid] <= position {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
-        return low
     }
 }
