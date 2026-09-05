@@ -18,8 +18,6 @@ public final class TranscriptController {
     public fileprivate(set) var matchCount = 0
     /// True while a search runs in the background.
     public fileprivate(set) var isSearching = false
-    /// True while the full layout pass runs.
-    public fileprivate(set) var isPreparingLayout = false
 
     public init() {}
 
@@ -518,13 +516,11 @@ public final class TranscriptTextCoordinator: NSObject {
     // MARK: - Full layout
 
     /// Lays the document out in chunks between run-loop turns, so opening a
-    /// long transcript never blocks. Once every position is exact, reports
-    /// completion and recenters.
+    /// long transcript never blocks. Once every position is exact, recenters.
     private func startFullLayout() {
         layoutGeneration += 1
         let generation = layoutGeneration
         laidOutWidth = textView.bounds.width
-        setPreparingLayout(true)
         Task { @MainActor in
             var position = 0
             while generation == self.layoutGeneration, position < self.lineRanges.count {
@@ -533,7 +529,6 @@ public final class TranscriptTextCoordinator: NSObject {
                 await Task.yield()
             }
             guard generation == self.layoutGeneration else { return }
-            self.setPreparingLayout(false)
             if self.view?.isTracking == true {
                 self.centerOnSpokenWord(forced: true, animated: false)
             }
@@ -551,11 +546,6 @@ public final class TranscriptTextCoordinator: NSObject {
               let textRange = textRange(from: linesRange(from: position, to: last), in: contentManager)
         else { return }
         layoutManager.ensureLayout(for: textRange)
-    }
-
-    /// Published outside the SwiftUI update this can run in.
-    private func setPreparingLayout(_ preparing: Bool) {
-        Task { @MainActor in self.controller?.isPreparingLayout = preparing }
     }
 
     private var storage: NSTextStorage? {

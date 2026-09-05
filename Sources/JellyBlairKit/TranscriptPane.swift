@@ -85,8 +85,6 @@ struct TranscriptPane: View {
                     Text("No transcript for this book")
                         .foregroundStyle(.secondary)
                 }
-            } else if controller.isPreparingLayout {
-                ProgressView()
             }
         }
     }
