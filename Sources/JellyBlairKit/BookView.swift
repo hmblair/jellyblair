@@ -112,11 +112,14 @@ public struct BookView: View {
     }
 
     /// Re-reads everything the server and the file know about this book: the
-    /// chapter list, the transcript, the resume position, and the library fields.
+    /// cover, the chapter list, the transcript, the resume position, and the
+    /// library fields.
     private func refreshMetadata() {
         Task {
+            await CoverImageLoader.shared.refresh(for: book.id, from: model.coverURL)
             if isLoaded {
                 await player.refreshChapters()
+                await player.refreshArtwork()
             } else {
                 await model.refreshChapters()
             }

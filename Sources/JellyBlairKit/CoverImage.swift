@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Serves book covers from memory, then disk, then the network.
 /// Covers seen once stay available offline and across scrolling.
+@Observable
 @MainActor
 public final class CoverImageLoader {
     public static let shared = CoverImageLoader()
@@ -12,29 +13,50 @@ public final class CoverImageLoader {
         jellyBlairDataDirectory().appendingPathComponent("covers")
     }
 
+    private func fileURL(for bookID: String) -> URL {
+        directory.appendingPathComponent(bookID)
+    }
+
+    /// Returns the cover already held in memory, without any loading.
+    public func cachedImage(for bookID: String) -> PlatformImage? {
+        memory[bookID]
+    }
+
     public func image(for bookID: String, from url: URL) async -> PlatformImage? {
         guard !bookID.isEmpty else { return nil }
         if let cached = memory[bookID] {
             return cached
         }
-        let fileURL = directory.appendingPathComponent(bookID)
-        if let image = PlatformImage(contentsOfFile: fileURL.path) {
+        if let image = PlatformImage(contentsOfFile: fileURL(for: bookID).path) {
             memory[bookID] = image
             return image
         }
+        return await download(for: bookID, from: url)
+    }
+
+    /// Downloads the cover again and replaces both cache levels.
+    /// A failed download keeps the cover the cache already holds.
+    public func refresh(for bookID: String, from url: URL) async {
+        guard !bookID.isEmpty else { return }
+        _ = await download(for: bookID, from: url)
+    }
+
+    private func download(for bookID: String, from url: URL) async -> PlatformImage? {
         guard
             let (data, response) = try? await URLSession.shared.data(from: url),
             (response as? HTTPURLResponse)?.statusCode == 200,
             let image = PlatformImage(data: data)
         else { return nil }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try? data.write(to: fileURL)
+        try? data.write(to: fileURL(for: bookID))
         memory[bookID] = image
         return image
     }
 }
 
 /// Displays a book cover through the cache, with a neutral placeholder.
+/// It reads the image straight from the loader, so a refreshed cover
+/// appears everywhere without a reload.
 public struct BookCoverImage: View {
     let bookID: String
     let url: URL
@@ -46,18 +68,16 @@ public struct BookCoverImage: View {
         self.contentMode = contentMode
     }
 
-    @State private var image: PlatformImage?
-
     public var body: some View {
         Group {
-            if let image {
+            if let image = CoverImageLoader.shared.cachedImage(for: bookID) {
                 Image(platformImage: image).resizable().aspectRatio(contentMode: contentMode)
             } else {
                 Color.secondary.opacity(0.2)
             }
         }
         .task(id: bookID) {
-            image = await CoverImageLoader.shared.image(for: bookID, from: url)
+            _ = await CoverImageLoader.shared.image(for: bookID, from: url)
         }
     }
 }

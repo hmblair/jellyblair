@@ -199,6 +199,12 @@ public final class PlayerController {
         setChapters(model.chapters)
     }
 
+    /// Re-reads the now-playing artwork from the cover cache.
+    public func refreshArtwork() async {
+        guard let currentModel else { return }
+        await loadArtwork(for: currentModel, generation: openGeneration)
+    }
+
     private func loadArtwork(for model: BookModel, generation: Int) async {
         let image = await CoverImageLoader.shared.image(for: model.book.id, from: model.coverURL)
         guard generation == openGeneration else { return }

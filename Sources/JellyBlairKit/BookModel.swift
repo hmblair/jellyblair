@@ -155,11 +155,7 @@ public final class BookModel: Identifiable {
         guard chapters.isEmpty, !isFetchingChapters else { return }
         isFetchingChapters = true
         defer { isFetchingChapters = false }
-        let loaded = await loadChapters()
-        // An empty result can mean a failed read, so only keep real chapters.
-        guard !loaded.isEmpty else { return }
-        chapters = loaded
-        onChaptersChanged(loaded)
+        _ = await loadAndStoreChapters()
     }
 
     /// Reads the chapters again from the file. The old list and its disk
@@ -171,13 +167,20 @@ public final class BookModel: Identifiable {
         let previous = chapters
         chapters = []
         releaseAsset()
-        let loaded = await loadChapters()
-        guard !loaded.isEmpty else {
+        if await loadAndStoreChapters() == false {
             chapters = previous
-            return
         }
+    }
+
+    /// Reads the chapters, stores them, and notifies the catalog. An empty
+    /// result can mean a failed read, so it stores only real chapters and
+    /// reports whether it did.
+    private func loadAndStoreChapters() async -> Bool {
+        let loaded = await loadChapters()
+        guard !loaded.isEmpty else { return false }
         chapters = loaded
         onChaptersChanged(loaded)
+        return true
     }
 
     // MARK: - Lyrics
