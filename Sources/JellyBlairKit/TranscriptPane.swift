@@ -39,9 +39,9 @@ struct TranscriptPane: View {
     }
 
     /// The transcript, marked at the listener's position. The coordinator
-    /// behind the view projects the position from the anchor and wakes
-    /// itself at each word boundary, so the view only updates on playback
-    /// events, not per word. Reading the anchor here keeps it observed.
+    /// projects the position from the anchor and wakes itself at each word
+    /// boundary, so the view only updates on playback events. Reading the
+    /// anchor here keeps it observed.
     private var transcript: some View {
         transcriptText(anchor: listeningAnchor, lines: model.lyrics, chapters: chapters)
             .task(id: book.id) {

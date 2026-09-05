@@ -1,10 +1,8 @@
 import SwiftUI
 
-/// Shows the listening time left in the book at the current speed.
-/// A periodic timeline drives the text, since the position anchor itself
-/// only changes on playback events. The readout is speed-adjusted time,
-/// which advances one displayed second per wall second at any speed, so
-/// one tick per second always covers it.
+/// Shows the listening time left in the book at the current speed. The
+/// speed-adjusted readout advances one displayed second per wall second,
+/// so a one-second timeline covers every speed.
 public struct RemainingTimeView: View {
     @Environment(PlayerController.self) private var player
 
@@ -30,8 +28,7 @@ public struct RemainingTimeView: View {
 
 /// The seek bar and time readout. The bar's motion is a Core Animation
 /// animation projected from the position anchor, and the time text ticks
-/// once per elapsed second at the playback speed, so playback drives no
-/// frequent view updates.
+/// once per elapsed second, so playback drives no frequent view updates.
 public struct SeekBarView: View {
     @Environment(PlayerController.self) private var player
 
@@ -152,10 +149,8 @@ public struct SeekBarView: View {
         min(1, max(0, x / max(width, 1)))
     }
 
-    /// One tick per displayed second: the elapsed readout advances at the
-    /// playback speed, so faster speeds cross second boundaries more often.
-    /// Reading the speed here keeps it observed, so a speed change replaces
-    /// the schedule.
+    /// One tick per displayed second: the elapsed readout crosses second
+    /// boundaries at the playback speed. Reading the speed keeps it observed.
     private var tickInterval: TimeInterval {
         1.0 / max(player.playbackSpeed, 0.25)
     }

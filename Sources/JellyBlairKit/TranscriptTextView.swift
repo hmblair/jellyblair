@@ -43,8 +43,7 @@ public struct TranscriptTextView {
     /// The book's chapters, for styling their heading lines.
     let chapters: [Chapter]
     /// The anchor the coloring and centering project the listening position
-    /// from. The coordinator wakes itself at each word boundary, so a moving
-    /// anchor needs no per-word view updates.
+    /// from.
     let anchor: PlaybackAnchor
     /// True while the view keeps the spoken word centered.
     let isTracking: Bool
@@ -190,8 +189,7 @@ public final class TranscriptTextCoordinator: NSObject {
     /// so the measurement re-lays this range out to keep positions exact.
     private var dirtyColorRange: NSRange?
 
-    /// Wakes the coordinator when playback crosses the next line or cue
-    /// boundary, so following the narration needs no per-word view updates.
+    /// Wakes the coordinator at the next line or cue boundary.
     private var tickTimer: Timer?
 
     /// How long a tracking scroll glides.
@@ -294,8 +292,7 @@ public final class TranscriptTextCoordinator: NSObject {
         view?.anchor.position(at: Date()) ?? 0
     }
 
-    /// Delay after each boundary, keeping the recolor just past it so the
-    /// projected position always covers the word.
+    /// Delay after each boundary, so the projected position covers the word.
     private static let tickSlack: TimeInterval = 0.005
 
     /// Schedules the wakeup for the next boundary the anchor will cross. A
@@ -317,16 +314,14 @@ public final class TranscriptTextCoordinator: NSObject {
         tickTimer = timer
     }
 
-    /// One boundary wakeup: recolors for the new position and schedules the
-    /// next boundary.
+    /// One wakeup: recolors for the new position and schedules the next.
     private func tick() {
         followPosition(recentered: false)
         scheduleNextTick()
     }
 
     /// The next moment the current line or spoken cue changes: the first cue
-    /// of the current line past the position, or the next timed line's
-    /// start, whichever comes first.
+    /// of the current line past the position, or the next timed line's start.
     private func nextBoundarySeconds(after seconds: Double) -> Double? {
         var next: Double?
         if let currentLine, lines.indices.contains(currentLine),
@@ -573,9 +568,8 @@ public final class TranscriptTextCoordinator: NSObject {
         textView.textStorage
     }
 
-    /// Recolors the span of lines between the stored position and the given
-    /// one through the resolver, so the crossed lines take their new
-    /// positional colors and the matches on them repaint.
+    /// Repaints the span of lines between the stored position and the given
+    /// one through the resolver.
     private func recolor(fromLine previousLine: Int?, toLine line: Int?) {
         guard let storage else { return }
         let oldLine = previousLine ?? 0
@@ -586,10 +580,8 @@ public final class TranscriptTextCoordinator: NSObject {
         storage.endEditing()
     }
 
-    /// Paints the final colors over the range: the positional base, then the
-    /// matches, which never paint over the spoken cue. Every storage repaint
-    /// funnels through this or paints matches clipped against the cue, so
-    /// the spoken word wins over matches by construction.
+    /// Paints the range's final colors: the positional base, then the
+    /// matches, clipped against the spoken cue so the spoken word wins.
     private func repaintResolved(_ range: NSRange) {
         for segment in baseSegments(for: range) {
             paint(segment.color, range: segment.range)
@@ -884,8 +876,7 @@ public final class TranscriptTextCoordinator: NSObject {
         }
     }
 
-    /// Paints the match color over the range, minus the cue, so a match
-    /// paint can never cover the spoken word.
+    /// Paints the match color over the range, minus the cue.
     private func paintMatch(_ match: NSRange, clippedBy cue: NSRange?) {
         guard let cue else {
             paint(Style.match, range: match)
