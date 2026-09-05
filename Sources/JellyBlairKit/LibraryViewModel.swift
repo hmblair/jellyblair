@@ -130,11 +130,10 @@ public final class LibraryViewModel {
     /// Groups of the active kind whose books match the query, keeping their
     /// headings. An empty query passes all.
     public func groups(matching query: String) -> [BookGroup] {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
         let all = groups(ofKind: groupKind)
-        guard !trimmed.isEmpty else { return all }
+        guard !query.isEmpty else { return all }
         return all.compactMap { group in
-            group.keeping { $0.matches(trimmed) }
+            group.keeping { $0.matches(query) }
         }
     }
 
@@ -167,9 +166,8 @@ public final class LibraryViewModel {
 
     /// One group's books, filtered by the query when it is not empty.
     public func books(in group: BookGroup, matching query: String) -> [Book] {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return group.books }
-        return group.books.filter { $0.matches(trimmed) }
+        guard !query.isEmpty else { return group.books }
+        return group.books.filter { $0.matches(query) }
     }
 
     /// Groups books under derived names; a book with several names, such as

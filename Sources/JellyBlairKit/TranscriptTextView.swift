@@ -721,7 +721,7 @@ public final class TranscriptTextCoordinator: NSObject {
         var ranges: [NSRange] = []
         for candidate in previous.ranges {
             let remaining = NSRange(location: candidate.location, length: full.length - candidate.location)
-            let match = full.range(of: query, options: options, range: remaining)
+            let match = full.range(of: query, options: options, range: remaining, locale: searchLocale)
             if match.location != NSNotFound {
                 ranges.append(match)
                 if ranges.count >= matchLimit { break }
