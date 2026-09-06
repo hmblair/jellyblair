@@ -103,17 +103,21 @@ public final class LibraryViewModel {
         isLoading = false
     }
 
+    /// Groups from the passed array, never from the freshly written
+    /// property: reading an observable back inside its own update runs
+    /// observation tracking mid-change, which has crashed in the runtime's
+    /// access list.
     private func setBooks(_ newBooks: [Book]) {
         books = newBooks
-        authorGroups = Self.group(books, kind: .author, by: { book in
+        authorGroups = Self.group(newBooks, kind: .author, by: { book in
             let authors = book.authors
             return authors.isEmpty ? [Self.unknownName] : authors
         })
-        narratorGroups = Self.group(books, kind: .narrator, by: { book in
+        narratorGroups = Self.group(newBooks, kind: .narrator, by: { book in
             let narrators = book.narrators
             return narrators.isEmpty ? [Self.unknownName] : narrators
         })
-        genreGroups = Self.group(books, kind: .genre, by: { book in
+        genreGroups = Self.group(newBooks, kind: .genre, by: { book in
             let genres = book.genres ?? []
             return genres.isEmpty ? [Self.unknownName] : genres
         })
