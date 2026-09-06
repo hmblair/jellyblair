@@ -19,6 +19,10 @@ public struct BookView: View {
     @State private var isShowingTranscript = false
     @State private var isHoveringDownload = false
 
+    /// Measured height of the header's metadata column, which sizes the
+    /// cover as a square of the same height.
+    @State private var metadataHeight: CGFloat = 0
+
     /// Removal asks once: the first tap shows a red question mark that
     /// reverts after a few seconds; a second tap within that window deletes.
     @State private var isConfirmingRemoval = false
@@ -170,8 +174,8 @@ public struct BookView: View {
     #endif
 
     /// Centered title over a side-by-side section: cover at the left,
-    /// left-aligned metadata lines beside it. The height follows the text,
-    /// which can outgrow the cover.
+    /// left-aligned metadata lines beside it. The cover is a square with
+    /// the metadata column's height, so the two sides always stand level.
     private var header: some View {
         VStack(spacing: 12) {
             Text(book.name)
@@ -179,45 +183,21 @@ public struct BookView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
 
-            // Two equal halves: the cover fills its half as a square, the
-            // metadata lines take the other.
+            // Two equal halves: the measured metadata column sizes the
+            // cover, and each half claims its side of the center seam.
             HStack(alignment: .top, spacing: Self.coverSpacing) {
-                // The square fits its half's width and the header's height,
-                // whichever is tighter. The clip hugs the image itself; the
-                // outer frame then claims the half, with the cover against
-                // the metadata beside it.
                 cover
-                    .aspectRatio(1, contentMode: .fit)
+                    .frame(width: metadataHeight, height: metadataHeight)
                     .clipShape(RoundedRectangle(cornerRadius: Self.coverCornerRadius))
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    if !book.authors.isEmpty {
-                        metadataLine(icon: BookGroup.Kind.author.iconName) {
-                            NameListLine(names: book.authors, open: openAuthor)
-                        }
+                metadataColumn
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        metadataHeight = height
                     }
-                    if !book.narrators.isEmpty {
-                        metadataLine(icon: BookGroup.Kind.narrator.iconName) {
-                            NameListLine(names: book.narrators, open: openNarrator)
-                        }
-                    }
-                    if let year = book.productionYear {
-                        metadataLine(icon: "calendar") { Text(verbatim: String(year)) }
-                    }
-                    if let genres = book.genres, !genres.isEmpty {
-                        metadataLine(icon: BookGroup.Kind.genre.iconName) {
-                            NameListLine(names: genres, open: openGenre)
-                        }
-                    }
-                    metadataLine(icon: "clock.fill") { lengthLine }
-                    if let kbps = book.bitrateKbps {
-                        metadataLine(icon: "waveform") { Text("\(kbps) kbps") }
-                    }
-                    downloadRow
-                }
-                .font(Self.lineFont)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         #if os(iOS)
@@ -225,6 +205,35 @@ public struct BookView: View {
         // stack compresses the text into truncation instead of wrapping it.
         .fixedSize(horizontal: false, vertical: true)
         #endif
+    }
+
+    private var metadataColumn: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !book.authors.isEmpty {
+                metadataLine(icon: BookGroup.Kind.author.iconName) {
+                    NameListLine(names: book.authors, open: openAuthor)
+                }
+            }
+            if !book.narrators.isEmpty {
+                metadataLine(icon: BookGroup.Kind.narrator.iconName) {
+                    NameListLine(names: book.narrators, open: openNarrator)
+                }
+            }
+            if let year = book.productionYear {
+                metadataLine(icon: "calendar") { Text(verbatim: String(year)) }
+            }
+            if let genres = book.genres, !genres.isEmpty {
+                metadataLine(icon: BookGroup.Kind.genre.iconName) {
+                    NameListLine(names: genres, open: openGenre)
+                }
+            }
+            metadataLine(icon: "clock.fill") { lengthLine }
+            if let kbps = book.bitrateKbps {
+                metadataLine(icon: "waveform") { Text("\(kbps) kbps") }
+            }
+            downloadRow
+        }
+        .font(Self.lineFont)
     }
 
     /// A metadata row: a small dimmed icon beside its text.
