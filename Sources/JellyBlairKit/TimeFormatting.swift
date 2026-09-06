@@ -5,10 +5,16 @@ public func formatTime(_ seconds: Double) -> String {
     formatTime(seconds, showZeroHour: false)
 }
 
-/// Formats an elapsed time, showing an hour exactly when the total does,
-/// so the readout keeps one width throughout playback.
+/// Formats an elapsed time with the total's digit count, so the readout
+/// keeps one width throughout playback: the hour shows exactly when the
+/// total's does, and zeros pad the leading field to the total's width.
 public func formatElapsedTime(_ elapsed: Double, matching total: Double) -> String {
-    formatTime(elapsed, showZeroHour: Int(total.rounded()) >= 3600)
+    let text = formatTime(elapsed, showZeroHour: Int(total.rounded()) >= 3600)
+    // With the hour matched, both strings have the same shape, so any
+    // length difference is missing digits in the leading field.
+    let missing = formatTime(total).count - text.count
+    guard missing > 0 else { return text }
+    return String(repeating: "0", count: missing) + text
 }
 
 private func formatTime(_ seconds: Double, showZeroHour: Bool) -> String {
