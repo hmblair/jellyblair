@@ -38,7 +38,7 @@ public final class TranscriptController {
 /// update as attribute edits on the spoken ranges.
 public struct TranscriptTextView {
     let lines: [LyricLine]
-    /// The book's chapters, for styling their heading lines.
+    /// The book's chapters, shown as heading lines in the transcript.
     let chapters: [Chapter]
     /// The anchor the coloring and centering project the listening position
     /// from.
@@ -61,6 +61,8 @@ public struct TranscriptTextView {
     let controller: TranscriptController
     /// Called with the clicked word's cue.
     let onWordTap: (LyricCue) -> Void
+    /// Called with the clicked chapter heading's chapter.
+    let onChapterTap: (Chapter) -> Void
     /// Called when the user scrolls or navigates the transcript themselves.
     let onUserScroll: () -> Void
 
@@ -77,6 +79,7 @@ public struct TranscriptTextView {
         horizontalPadding: CGFloat,
         controller: TranscriptController,
         onWordTap: @escaping (LyricCue) -> Void,
+        onChapterTap: @escaping (Chapter) -> Void,
         onUserScroll: @escaping () -> Void
     ) {
         self.lines = lines
@@ -91,6 +94,7 @@ public struct TranscriptTextView {
         self.horizontalPadding = horizontalPadding
         self.controller = controller
         self.onWordTap = onWordTap
+        self.onChapterTap = onChapterTap
         self.onUserScroll = onUserScroll
     }
 }
@@ -148,10 +152,15 @@ extension TranscriptTextView: UIViewRepresentable {
 public final class TranscriptTextCoordinator: NSObject {
     fileprivate weak var controller: TranscriptController?
 
+    /// The view's lines as given, kept for change detection.
+    private var sourceLines: [LyricLine] = []
+    /// The lines on display: the source lines with one heading line per
+    /// chapter.
     private var lines: [LyricLine] = []
     private var chapters: [Chapter] = []
-    /// Indices of lines drawn as chapter headings, derived from the chapters.
-    private var titleLineIndices: Set<Int> = []
+    /// The chapter behind each heading line, keyed by the line's position in
+    /// the display lines.
+    private var titleChapters: [Int: Chapter] = [:]
     /// UTF-16 range of each line's text inside the storage.
     private var lineRanges: [NSRange] = []
     /// Start times of the timed lines with their array positions, in order,
@@ -265,7 +274,7 @@ public final class TranscriptTextCoordinator: NSObject {
 
     func update(from view: TranscriptTextView) {
         // Array equality short-circuits on shared storage, so this is cheap per tick.
-        let contentChanged = view.lines != lines || view.chapters != chapters
+        let contentChanged = view.lines != sourceLines || view.chapters != chapters
         self.view = view
         applyInsets()
         if contentChanged {
@@ -453,9 +462,9 @@ public final class TranscriptTextCoordinator: NSObject {
     /// baked in, so no recolor follows the build.
     private func rebuildContent() {
         guard let view else { return }
-        lines = view.lines
+        sourceLines = view.lines
         chapters = view.chapters
-        titleLineIndices = Self.titleLineIndices(of: lines, chapters: chapters)
+        (lines, titleChapters) = Self.mergedLines(sourceLines, chapters: chapters)
         lineRanges = []
         timedLines = []
         matchRanges = []
@@ -465,7 +474,7 @@ public final class TranscriptTextCoordinator: NSObject {
 
         let content = NSMutableAttributedString()
         for (position, line) in lines.enumerated() {
-            let isTitle = titleLineIndices.contains(line.index)
+            let isTitle = titleChapters[position] != nil
             let attributes = isTitle ? Style.titleAttributes : Style.bodyAttributes
             let text = NSAttributedString(string: line.text + "\n", attributes: attributes)
             lineRanges.append(NSRange(location: content.length, length: (line.text as NSString).length))
@@ -492,25 +501,47 @@ public final class TranscriptTextCoordinator: NSObject {
         }
     }
 
-    /// Indices of transcript lines that are chapter headings: the first line
-    /// at a chapter's start whose words are exactly the chapter's title,
-    /// compared without case. One walk covers both ordered lists.
-    private static func titleLineIndices(of lines: [LyricLine], chapters: [Chapter]) -> Set<Int> {
-        var indices: Set<Int> = []
+    /// Builds the display lines: the source lines with one heading line per
+    /// chapter. The transcript line at the chapter's start becomes the
+    /// heading when its words are exactly the chapter's title; otherwise an
+    /// untimed heading line with the title is inserted there. One walk
+    /// covers both ordered lists. An empty transcript stays empty.
+    private static func mergedLines(_ lines: [LyricLine], chapters: [Chapter]) -> (lines: [LyricLine], titles: [Int: Chapter]) {
+        guard !lines.isEmpty else { return (lines, [:]) }
+        var merged: [LyricLine] = []
+        var titles: [Int: Chapter] = [:]
         var lineIndex = 0
         for chapter in chapters {
             while lineIndex < lines.count, (lines[lineIndex].startSeconds ?? -1) < chapter.startSeconds - 0.5 {
+                merged.append(lines[lineIndex])
                 lineIndex += 1
             }
-            guard lineIndex < lines.count else { break }
-            let line = lines[lineIndex]
-            let lineText = line.text.trimmingCharacters(in: .whitespaces)
-            let title = chapter.title.trimmingCharacters(in: .whitespaces)
-            if lineText.caseInsensitiveCompare(title) == .orderedSame {
-                indices.insert(line.index)
+            titles[merged.count] = chapter
+            if lineIndex < lines.count, matchesTitle(lines[lineIndex], of: chapter) {
+                merged.append(lines[lineIndex])
+                lineIndex += 1
+            } else {
+                merged.append(headingLine(for: chapter))
             }
         }
-        return indices
+        merged.append(contentsOf: lines[lineIndex...])
+        return (merged, titles)
+    }
+
+    /// True when the line's words are exactly the chapter's title, compared
+    /// without case.
+    private static func matchesTitle(_ line: LyricLine, of chapter: Chapter) -> Bool {
+        let lineText = line.text.trimmingCharacters(in: .whitespaces)
+        let title = chapter.title.trimmingCharacters(in: .whitespaces)
+        return lineText.caseInsensitiveCompare(title) == .orderedSame
+    }
+
+    /// An untimed heading line holding the chapter's title, for chapters
+    /// whose title is not read aloud. With no start time and no cues, the
+    /// line never becomes the current line and never highlights. The
+    /// negative index keeps it apart from the source lines.
+    private static func headingLine(for chapter: Chapter) -> LyricLine {
+        LyricLine(index: -1 - chapter.index, text: chapter.title, startSeconds: nil, cues: [])
     }
 
     // MARK: - Full layout
@@ -1046,13 +1077,20 @@ public final class TranscriptTextCoordinator: NSObject {
     }
     #endif
 
-    /// Routes a click to the word's cue. Clicks on whitespace or beside the
-    /// words do nothing.
+    /// Routes a click: anywhere on a chapter heading goes to the chapter,
+    /// and a word elsewhere goes to its cue. Clicks on whitespace or beside
+    /// the words of a body line do nothing.
     private func handleTap(atUTF16Index index: Int) {
-        guard let position = lineRanges.firstIndex(where: { index >= $0.location && index <= $0.location + $0.length }) else { return }
+        guard let view,
+              let position = lineRanges.firstIndex(where: { index >= $0.location && index <= $0.location + $0.length })
+        else { return }
+        if let chapter = titleChapters[position] {
+            view.onChapterTap(chapter)
+            return
+        }
         let line = lines[position]
         let local = characterOffset(ofUTF16: index - lineRanges[position].location, in: line.text)
-        guard let view, let cue = cue(atCharacter: local, in: line) else { return }
+        guard let cue = cue(atCharacter: local, in: line) else { return }
         view.onWordTap(cue)
     }
 

@@ -73,6 +73,9 @@ struct TranscriptPane: View {
             onWordTap: { cue in
                 jump(toSeconds: cue.startSeconds)
             },
+            onChapterTap: { chapter in
+                jump(toSeconds: chapter.startSeconds)
+            },
             onUserScroll: {
                 isTracking = false
             }
