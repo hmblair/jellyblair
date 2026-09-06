@@ -371,7 +371,13 @@ public struct BookView: View {
             .frame(minWidth: 100)
         }
         .buttonStyle(.borderedProminent)
+        // The large control is a modest button on the Mac but a thick
+        // capsule on the phone; the regular size matches the Mac's look.
+        #if os(macOS)
         .controlSize(.large)
+        #else
+        .controlSize(.regular)
+        #endif
         .disabled(!canStartPlayback)
     }
 
