@@ -547,10 +547,12 @@ public final class TranscriptTextCoordinator: NSObject {
     /// viewport stays put. On iOS there is no pass: heights refine as the
     /// viewport reaches them and UITextView keeps the visible text in place
     /// itself, while a background pass would slide the content under the
-    /// recoloring for the pass's whole duration.
+    /// recoloring for the pass's whole duration. An unsized view skips the
+    /// work; the first real width comes through update and starts it.
     private func startFullLayout() {
         layoutGeneration += 1
         laidOutWidth = textView.bounds.width
+        guard laidOutWidth > 0 else { return }
         #if canImport(AppKit)
         let generation = layoutGeneration
         Task { @MainActor in
