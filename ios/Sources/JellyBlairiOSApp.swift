@@ -56,28 +56,26 @@ struct MainScreen: View {
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
-            LibraryScreen(session: session)
-                .navigationDestination(for: LibraryRoute.self) { route in
-                    switch route {
-                    case .book(let book):
-                        BookView(book: book)
-                            .navigationBarTitleDisplayMode(.inline)
-                    case .group(let group):
-                        LibraryScreen(session: session, scope: group)
+        // The bar is a stack sibling, not a safe-area inset: an inset lets
+        // scrollable screens extend their frames beneath it, which would
+        // put the panes' fades and centering at the screen bottom instead
+        // of the bar.
+        VStack(spacing: 0) {
+            NavigationStack(path: $path) {
+                LibraryScreen(session: session)
+                    .navigationDestination(for: LibraryRoute.self) { route in
+                        switch route {
+                        case .book(let book):
+                            BookView(book: book)
+                                .navigationBarTitleDisplayMode(.inline)
+                        case .group(let group):
+                            LibraryScreen(session: session, scope: group)
+                        }
                     }
-                }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            // The bar shows everywhere except the loaded book's own screen,
-            // which already carries the full controls.
-            if let loadedBook = scope.player.book, path.last != .book(loadedBook) {
-                MiniPlayerBar {
-                    path = [.book(loadedBook)]
-                }
             }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+            PlaybackBar { book in
+                path = [.book(book)]
+            }
             OfflineIndicator()
                 .background(.bar)
         }

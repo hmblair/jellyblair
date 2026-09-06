@@ -107,10 +107,8 @@ struct ContentView: View {
                 }
             }
 
-            if let loadedBook = scope.player.book, loadedBook.id != selectedBookID {
-                MiniPlayerBar {
-                    selectedBookID = loadedBook.id
-                }
+            PlaybackBar { book in
+                selectedBookID = book.id
             }
         }
         // Blank, so the window shows no title text over the book screen.

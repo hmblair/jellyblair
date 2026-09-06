@@ -5,11 +5,10 @@ public func formatTime(_ seconds: Double) -> String {
     formatTime(seconds, showZeroHour: false)
 }
 
-/// Formats "elapsed / total", with the elapsed part showing an hour exactly
-/// when the total does, so the readout keeps one width throughout playback.
-public func formatTimePair(elapsed: Double, total: Double) -> String {
-    let totalShowsHour = Int(total.rounded()) >= 3600
-    return "\(formatTime(elapsed, showZeroHour: totalShowsHour)) / \(formatTime(total))"
+/// Formats an elapsed time, showing an hour exactly when the total does,
+/// so the readout keeps one width throughout playback.
+public func formatElapsedTime(_ elapsed: Double, matching total: Double) -> String {
+    formatTime(elapsed, showZeroHour: Int(total.rounded()) >= 3600)
 }
 
 private func formatTime(_ seconds: Double, showZeroHour: Bool) -> String {

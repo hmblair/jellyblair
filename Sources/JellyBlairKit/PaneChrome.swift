@@ -2,15 +2,8 @@ import SwiftUI
 
 /// Layout shared by the book screen's chapter and transcript panes.
 enum PaneLayout {
-    /// Resting clearance for the last row: past the fade, and past the home
-    /// indicator on the phone.
-    static var bottomRestingInset: CGFloat {
-        #if os(iOS)
-        return 44
-        #else
-        return 16
-        #endif
-    }
+    /// Resting clearance for the last row, past the bottom fade.
+    static let bottomRestingInset: CGFloat = 16
 
     /// Side padding of the transcript text: the phone's content padding, and
     /// the inset list's margin on the Mac.

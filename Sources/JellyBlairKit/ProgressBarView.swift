@@ -45,7 +45,7 @@ extension AnimatedProgressBar: UIViewRepresentable {
 
 /// The layer-backed platform view behind AnimatedProgressBar.
 final class ProgressBarLayerView: PlatformNativeView {
-    private static let barHeight: CGFloat = 7
+    private static let barHeight: CGFloat = 9
     private static let animationKey = "progress"
 
     private let trackLayer = CALayer()

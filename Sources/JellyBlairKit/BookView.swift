@@ -47,17 +47,12 @@ public struct BookView: View {
 
     public var body: some View {
         // On the phone the list runs edge to edge; only the upper content
-        // keeps side padding. The Mac pads the whole page.
+        // keeps side padding. The Mac pads the whole page. The loaded book's
+        // controls live in the app-wide playback bar, not here.
         VStack(spacing: 16) {
             Group {
                 header
-                if isLoaded {
-                    if let message = player.playbackErrorMessage {
-                        errorBanner(message)
-                    }
-                    SeekBarView()
-                    TransportControlsView()
-                } else {
+                if !isLoaded {
                     playButton
                 }
             }
@@ -66,7 +61,6 @@ public struct BookView: View {
             #endif
             Divider()
             listSection
-                .modifier(ExtendToScreenBottom())
         }
         #if os(macOS)
         .padding(.horizontal, 20)
@@ -348,17 +342,6 @@ public struct BookView: View {
         }
     }
 
-    private func errorBanner(_ message: String) -> some View {
-        HStack {
-            Label(message, systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.red)
-            Spacer()
-            Button("Retry") {
-                player.retryCurrentBook()
-            }
-        }
-    }
-
     private var playButton: some View {
         Button {
             player.open(model, playWhenReady: true)
@@ -402,18 +385,6 @@ public struct BookView: View {
     /// sidecar, or a fetched transcript is already cached.
     private var hasTranscript: Bool {
         book.hasLyrics == true || !model.lyrics.isEmpty
-    }
-}
-
-/// On the phone the chapter list runs under the home indicator, so the fade
-/// lands at the true screen bottom. The Mac window has no such inset.
-private struct ExtendToScreenBottom: ViewModifier {
-    func body(content: Content) -> some View {
-        #if os(iOS)
-        content.ignoresSafeArea(edges: .bottom)
-        #else
-        content
-        #endif
     }
 }
 
