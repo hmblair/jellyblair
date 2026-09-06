@@ -237,12 +237,16 @@ public struct BookView: View {
         }
     }
 
-    /// A metadata row with a custom view in the icon column.
+    /// A metadata row with a custom view in the icon column. The content
+    /// stays on one line and scrolls horizontally, but only when it
+    /// overflows; a line that fits does not move.
     private func metadataLine(@ViewBuilder icon: () -> some View, @ViewBuilder content: () -> some View) -> some View {
         HStack(spacing: 6) {
             icon()
                 .frame(width: 22)
-            content()
+            OverflowScrollLine {
+                content()
+            }
         }
     }
 
@@ -388,7 +392,57 @@ public struct BookView: View {
     }
 }
 
-/// A comma-separated list of names wrapping like text, each name its own
+/// Full width of an overflowing line's edge fade; a smaller overflow
+/// shrinks the fade with it, so the fade dissolves as the edge approaches
+/// the content's end instead of popping off.
+private let overflowFadeWidth: CGFloat = 20
+
+/// One line of content that scrolls horizontally only when it overflows.
+/// Each clipped edge fades out while more content lies beyond it, so the
+/// fade itself signals that the line can scroll; the fades follow the
+/// scroll position and vanish at the content's true ends.
+private struct OverflowScrollLine<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    /// Points of content clipped beyond each edge.
+    @State private var overflow = EdgeOverflow(leading: 0, trailing: 0)
+
+    private struct EdgeOverflow: Equatable {
+        var leading: CGFloat
+        var trailing: CGFloat
+    }
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            content
+        }
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize, axes: [.horizontal])
+        .onScrollGeometryChange(for: EdgeOverflow.self) { geometry in
+            EdgeOverflow(
+                leading: max(0, geometry.contentOffset.x),
+                trailing: max(0, geometry.contentSize.width - geometry.containerSize.width - geometry.contentOffset.x)
+            )
+        } action: { _, newOverflow in
+            overflow = newOverflow
+        }
+        .mask {
+            fadeMask
+        }
+    }
+
+    private var fadeMask: some View {
+        HStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                .frame(width: min(overflowFadeWidth, overflow.leading))
+            Rectangle()
+            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: min(overflowFadeWidth, overflow.trailing))
+        }
+    }
+}
+
+/// A comma-separated list of names on one line, each name its own
 /// click-and-hover target navigating to that name's books when the shell
 /// provides a destination.
 private struct NameListLine: View {
@@ -398,7 +452,7 @@ private struct NameListLine: View {
     @State private var hoveredName: String?
 
     var body: some View {
-        FlowLayout(alignment: .leading) {
+        HStack(spacing: 4) {
             ForEach(Array(names.enumerated()), id: \.offset) { index, name in
                 item(name, isLast: index == names.count - 1)
             }
