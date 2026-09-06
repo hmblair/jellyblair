@@ -104,11 +104,21 @@ public struct Book: Codable, Identifiable, Hashable {
         return Int((Double(bitrate) / 1000).rounded())
     }
 
-    public var author: String? {
-        if let albumArtist, !albumArtist.isEmpty {
-            return albumArtist
+    /// The individual author names: the artists list, or the album artist
+    /// alone when the list is empty.
+    public var authors: [String] {
+        if let artists, !artists.isEmpty {
+            return artists
         }
-        let joined = (artists ?? []).joined(separator: ", ")
+        if let albumArtist, !albumArtist.isEmpty {
+            return [albumArtist]
+        }
+        return []
+    }
+
+    /// The authors joined, as the single string the search matcher checks.
+    public var author: String? {
+        let joined = authors.joined(separator: ", ")
         return joined.isEmpty ? nil : joined
     }
 

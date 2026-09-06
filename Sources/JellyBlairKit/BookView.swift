@@ -198,9 +198,9 @@ public struct BookView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    if let author = book.author {
+                    if !book.authors.isEmpty {
                         metadataLine(icon: BookGroup.Kind.author.iconName) {
-                            NameListLine(names: [author], open: openAuthor)
+                            NameListLine(names: book.authors, open: openAuthor)
                         }
                     }
                     if !book.narrators.isEmpty {
