@@ -182,7 +182,8 @@ public struct BookView: View {
 
     /// Centered title over a side-by-side section: cover at the left,
     /// left-aligned metadata lines beside it. The cover is a square with
-    /// the metadata column's height, so the two sides always stand level.
+    /// the metadata column's height, so the two sides always share one
+    /// height.
     private var header: some View {
         VStack(spacing: 12) {
             Text(book.name)
@@ -416,7 +417,7 @@ public struct BookView: View {
 
 /// Full width of an overflowing line's edge fade; a smaller overflow
 /// shrinks the fade with it, so the fade dissolves as the edge approaches
-/// the content's end instead of popping off.
+/// the content's end instead of disappearing at full width.
 private let overflowFadeWidth: CGFloat = 20
 
 /// One line of content that scrolls horizontally only when it overflows.

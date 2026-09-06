@@ -238,8 +238,8 @@ public final class PlayerController {
     private func closeCurrentBook() async {
         guard let book else { return }
         player?.pause()
-        // Forced directly: the observation's hop to the main actor would
-        // land after the player is gone.
+        // The transition runs directly here: the observation's hop to the
+        // main actor would land after the player is gone.
         updatePlayingState(false)
         removeObservers()
         stopProgressReports()

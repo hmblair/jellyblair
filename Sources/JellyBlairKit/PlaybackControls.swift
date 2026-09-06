@@ -60,7 +60,7 @@ struct PlaybackSpeedMenu: View {
         }
         .fixedSize()
         .menuIndicator(.hidden)
-        // The label wears the time display's gray instead of the tint.
+        // The label uses the time display's gray instead of the tint.
         .tint(Color.secondary)
         .buttonStyle(.plain)
         .menuStyle(.borderlessButton)

@@ -105,7 +105,7 @@ public final class LibraryViewModel {
 
     /// Groups from the passed array, never from the freshly written
     /// property: reading an observable back inside its own update runs
-    /// observation tracking mid-change, which has crashed in the runtime's
+    /// observation tracking mid-change, which can crash in the runtime's
     /// access list.
     private func setBooks(_ newBooks: [Book]) {
         books = newBooks

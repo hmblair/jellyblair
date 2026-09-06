@@ -158,8 +158,8 @@ public final class JellyfinClient {
     }
 
     /// Fetches a book's lyric sidecar, parsed by the server into transcript
-    /// lines. Returns no lines for a book without a sidecar: absence is an
-    /// answer, not a failure.
+    /// lines. Returns no lines for a book without a sidecar; only a failed
+    /// request throws.
     func fetchLyrics(bookID: String) async throws -> [LyricLine] {
         let request = makeRequest(path: "Audio/\(bookID)/Lyrics")
         let data: Data
