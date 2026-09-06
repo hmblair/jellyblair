@@ -36,6 +36,10 @@ public final class PlayerController {
     public private(set) var book: Book?
     public private(set) var chapters: [Chapter] = []
     public private(set) var currentChapterIndex: Int?
+
+    /// True while the player intends to play. The player's own state is the
+    /// source of truth; updatePlayingState mirrors it here and is the one
+    /// place that writes it.
     public private(set) var isPlaying = false
 
     /// The position anchor, written on playback events: open, seek, pause,
@@ -63,6 +67,7 @@ public final class PlayerController {
     private var player: AVPlayer?
     private var boundaryObserver: Any?
     private var statusObservation: NSKeyValueObservation?
+    private var timeControlObservation: NSKeyValueObservation?
     private var timebaseRateObserver: NSObjectProtocol?
     private var playbackEndObserver: NSObjectProtocol?
     private var terminationObserver: NSObjectProtocol?
@@ -169,6 +174,7 @@ public final class PlayerController {
         player = newPlayer
         observeFailure(of: item)
         observePlaybackEnd(of: item)
+        observePlayingState(of: newPlayer)
 
         let ready = await waitUntilReady(item)
         guard generation == openGeneration else { return }
@@ -232,8 +238,9 @@ public final class PlayerController {
     private func closeCurrentBook() async {
         guard let book else { return }
         player?.pause()
-        isPlaying = false
-        reanchorFromPlayer()
+        // Forced directly: the observation's hop to the main actor would
+        // land after the player is gone.
+        updatePlayingState(false)
         removeObservers()
         stopProgressReports()
         let position = currentTime
@@ -279,23 +286,33 @@ public final class PlayerController {
         startPlayback()
     }
 
+    /// Commands only: the playing flag and its side effects follow from
+    /// the player's state change, through updatePlayingState.
     private func startPlayback() {
-        guard isReady, let book else { return }
+        guard isReady else { return }
         player?.rate = Float(playbackSpeed)
-        isPlaying = true
-        if !hasActiveSession {
-            hasActiveSession = true
-            startProgressReports(for: book)
-        }
-        syncNowPlaying()
     }
 
     public func pause() {
         player?.pause()
-        isPlaying = false
-        reanchorFromPlayer()
-        audioMeter.reset()
-        reportProgressNow()
+    }
+
+    /// The one writer of the playing flag, with the side effects of each
+    /// transition. Every pause runs the same effects here, whether the app
+    /// or the system paused the player.
+    private func updatePlayingState(_ playing: Bool) {
+        guard playing != isPlaying else { return }
+        isPlaying = playing
+        if playing {
+            if let book, !hasActiveSession {
+                hasActiveSession = true
+                startProgressReports(for: book)
+            }
+        } else {
+            reanchorFromPlayer()
+            audioMeter.reset()
+            reportProgressNow()
+        }
         syncNowPlaying()
     }
 
@@ -475,6 +492,20 @@ public final class PlayerController {
         }
     }
 
+    /// Derives the playing flag from the player's own state. Every change
+    /// arrives here, including pauses the system performs itself, such as
+    /// the automatic pause when headphones disconnect. A rebuffering stall
+    /// reports the waiting status, not the paused one, so it stays a
+    /// playing state.
+    private func observePlayingState(of player: AVPlayer) {
+        timeControlObservation = player.observe(\.timeControlStatus) { [weak self] player, _ in
+            let playing = player.timeControlStatus != .paused
+            Task { @MainActor in
+                self?.updatePlayingState(playing)
+            }
+        }
+    }
+
     private func observeFailure(of item: AVPlayerItem) {
         statusObservation = item.observe(\.status) { [weak self] item, _ in
             guard item.status == .failed else { return }
@@ -501,6 +532,8 @@ public final class PlayerController {
         removeChapterBoundaryObserver()
         statusObservation?.invalidate()
         statusObservation = nil
+        timeControlObservation?.invalidate()
+        timeControlObservation = nil
         if let timebaseRateObserver {
             NotificationCenter.default.removeObserver(timebaseRateObserver)
         }
@@ -514,7 +547,7 @@ public final class PlayerController {
     private func handlePlaybackFailure(_ message: String) {
         guard playbackErrorMessage == nil else { return }
         playbackErrorMessage = message
-        isPlaying = false
+        updatePlayingState(false)
         isReady = false
         removeObservers()
         player = nil
@@ -524,7 +557,7 @@ public final class PlayerController {
 
     private func handlePlaybackEnded() {
         guard let book else { return }
-        isPlaying = false
+        updatePlayingState(false)
         setAnchor(position: duration, rate: 0)
         currentModel?.recordPosition(duration)
         audioMeter.reset()
