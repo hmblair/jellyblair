@@ -185,10 +185,15 @@ struct SeekTimeRow: View {
     }
 }
 
-/// The skip-30 and play/pause buttons. Chapter navigation lives in the
-/// system Now Playing commands and the chapter list.
+/// The skip and play/pause buttons. The skip amounts come from the stored
+/// intervals, with the numbered arrow symbols following them. Chapter
+/// navigation lives in the system Now Playing commands and the chapter
+/// list.
 struct TransportControlsView: View {
     @Environment(PlayerController.self) private var player
+
+    @AppStorage(SkipIntervals.backKey) private var skipBackSeconds: Double = SkipIntervals.defaultSeconds
+    @AppStorage(SkipIntervals.forwardKey) private var skipForwardSeconds: Double = SkipIntervals.defaultSeconds
 
     #if os(macOS)
     private static let playButtonSize: CGFloat = 34
@@ -203,9 +208,9 @@ struct TransportControlsView: View {
     var body: some View {
         HStack(spacing: Self.buttonSpacing) {
             Button {
-                Task { await player.skip(by: -30) }
+                Task { await player.skip(by: -skipBackSeconds) }
             } label: {
-                Image(systemName: "gobackward.30").font(.system(size: Self.skipButtonSize))
+                Image(systemName: "gobackward.\(Int(skipBackSeconds))").font(.system(size: Self.skipButtonSize))
             }
             .buttonStyle(HoverScaleButtonStyle())
 
@@ -220,9 +225,9 @@ struct TransportControlsView: View {
             .buttonStyle(HoverScaleButtonStyle())
 
             Button {
-                Task { await player.skip(by: 30) }
+                Task { await player.skip(by: skipForwardSeconds) }
             } label: {
-                Image(systemName: "goforward.30").font(.system(size: Self.skipButtonSize))
+                Image(systemName: "goforward.\(Int(skipForwardSeconds))").font(.system(size: Self.skipButtonSize))
             }
             .buttonStyle(HoverScaleButtonStyle())
         }

@@ -10,8 +10,6 @@ import MediaPlayer
 final class NowPlayingCenter {
     private weak var player: PlayerController?
 
-    static let skipInterval: Double = 30
-
     func attach(to player: PlayerController) {
         self.player = player
         configureCommands()
@@ -41,6 +39,15 @@ final class NowPlayingCenter {
         }
         center.nowPlayingInfo = info
         setPlaybackState(on: center, playing: isPlaying, stopped: false)
+        syncSkipIntervals()
+    }
+
+    /// Keeps the remote skip buttons' labels at the stored intervals, which
+    /// the settings screens can change at any time.
+    private func syncSkipIntervals() {
+        let commands = MPRemoteCommandCenter.shared()
+        commands.skipBackwardCommand.preferredIntervals = [NSNumber(value: SkipIntervals.back)]
+        commands.skipForwardCommand.preferredIntervals = [NSNumber(value: SkipIntervals.forward)]
     }
 
     /// The explicit playback state only exists on macOS; iOS infers it.
@@ -61,14 +68,13 @@ final class NowPlayingCenter {
         center.togglePlayPauseCommand.addTarget { [weak self] _ in
             self?.dispatch { $0.togglePlayback() } ?? .commandFailed
         }
-        center.skipForwardCommand.preferredIntervals = [NSNumber(value: Self.skipInterval)]
         center.skipForwardCommand.addTarget { [weak self] _ in
-            self?.dispatch { player in Task { await player.skip(by: Self.skipInterval) } } ?? .commandFailed
+            self?.dispatch { player in Task { await player.skip(by: SkipIntervals.forward) } } ?? .commandFailed
         }
-        center.skipBackwardCommand.preferredIntervals = [NSNumber(value: Self.skipInterval)]
         center.skipBackwardCommand.addTarget { [weak self] _ in
-            self?.dispatch { player in Task { await player.skip(by: -Self.skipInterval) } } ?? .commandFailed
+            self?.dispatch { player in Task { await player.skip(by: -SkipIntervals.back) } } ?? .commandFailed
         }
+        syncSkipIntervals()
         center.nextTrackCommand.addTarget { [weak self] _ in
             self?.dispatch { player in Task { await player.nextChapter() } } ?? .commandFailed
         }

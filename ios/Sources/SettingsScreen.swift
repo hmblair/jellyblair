@@ -16,6 +16,9 @@ struct SettingsScreen: View {
                     session.signOut()
                     dismiss()
                 }
+                Section("Playback") {
+                    SkipIntervalSettings()
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

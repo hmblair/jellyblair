@@ -18,6 +18,9 @@ struct SettingsView: View {
                 Text("Not signed in")
                     .foregroundStyle(.secondary)
             }
+            Section("Playback") {
+                SkipIntervalSettings()
+            }
         }
         .formStyle(.grouped)
         .frame(width: 380)
