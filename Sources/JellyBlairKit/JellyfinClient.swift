@@ -157,10 +157,17 @@ public final class JellyfinClient {
         return try? decode(Book.self, from: data)
     }
 
-    /// Fetches a book's lyric sidecar, parsed by the server into transcript lines.
+    /// Fetches a book's lyric sidecar, parsed by the server into transcript
+    /// lines. Returns no lines for a book without a sidecar: absence is an
+    /// answer, not a failure.
     func fetchLyrics(bookID: String) async throws -> [LyricLine] {
         let request = makeRequest(path: "Audio/\(bookID)/Lyrics")
-        let data = try await send(request)
+        let data: Data
+        do {
+            data = try await send(request)
+        } catch JellyfinError.badStatus(404) {
+            return []
+        }
         let response = try decode(LyricsResponse.self, from: data)
         return response.lyrics.enumerated().map { index, line in
             LyricLine(

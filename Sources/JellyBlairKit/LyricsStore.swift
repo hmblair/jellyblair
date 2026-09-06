@@ -23,4 +23,8 @@ struct LyricsStore {
         guard let data = try? JSONEncoder().encode(lines) else { return }
         try? data.write(to: fileURL(for: bookID))
     }
+
+    func delete(bookID: String) {
+        try? FileManager.default.removeItem(at: fileURL(for: bookID))
+    }
 }

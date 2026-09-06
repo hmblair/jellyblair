@@ -127,6 +127,13 @@ public struct BookView: View {
         }
     }
 
+    /// True while the transcript pane is the visible one. A transcript that
+    /// disappears in a refresh falls back to the chapters, even though the
+    /// toggle state remembers the choice.
+    private var showsTranscriptPane: Bool {
+        isShowingTranscript && hasTranscript
+    }
+
     /// Both panes stay alive; the toolbar toggle changes only which one
     /// shows. The hidden transcript keeps tracking the narration, so
     /// switching to it opens on the current word without any repositioning.
@@ -141,8 +148,8 @@ public struct BookView: View {
                 isLoaded: isLoaded,
                 canStartPlayback: canStartPlayback
             )
-            .opacity(isShowingTranscript ? 0 : 1)
-            .allowsHitTesting(!isShowingTranscript)
+            .opacity(showsTranscriptPane ? 0 : 1)
+            .allowsHitTesting(!showsTranscriptPane)
             if hasTranscript {
                 TranscriptPane(
                     book: book,
@@ -150,10 +157,10 @@ public struct BookView: View {
                     chapters: chapters,
                     isLoaded: isLoaded,
                     canStartPlayback: canStartPlayback,
-                    isVisible: isShowingTranscript
+                    isVisible: showsTranscriptPane
                 )
-                .opacity(isShowingTranscript ? 1 : 0)
-                .allowsHitTesting(isShowingTranscript)
+                .opacity(showsTranscriptPane ? 1 : 0)
+                .allowsHitTesting(showsTranscriptPane)
             }
         }
     }

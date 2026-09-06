@@ -201,7 +201,8 @@ public final class BookModel: Identifiable {
     }
 
     /// Fetches the transcript from the server again. The old lines and their
-    /// disk cache survive unless the fetch succeeds.
+    /// disk cache survive a failed fetch, but any successful answer wins,
+    /// including an empty one.
     public func refreshLyrics() async {
         guard !isFetchingLyrics else { return }
         isFetchingLyrics = true
@@ -209,10 +210,17 @@ public final class BookModel: Identifiable {
         await fetchLyricsFromServer()
     }
 
+    /// Applies the server's answer: new lines replace the cache, and no
+    /// lines clear it, so a sidecar removed on the server disappears here
+    /// too. A failed fetch changes nothing.
     private func fetchLyricsFromServer() async {
-        guard let loaded = try? await client.fetchLyrics(bookID: book.id), !loaded.isEmpty else { return }
+        guard let loaded = try? await client.fetchLyrics(bookID: book.id) else { return }
         lyrics = loaded
-        lyricsStore.save(loaded, for: book.id)
+        if loaded.isEmpty {
+            lyricsStore.delete(bookID: book.id)
+        } else {
+            lyricsStore.save(loaded, for: book.id)
+        }
     }
 
     // MARK: - Chapter reading
