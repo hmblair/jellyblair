@@ -6,7 +6,11 @@ public final class JellyfinClient {
     public let serverURL: URL
 
     private static let clientName = "JellyBlair"
-    private static let clientVersion = "0.1"
+
+    /// The app version the server sees, from the bundle, where the build
+    /// stamps it out of the VERSION file. A bare development binary has no
+    /// bundle version.
+    private static let clientVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
 
     #if os(macOS)
     private static let deviceName = "Mac"

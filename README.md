@@ -36,6 +36,10 @@ make iphone
 
 You can also generate the project with `cd ios && xcodegen generate`, open it in Xcode, select your team, and run from there.
 
+## Versioning
+
+The app version lives in the `VERSION` file. The make targets stamp it into both platforms' bundles, and the client reports it to the server.
+
 ## Security note
 
 The app stores your Jellyfin access token in UserDefaults, not in the Keychain. This is deliberate: Keychain access prompts on every rebuilt development binary, and a Jellyfin token grants only what your Jellyfin account can do. If your server is exposed to the open internet and you consider the token sensitive, weigh this before signing in.

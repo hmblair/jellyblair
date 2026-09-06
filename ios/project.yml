@@ -18,6 +18,8 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: JellyBlair
+        # Resolved at build time; make iphone passes it from the VERSION file.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         UISupportedInterfaceOrientations:
@@ -26,6 +28,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hmblair.jellyblair.ios
         CODE_SIGN_STYLE: Automatic
+        # Placeholder for builds outside make, such as running from Xcode.
+        MARKETING_VERSION: "0"
         # The signing team comes from Makefile.local through make iphone,
         # or from your own selection when building in Xcode.
         TARGETED_DEVICE_FAMILY: "1"
