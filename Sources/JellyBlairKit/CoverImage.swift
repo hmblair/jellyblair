@@ -14,7 +14,7 @@ public final class CoverImageLoader {
     }
 
     private func fileURL(for bookID: String) -> URL {
-        directory.appendingPathComponent(bookID)
+        directory.appendingPathComponent(sanitizedFileComponent(bookID))
     }
 
     /// Returns the cover already held in memory, without any loading.

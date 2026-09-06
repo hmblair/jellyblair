@@ -11,7 +11,7 @@ struct LyricsStore {
     }
 
     private func fileURL(for bookID: String) -> URL {
-        directory.appendingPathComponent("\(bookID).json")
+        directory.appendingPathComponent("\(sanitizedFileComponent(bookID)).json")
     }
 
     func load(bookID: String) -> [LyricLine] {
