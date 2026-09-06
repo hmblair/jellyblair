@@ -476,19 +476,38 @@ public final class PlayerController {
         boundaryObserver = nil
     }
 
+    /// Observes a notification the media subsystem posts from its own
+    /// threads, running the action on the main actor.
+    ///
+    /// Every media notification must register through this helper. It takes
+    /// delivery on the posting thread and hops to the main actor itself:
+    /// main-queue delivery makes the media thread wait for the main thread
+    /// while holding the notification center's lock, and a timebase
+    /// teardown finalizing on the main thread waits for that lock, so the
+    /// two deadlock when one book closes while another starts.
+    private func observeMediaNotification(
+        _ name: Notification.Name,
+        from object: Any,
+        action: @escaping @MainActor (PlayerController) -> Void
+    ) -> NSObjectProtocol {
+        NotificationCenter.default.addObserver(forName: name, object: object, queue: nil) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                action(self)
+            }
+        }
+    }
+
     /// Reanchors when the timebase's effective rate changes. The notification
     /// arrives at the exact moments rendering starts, stalls, resumes, or
     /// changes speed, so the projection follows the audio without polling.
     private func observeTimebaseRate(of item: AVPlayerItem) {
         guard let timebase = item.timebase else { return }
-        timebaseRateObserver = NotificationCenter.default.addObserver(
-            forName: .init(kCMTimebaseNotification_EffectiveRateChanged as String),
-            object: timebase,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.reanchorFromPlayer()
-            }
+        timebaseRateObserver = observeMediaNotification(
+            .init(kCMTimebaseNotification_EffectiveRateChanged as String),
+            from: timebase
+        ) { player in
+            player.reanchorFromPlayer()
         }
     }
 
@@ -517,14 +536,8 @@ public final class PlayerController {
     }
 
     private func observePlaybackEnd(of item: AVPlayerItem) {
-        playbackEndObserver = NotificationCenter.default.addObserver(
-            forName: AVPlayerItem.didPlayToEndTimeNotification,
-            object: item,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.handlePlaybackEnded()
-            }
+        playbackEndObserver = observeMediaNotification(AVPlayerItem.didPlayToEndTimeNotification, from: item) { player in
+            player.handlePlaybackEnded()
         }
     }
 
