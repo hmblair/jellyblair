@@ -66,7 +66,7 @@ struct TranscriptPane: View {
             isVisible: isVisible,
             searchQuery: query,
             searchIsCaseSensitive: isCaseSensitive,
-            topInset: floatingBarZoneHeight + 6,
+            topInset: floatingBarClearance,
             bottomInset: PaneLayout.bottomRestingInset,
             horizontalPadding: PaneLayout.transcriptHorizontalPadding,
             controller: controller,

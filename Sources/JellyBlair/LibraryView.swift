@@ -57,7 +57,7 @@ struct LibraryView: View {
         }
         .listStyle(.sidebar)
         .safeAreaInset(edge: .top, spacing: 0) {
-            Color.clear.frame(height: floatingBarZoneHeight + 6)
+            Color.clear.frame(height: floatingBarClearance)
         }
         .overlay {
             LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleGroups.isEmpty, searchQuery: filters.searchQuery)

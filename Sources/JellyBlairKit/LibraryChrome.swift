@@ -3,6 +3,9 @@ import SwiftUI
 /// Height of the zone a floating bar occupies over a list.
 public let floatingBarZoneHeight: CGFloat = 34
 
+/// Clearance content keeps under a floating bar: its zone plus a gap.
+public let floatingBarClearance: CGFloat = floatingBarZoneHeight + 6
+
 /// Fades a list's rows to nothing under the floating bar's zone, and
 /// optionally into the bottom edge.
 private struct FloatingBarFade: ViewModifier {

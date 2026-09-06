@@ -5,15 +5,16 @@ import AppKit
 import UIKit
 #endif
 
-/// The transcript's outward face: commands in, observable status out. The
-/// transcript owns its content work; controls read the status and send
-/// commands without knowing anything about the text.
+/// The interface between the transcript and its controls: commands go in,
+/// observable status comes out. The transcript owns its content work;
+/// controls read the status and send commands without knowing anything
+/// about the text.
 @Observable
 @MainActor
 public final class TranscriptController {
     fileprivate weak var coordinator: TranscriptTextCoordinator?
 
-    /// The position of the match the navigation stands on.
+    /// The position of the selected match.
     public fileprivate(set) var matchIndex = 0
     public fileprivate(set) var matchCount = 0
     /// True while a search runs in the background.
@@ -120,6 +121,7 @@ extension TranscriptTextView: NSViewRepresentable {
 
     public static func dismantleNSView(_ view: NSScrollView, coordinator: TranscriptTextCoordinator) {
         coordinator.cancelTick()
+        coordinator.cancelSearch()
     }
 }
 #else
@@ -142,6 +144,7 @@ extension TranscriptTextView: UIViewRepresentable {
 
     public static func dismantleUIView(_ view: UITextView, coordinator: TranscriptTextCoordinator) {
         coordinator.cancelTick()
+        coordinator.cancelSearch()
     }
 }
 #endif
@@ -173,7 +176,7 @@ public final class TranscriptTextCoordinator: NSObject {
     private var spokenCueIndex: Int?
     /// UTF-16 ranges of the search matches inside the storage, in order.
     private var matchRanges: [NSRange] = []
-    /// The position of the match the navigation stands on.
+    /// The position of the selected match.
     private var matchIndex = 0
     /// The query whose search last started, and its case sensitivity.
     private var appliedQuery = ""
@@ -259,18 +262,28 @@ public final class TranscriptTextCoordinator: NSObject {
     #endif
 
     deinit {
-        tickTimer?.invalidate()
-        #if canImport(AppKit)
-        if let scrollObserver {
-            NotificationCenter.default.removeObserver(scrollObserver)
+        // Owned by SwiftUI state, so deallocation happens on the main thread.
+        MainActor.assumeIsolated {
+            tickTimer?.invalidate()
+            searchTask?.cancel()
+            #if canImport(AppKit)
+            if let scrollObserver {
+                NotificationCenter.default.removeObserver(scrollObserver)
+            }
+            #endif
         }
-        #endif
     }
 
     /// Stops the boundary timer when the view leaves the hierarchy.
     func cancelTick() {
         tickTimer?.invalidate()
         tickTimer = nil
+    }
+
+    /// Stops any background search when the view leaves the hierarchy.
+    func cancelSearch() {
+        searchTask?.cancel()
+        searchTask = nil
     }
 
     // MARK: - Updates
@@ -339,20 +352,10 @@ public final class TranscriptTextCoordinator: NSObject {
         return next
     }
 
-    /// The start of the first timed line strictly past the position, by
-    /// binary search.
+    /// The start of the first timed line strictly past the position.
     private func nextTimedLineStart(after seconds: Double) -> Double? {
-        var low = 0
-        var high = timedLines.count
-        while low < high {
-            let mid = (low + high) / 2
-            if timedLines[mid].start <= seconds {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
-        return low < timedLines.count ? timedLines[low].start : nil
+        let position = timedLines.partitioningIndex { $0.start > seconds }
+        return position < timedLines.count ? timedLines[position].start : nil
     }
 
     /// The insets last applied, so the per-tick update skips the setters:
@@ -396,22 +399,19 @@ public final class TranscriptTextCoordinator: NSObject {
     /// The array position of the line containing the playback position.
     private func lineIndex(at seconds: Double) -> Int? {
         guard seconds > 0 else { return nil }
-        var low = 0
-        var high = timedLines.count
-        while low < high {
-            let mid = (low + high) / 2
-            if timedLines[mid].start <= seconds {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
-        return low > 0 ? timedLines[low - 1].position : nil
+        let position = timedLines.partitioningIndex { $0.start > seconds }
+        return position > 0 ? timedLines[position - 1].position : nil
     }
 
     /// The index of the last cue starting at or before the position.
     private func spokenCueIndex(in line: LyricLine, at seconds: Double) -> Int? {
         line.cues.lastIndex(where: { $0.startSeconds <= seconds })
+    }
+
+    /// The storage location where the current line starts, or zero without
+    /// a current line.
+    private func currentLineStart() -> Int {
+        currentLine.flatMap { lineRanges.indices.contains($0) ? lineRanges[$0].location : nil } ?? 0
     }
 
     // MARK: - Content
@@ -499,14 +499,16 @@ public final class TranscriptTextCoordinator: NSObject {
     /// chapter. The transcript line at the chapter's start becomes the
     /// heading when its words are exactly the chapter's title; otherwise an
     /// untimed heading line with the title is inserted there. One walk
-    /// covers both ordered lists. An empty transcript stays empty.
+    /// covers both ordered lists. An empty transcript stays empty, and a
+    /// transcript without timestamps gets no headings, since they have no
+    /// position to land on.
     private static func mergedLines(_ lines: [LyricLine], chapters: [Chapter]) -> (lines: [LyricLine], titles: [Int: Chapter]) {
-        guard !lines.isEmpty else { return (lines, [:]) }
+        guard lines.contains(where: { $0.startSeconds != nil }) else { return (lines, [:]) }
         var merged: [LyricLine] = []
         var titles: [Int: Chapter] = [:]
         var lineIndex = 0
         for chapter in chapters {
-            while lineIndex < lines.count, (lines[lineIndex].startSeconds ?? -1) < chapter.startSeconds - 0.5 {
+            while lineIndex < lines.count, (lines[lineIndex].startSeconds ?? -1) < chapter.startSeconds - Chapter.startSlackSeconds {
                 merged.append(lines[lineIndex])
                 lineIndex += 1
             }
@@ -659,20 +661,22 @@ public final class TranscriptTextCoordinator: NSObject {
         updateContentGeometry()
     }
 
-    #if canImport(AppKit)
     /// Runs the work, then shifts the scroll so the text at the top of the
     /// viewport keeps its place on screen when the work moved the content.
     /// Only the Mac needs the shift: UITextView adjusts its own offset when
     /// the geometry above the viewport changes, and a manual shift there
     /// would double the move.
     private func keepingViewport(_ work: () -> Void) {
+        #if canImport(AppKit)
         let anchor = viewportAnchorRange()
         let before = anchor.flatMap { frame(forStorageRange: $0)?.minY }
         work()
         guard let anchor, let before, let after = frame(forStorageRange: anchor)?.minY else { return }
         shiftScroll(by: after - before)
+        #else
+        work()
+        #endif
     }
-    #endif
 
     /// A zero-length range at the start of the text at the current scroll
     /// offset, whose frame anchors offset corrections. Asked of the layout
@@ -719,7 +723,7 @@ public final class TranscriptTextCoordinator: NSObject {
     /// region, the unread region, and the current line's runs on top.
     private func baseSegments(for range: NSRange) -> [(color: PlatformColor, range: NSRange)] {
         var segments: [(color: PlatformColor, range: NSRange)] = []
-        let readEnd = currentLine.flatMap { lineRanges.indices.contains($0) ? lineRanges[$0].location : nil } ?? 0
+        let readEnd = currentLineStart()
         let end = range.location + range.length
         if readEnd > range.location {
             segments.append((Style.read, NSRange(location: range.location, length: min(readEnd, end) - range.location)))
@@ -827,12 +831,15 @@ public final class TranscriptTextCoordinator: NSObject {
 
     /// Installs a finished search: the old match colors revert, the new
     /// matches paint in one batch, and a fresh query lands on the first
-    /// match at or past the spoken line, like find starting from a cursor.
+    /// match at or past the spoken line.
     private func finishSearch(query: String, caseSensitive: Bool, ranges: [NSRange]) {
         guard query == appliedQuery, caseSensitive == appliedCaseSensitive else { return }
         let isFreshQuery = query != completedQuery || caseSensitive != completedCaseSensitive
-        matchRanges = ranges
-        invalidateAllColors()
+        // With no matches before or after there is nothing to repaint.
+        if !matchRanges.isEmpty || !ranges.isEmpty {
+            matchRanges = ranges
+            invalidateAllColors()
+        }
         completedQuery = query
         completedCaseSensitive = caseSensitive
         if isFreshQuery {
@@ -862,18 +869,9 @@ public final class TranscriptTextCoordinator: NSObject {
     /// to the first match overall.
     private func nearestForwardMatch() -> Int {
         guard !matchRanges.isEmpty else { return 0 }
-        let location = currentLine.flatMap { lineRanges.indices.contains($0) ? lineRanges[$0].location : nil } ?? 0
-        var low = 0
-        var high = matchRanges.count
-        while low < high {
-            let mid = (low + high) / 2
-            if matchRanges[mid].location < location {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
-        return low < matchRanges.count ? low : 0
+        let location = currentLineStart()
+        let position = matchRanges.partitioningIndex { $0.location >= location }
+        return position < matchRanges.count ? position : 0
     }
 
     /// Upper bound on collected matches, so a one-letter query stays fast.
@@ -923,24 +921,14 @@ public final class TranscriptTextCoordinator: NSObject {
         }
     }
 
-    /// Repaints the match color over the occurrences intersecting the range,
-    /// found by binary search.
+    /// Repaints the match color over the occurrences intersecting the range.
     private func repaintMatches(intersecting range: NSRange) {
         guard !matchRanges.isEmpty else { return }
         let cue = spokenCueRange(currentLine, cue: spokenCueIndex)
-        var low = 0
-        var high = matchRanges.count
-        while low < high {
-            let mid = (low + high) / 2
-            if matchRanges[mid].location + matchRanges[mid].length <= range.location {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
-        while low < matchRanges.count, matchRanges[low].location < range.location + range.length {
-            paintMatch(matchRanges[low], clippedBy: cue)
-            low += 1
+        var position = matchRanges.partitioningIndex { $0.location + $0.length > range.location }
+        while position < matchRanges.count, matchRanges[position].location < range.location + range.length {
+            paintMatch(matchRanges[position], clippedBy: cue)
+            position += 1
         }
     }
 
@@ -990,18 +978,13 @@ public final class TranscriptTextCoordinator: NSObject {
               let contentManager = layoutManager.textContentManager,
               let anchor = viewportAnchorRange()
         else { return }
-        #if canImport(AppKit)
-        let before = frame(forStorageRange: anchor)?.minY
-        #endif
         let start = min(anchor.location, target.location)
         let end = max(anchor.location, target.location + target.length)
         guard let corridor = textRange(from: NSRange(location: start, length: end - start), in: contentManager) else { return }
-        layoutManager.ensureLayout(for: corridor)
-        updateContentGeometry()
-        #if canImport(AppKit)
-        guard let before, let after = frame(forStorageRange: anchor)?.minY else { return }
-        shiftScroll(by: after - before)
-        #endif
+        keepingViewport {
+            layoutManager.ensureLayout(for: corridor)
+            updateContentGeometry()
+        }
     }
 
     /// Pushes the laid-out extent into the view, so the scroll limit and
@@ -1070,9 +1053,7 @@ public final class TranscriptTextCoordinator: NSObject {
         #if canImport(AppKit)
         scrollView.dropsMomentum = true
         let clip = scrollView.contentView
-        let visible = clip.bounds.height - view.topInset - view.bottomInset
-        let limit = max(-view.topInset, documentHeight() - clip.bounds.height + view.bottomInset)
-        let target = min(max(y - view.topInset - visible / 2, -view.topInset), limit)
+        let target = scrollTarget(centering: y, viewportHeight: clip.bounds.height, topInset: view.topInset, bottomInset: view.bottomInset)
         let origin = NSPoint(x: clip.bounds.origin.x, y: target)
         if animated {
             NSAnimationContext.runAnimationGroup { context in
@@ -1089,9 +1070,7 @@ public final class TranscriptTextCoordinator: NSObject {
             textView.setContentOffset(textView.contentOffset, animated: false)
         }
         let inset = textView.contentInset
-        let visible = textView.bounds.height - inset.top - inset.bottom
-        let limit = max(-inset.top, documentHeight() - textView.bounds.height + inset.bottom)
-        let target = min(max(y - inset.top - visible / 2, -inset.top), limit)
+        let target = scrollTarget(centering: y, viewportHeight: textView.bounds.height, topInset: inset.top, bottomInset: inset.bottom)
         let offset = CGPoint(x: 0, y: target)
         if animated {
             UIView.animate(withDuration: Self.scrollDuration) {
@@ -1101,6 +1080,14 @@ public final class TranscriptTextCoordinator: NSObject {
             textView.contentOffset = offset
         }
         #endif
+    }
+
+    /// The scroll position that puts the document y at the center of the
+    /// region between the insets, clamped to the scrollable range.
+    private func scrollTarget(centering y: CGFloat, viewportHeight: CGFloat, topInset: CGFloat, bottomInset: CGFloat) -> CGFloat {
+        let visible = viewportHeight - topInset - bottomInset
+        let limit = max(-topInset, documentHeight() - viewportHeight + bottomInset)
+        return min(max(y - topInset - visible / 2, -topInset), limit)
     }
 
     private func documentHeight() -> CGFloat {
@@ -1133,9 +1120,9 @@ public final class TranscriptTextCoordinator: NSObject {
     /// and a word elsewhere goes to its cue. Clicks on whitespace or beside
     /// the words of a body line do nothing.
     private func handleTap(atUTF16Index index: Int) {
-        guard let view,
-              let position = lineRanges.firstIndex(where: { index >= $0.location && index <= $0.location + $0.length })
-        else { return }
+        guard let view else { return }
+        let position = lineRanges.partitioningIndex { $0.location + $0.length >= index }
+        guard position < lineRanges.count, index >= lineRanges[position].location else { return }
         if let chapter = titleChapters[position] {
             view.onChapterTap(chapter)
             return
@@ -1171,6 +1158,25 @@ public final class TranscriptTextCoordinator: NSObject {
               let index = utf16Index.samePosition(in: text)
         else { return 0 }
         return text.distance(from: text.startIndex, to: index)
+    }
+}
+
+extension Array {
+    /// The position of the first element in the suffix the predicate marks,
+    /// or the count when the suffix is empty, by binary search. The array
+    /// must order all non-matching elements before all matching ones.
+    fileprivate func partitioningIndex(where belongsToSuffix: (Element) -> Bool) -> Int {
+        var low = 0
+        var high = count
+        while low < high {
+            let mid = (low + high) / 2
+            if belongsToSuffix(self[mid]) {
+                high = mid
+            } else {
+                low = mid + 1
+            }
+        }
+        return low
     }
 }
 

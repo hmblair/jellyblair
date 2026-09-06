@@ -68,7 +68,7 @@ struct ChapterListPane: View {
             .platformChapterListStyle()
             // Keeps the resting rows clear of the floating filter bar.
             .safeAreaInset(edge: .top, spacing: 0) {
-                Color.clear.frame(height: floatingBarZoneHeight + 6)
+                Color.clear.frame(height: floatingBarClearance)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 Color.clear.frame(height: PaneLayout.bottomRestingInset)

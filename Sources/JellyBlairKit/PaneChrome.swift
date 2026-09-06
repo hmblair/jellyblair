@@ -67,7 +67,7 @@ extension View {
     }
 }
 
-/// Ghost find controls at a search field's right edge: a case-sensitivity
+/// Muted find controls at a search field's right edge: a case-sensitivity
 /// toggle, the match position, and arrows stepping through the matches.
 struct MatchNavigator: View {
     @Binding var isCaseSensitive: Bool

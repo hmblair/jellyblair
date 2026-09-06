@@ -395,7 +395,7 @@ public struct BookView: View {
             return player.currentChapterIndex
         }
         guard model.resumePositionSeconds > 0 else { return nil }
-        return chapters.last(where: { $0.startSeconds <= model.resumePositionSeconds + 0.5 })?.index
+        return chapters.last(where: { $0.startSeconds <= model.resumePositionSeconds + Chapter.startSlackSeconds })?.index
     }
 
     /// True when this book can show a transcript: the server reports a lyric

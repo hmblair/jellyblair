@@ -402,7 +402,7 @@ public final class PlayerController {
     /// Writes the index only when it changes, so views that depend on the
     /// chapter alone do not re-render on every time tick.
     private func refreshCurrentChapterIndex() {
-        let index = chapters.last(where: { $0.startSeconds <= currentTime + 0.5 })?.index
+        let index = chapters.last(where: { $0.startSeconds <= currentTime + Chapter.startSlackSeconds })?.index
         if index != currentChapterIndex {
             currentChapterIndex = index
             syncNowPlaying()
