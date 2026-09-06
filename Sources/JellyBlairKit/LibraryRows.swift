@@ -25,10 +25,7 @@ public struct BookRow: View {
                 Text(book.name)
                     .font(.title3)
                     .lineLimit(1)
-                Text(formatHoursMinutes(book.runTimeSeconds))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                detailLine
             }
 
             Spacer()
@@ -53,6 +50,34 @@ public struct BookRow: View {
                 .padding(.horizontal, 10)
         )
         .onHover { isHovering = $0 }
+    }
+
+    /// The row's second line: the first author, the year, and the length.
+    /// The author truncates first when the row is narrow; the rest keeps
+    /// its size.
+    private var detailLine: some View {
+        HStack(spacing: 0) {
+            if let author = book.authors.first {
+                Text(author)
+                    .lineLimit(1)
+            }
+            Text(fixedDetailText)
+                .fixedSize()
+        }
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+    }
+
+    /// The detail line's fixed tail: the year when known, then the length,
+    /// with a leading separator when an author precedes them.
+    private var fixedDetailText: String {
+        var parts: [String] = []
+        if let year = book.productionYear {
+            parts.append(String(year))
+        }
+        parts.append(formatHoursMinutes(book.runTimeSeconds))
+        let tail = parts.joined(separator: " · ")
+        return book.authors.isEmpty ? tail : " · " + tail
     }
 }
 
