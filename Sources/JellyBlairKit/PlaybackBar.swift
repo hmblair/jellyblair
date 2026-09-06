@@ -55,9 +55,9 @@ public struct PlaybackBar: View {
     }
 
     #if os(macOS)
-    /// One row: the info at the leading edge, the seek cluster at the true
-    /// center, and the transport at the trailing edge. The bar layout sizes
-    /// and places each element independently.
+    /// One row: the info at the leading edge, the transport at the trailing
+    /// edge, and the seek cluster centered in the space between them. The
+    /// bar layout sizes and places each element independently.
     private func controls(for book: Book) -> some View {
         BarLayout(infoMaximum: Self.infoMaxWidth, clusterMaximum: Self.seekClusterMaxWidth, spacing: 16) {
             info(for: book)
@@ -127,11 +127,11 @@ public struct PlaybackBar: View {
 
 #if os(macOS)
 /// Places the bar's three elements independently of each other: the first
-/// at the leading edge, the second at the true center, and the third at
-/// the trailing edge, each centered vertically. The sizes come first and
-/// never move the positions: the info hugs its content up to its cap, the
-/// transport takes its own size, and the center cluster gets the width the
-/// wider side leaves free on both sides, up to its cap.
+/// at the leading edge, the third at the trailing edge, and the second
+/// centered in the space between its two neighbors, each centered
+/// vertically. The info hugs its content up to its cap, the transport
+/// takes its own size, and the cluster gets all the space they leave, up
+/// to its cap.
 private struct BarLayout: Layout {
     let infoMaximum: CGFloat
     let clusterMaximum: CGFloat
@@ -174,8 +174,10 @@ private struct BarLayout: Layout {
             anchor: .leading,
             proposal: ProposedViewSize(sizes.info)
         )
+        // The midpoint of the gap between the info and the transport.
+        let clusterX = (bounds.minX + sizes.info.width + bounds.maxX - sizes.transport.width) / 2
         elements.cluster.place(
-            at: CGPoint(x: bounds.midX, y: bounds.midY),
+            at: CGPoint(x: clusterX, y: bounds.midY),
             anchor: .center,
             proposal: ProposedViewSize(sizes.cluster)
         )
@@ -188,24 +190,17 @@ private struct BarLayout: Layout {
 
     /// The elements' sizes for the given bar width: the info at its content
     /// width up to its cap, the transport at its own size, and the cluster
-    /// at the centered width those two leave.
+    /// at the width those two leave between them, up to its cap.
     private func sizes(of elements: Elements, inBarWidth barWidth: CGFloat?) -> ElementSizes {
         let transport = elements.transport.sizeThatFits(.unspecified)
         let infoWidth = min(elements.info.sizeThatFits(.unspecified).width, infoMaximum)
-        let clusterWidth = centeredClusterWidth(inBarWidth: barWidth, infoWidth: infoWidth, transportWidth: transport.width)
+        let available = (barWidth ?? .infinity) - infoWidth - transport.width - 2 * spacing
+        let clusterWidth = max(0, min(clusterMaximum, available))
         return ElementSizes(
             info: CGSize(width: infoWidth, height: height(of: elements.info, atWidth: infoWidth)),
             cluster: CGSize(width: clusterWidth, height: height(of: elements.cluster, atWidth: clusterWidth)),
             transport: transport
         )
-    }
-
-    /// The width of the centered cluster: the space the wider side leaves
-    /// free on both sides, up to the cluster's cap.
-    private func centeredClusterWidth(inBarWidth barWidth: CGFloat?, infoWidth: CGFloat, transportWidth: CGFloat) -> CGFloat {
-        let side = max(infoWidth, transportWidth) + spacing
-        let available = (barWidth ?? .infinity) - 2 * side
-        return max(0, min(clusterMaximum, available))
     }
 
     /// The element's height when laid out at the given width.
