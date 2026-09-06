@@ -26,5 +26,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hmblair.jellyblair.ios
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: UL59X4DZK5
+        # The signing team comes from Makefile.local through make iphone,
+        # or from your own selection when building in Xcode.
         TARGETED_DEVICE_FAMILY: "1"

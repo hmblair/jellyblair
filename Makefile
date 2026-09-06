@@ -3,6 +3,14 @@ BUILD_DIR := .build/release
 DIST_DIR := dist
 BUNDLE := $(DIST_DIR)/$(APP_NAME).app
 
+# Personal values live in an untracked Makefile.local:
+#   IPHONE  := <device name>       # for make iphone
+#   TEAM_ID := <Apple team ID>     # for iOS code signing
+-include Makefile.local
+
+IPHONE ?=
+TEAM_ID ?=
+
 INSTALL_DIR := /Applications
 
 # Development certificate: a stable Apple-issued identity for local use.
@@ -32,11 +40,14 @@ install: dist
 
 IOS_DIR := ios
 IOS_APP := $(IOS_DIR)/build/Build/Products/Debug-iphoneos/JellyBlairiOS.app
-IPHONE := Hamish’s iPhone
 
 iphone:
+	@if [ -z "$(IPHONE)" ] || [ -z "$(TEAM_ID)" ]; then \
+		echo "Set IPHONE and TEAM_ID in Makefile.local or on the command line."; \
+		exit 1; \
+	fi
 	cd $(IOS_DIR) && xcodegen generate
-	cd $(IOS_DIR) && xcodebuild -project JellyBlairiOS.xcodeproj -scheme JellyBlairiOS -destination generic/platform=iOS -derivedDataPath build -allowProvisioningUpdates -quiet build
+	cd $(IOS_DIR) && xcodebuild -project JellyBlairiOS.xcodeproj -scheme JellyBlairiOS -destination generic/platform=iOS -derivedDataPath build -allowProvisioningUpdates DEVELOPMENT_TEAM=$(TEAM_ID) -quiet build
 	xcrun devicectl device install app --device "$(IPHONE)" $(IOS_APP)
 	@echo "Installed on $(IPHONE)"
 
