@@ -35,7 +35,8 @@ public final class TranscriptController {
 /// The transcript as one native text view. The text system lays the whole
 /// book out lazily, answers where any character range sits, and scrolls to
 /// it, so following the narration needs no view-level machinery. Word colors
-/// update as attribute edits on the spoken ranges.
+/// come from a resolver of rendering attributes; recoloring re-lays the
+/// spoken line, which changes no metrics.
 public struct TranscriptTextView {
     let lines: [LyricLine]
     /// The book's chapters, shown as heading lines in the transcript.
@@ -226,6 +227,7 @@ public final class TranscriptTextCoordinator: NSObject {
 
         let click = NSClickGestureRecognizer(target: self, action: #selector(handleClick(_:)))
         textView.addGestureRecognizer(click)
+        installColorValidator()
 
         scrollObserver = NotificationCenter.default.addObserver(
             forName: NSScrollView.willStartLiveScrollNotification,
@@ -251,6 +253,7 @@ public final class TranscriptTextCoordinator: NSObject {
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         textView.addGestureRecognizer(tap)
+        installColorValidator()
         return textView
     }
     #endif
@@ -486,19 +489,10 @@ public final class TranscriptTextCoordinator: NSObject {
         let seconds = projectedPosition()
         currentLine = lineIndex(at: seconds)
         spokenCueIndex = currentLine.flatMap { spokenCueIndex(in: lines[$0], at: seconds) }
-        applyPositionColors(to: content)
         storage?.setAttributedString(content)
+        invalidateAllColors()
         searchText = content.string
         startFullLayout()
-    }
-
-    /// Colors the content for the stored position, from the same segments
-    /// the resolver paints. Runs before the storage ingests the content, so
-    /// the coloring invalidates no layout.
-    private func applyPositionColors(to content: NSMutableAttributedString) {
-        for segment in baseSegments(for: NSRange(location: 0, length: content.length)) {
-            content.addAttribute(.foregroundColor, value: segment.color, range: segment.range)
-        }
     }
 
     /// Builds the display lines: the source lines with one heading line per
@@ -546,16 +540,24 @@ public final class TranscriptTextCoordinator: NSObject {
 
     // MARK: - Full layout
 
-    /// Lays the document out in chunks between run-loop turns, so opening a
-    /// long transcript never blocks. Once every position is exact, recenters.
+    /// Lays the document out. On the Mac a chunked pass between run-loop
+    /// turns makes every position exact, with each chunk compensated so the
+    /// viewport stays put. On iOS there is no pass: heights refine as the
+    /// viewport reaches them and UITextView keeps the visible text in place
+    /// itself, while a background pass would slide the content under the
+    /// recoloring for the pass's whole duration.
     private func startFullLayout() {
         layoutGeneration += 1
-        let generation = layoutGeneration
         laidOutWidth = textView.bounds.width
+        #if canImport(AppKit)
+        let generation = layoutGeneration
         Task { @MainActor in
             var position = 0
             while generation == self.layoutGeneration, position < self.lineRanges.count {
-                self.layOutLines(from: position, count: Self.layoutChunkLines)
+                self.keepingViewport {
+                    self.layOutLines(from: position, count: Self.layoutChunkLines)
+                    self.updateContentGeometry()
+                }
                 position += Self.layoutChunkLines
                 await Task.yield()
             }
@@ -564,6 +566,11 @@ public final class TranscriptTextCoordinator: NSObject {
                 self.centerOnSpokenWord(forced: true, animated: false)
             }
         }
+        #else
+        if view?.isTracking == true {
+            centerOnSpokenWord(forced: true, animated: false)
+        }
+        #endif
     }
 
     /// Lines laid out per chunk of the layout pass.
@@ -583,58 +590,121 @@ public final class TranscriptTextCoordinator: NSObject {
         textView.textStorage
     }
 
-    /// Repaints the span of lines between the stored position and the given
-    /// one through the resolver.
+    /// Recolors the span of lines between the stored position and the given
+    /// one, by marking its colors stale.
     private func recolor(fromLine previousLine: Int?, toLine line: Int?) {
         let oldLine = previousLine ?? 0
         let newLine = line ?? 0
-        let span = linesRange(from: min(oldLine, newLine), to: max(oldLine, newLine))
-        paintKeepingViewport {
-            repaintResolved(span)
+        invalidateColors(in: linesRange(from: min(oldLine, newLine), to: max(oldLine, newLine)))
+    }
+
+    /// Installs the color resolver as the layout manager's rendering-
+    /// attributes validator. Each fragment asks it for colors as the
+    /// fragment lays out, so coloring lives outside the text storage and
+    /// the document colors lazily.
+    private func installColorValidator() {
+        textView.textLayoutManager?.renderingAttributesValidator = { [weak self] layoutManager, fragment in
+            MainActor.assumeIsolated {
+                self?.validateColors(of: fragment, in: layoutManager)
+            }
         }
     }
 
-    /// Runs the paints in one storage batch and keeps the text at the top
-    /// of the viewport in place. An attribute edit invalidates layout over
-    /// its range, and heights re-estimated above the viewport would
-    /// otherwise slide the content under the fixed scroll offset.
-    private func paintKeepingViewport(_ paints: () -> Void) {
-        guard let storage else { return }
+    /// Paints one fragment's final colors through the resolver.
+    private func validateColors(of fragment: NSTextLayoutFragment, in layoutManager: NSTextLayoutManager) {
+        guard let contentManager = layoutManager.textContentManager else { return }
+        let element = fragment.rangeInElement
+        let location = contentManager.offset(from: contentManager.documentRange.location, to: element.location)
+        let length = contentManager.offset(from: element.location, to: element.endLocation)
+        repaintResolved(NSRange(location: location, length: length))
+    }
+
+    /// Recolors the range: its rendering attributes revert to the resolver,
+    /// and the redraw nudge makes its fragments re-ask it now.
+    private func invalidateColors(in range: NSRange) {
+        guard let layoutManager = textView.textLayoutManager,
+              let contentManager = layoutManager.textContentManager,
+              let textRange = textRange(from: range, in: contentManager)
+        else { return }
+        layoutManager.invalidateRenderingAttributes(for: textRange)
+        nudgeRedraw(of: textRange, in: layoutManager)
+    }
+
+    /// Marks the whole document's colors stale and refreshes the visible
+    /// part now. Fragments outside the viewport revalidate as they lay out.
+    private func invalidateAllColors() {
+        guard let layoutManager = textView.textLayoutManager else { return }
+        layoutManager.invalidateRenderingAttributes(for: layoutManager.documentRange)
+        guard let viewport = layoutManager.textViewportLayoutController.viewportRange else { return }
+        nudgeRedraw(of: viewport, in: layoutManager)
+    }
+
+    /// Re-lays the range's fragments through a zero-length attribute edit,
+    /// the one path the view reliably redraws from, then re-lays the range
+    /// and pushes its geometry in the same turn, so no estimated heights
+    /// linger for the view's own bookkeeping to react to. Colors change no
+    /// metrics, so the geometry comes back identical and the content stays
+    /// in place.
+    private func nudgeRedraw(of textRange: NSTextRange, in layoutManager: NSTextLayoutManager) {
+        guard let storage,
+              let contentManager = layoutManager.textContentManager
+        else { return }
+        let location = contentManager.offset(from: contentManager.documentRange.location, to: textRange.location)
+        let length = contentManager.offset(from: textRange.location, to: textRange.endLocation)
+        guard length > 0 else { return }
+        storage.beginEditing()
+        storage.edited(.editedAttributes, range: NSRange(location: location, length: length), changeInLength: 0)
+        storage.endEditing()
+        layoutManager.ensureLayout(for: textRange)
+        updateContentGeometry()
+    }
+
+    #if canImport(AppKit)
+    /// Runs the work, then shifts the scroll so the text at the top of the
+    /// viewport keeps its place on screen when the work moved the content.
+    /// Only the Mac needs the shift: UITextView adjusts its own offset when
+    /// the geometry above the viewport changes, and a manual shift there
+    /// would double the move.
+    private func keepingViewport(_ work: () -> Void) {
         let anchor = viewportAnchorRange()
         let before = anchor.flatMap { frame(forStorageRange: $0)?.minY }
-        storage.beginEditing()
-        paints()
-        storage.endEditing()
+        work()
         guard let anchor, let before, let after = frame(forStorageRange: anchor)?.minY else { return }
         shiftScroll(by: after - before)
     }
+    #endif
 
-    /// A zero-length range at the start of the viewport's text, whose frame
-    /// anchors offset corrections.
+    /// A zero-length range at the start of the text at the current scroll
+    /// offset, whose frame anchors offset corrections. Asked of the layout
+    /// manager directly: the render viewport lags programmatic scrolls, so
+    /// anchoring on it corrects against the wrong text.
     private func viewportAnchorRange() -> NSRange? {
         guard let layoutManager = textView.textLayoutManager,
-              let contentManager = layoutManager.textContentManager,
-              let viewport = layoutManager.textViewportLayoutController.viewportRange
+              let contentManager = layoutManager.textContentManager
         else { return nil }
-        let start = contentManager.offset(from: contentManager.documentRange.location, to: viewport.location)
+        #if canImport(AppKit)
+        let offsetY = scrollView.contentView.bounds.origin.y - textView.textContainerOrigin.y
+        #else
+        let offsetY = textView.contentOffset.y - textView.textContainerInset.top
+        #endif
+        guard let fragment = layoutManager.textLayoutFragment(for: CGPoint(x: 0, y: max(0, offsetY))) else { return nil }
+        let start = contentManager.offset(from: contentManager.documentRange.location, to: fragment.rangeInElement.location)
         return NSRange(location: start, length: 0)
     }
 
+    #if canImport(AppKit)
     /// Moves the scroll offset by the delta without animation, so content
     /// that shifted in document coordinates stays put on screen.
     private func shiftScroll(by delta: CGFloat) {
         guard abs(delta) > 0.5 else { return }
-        #if canImport(AppKit)
         let clip = scrollView.contentView
         clip.setBoundsOrigin(NSPoint(x: clip.bounds.origin.x, y: clip.bounds.origin.y + delta))
         scrollView.reflectScrolledClipView(clip)
-        #else
-        textView.contentOffset.y += delta
-        #endif
         if let centeredY {
             self.centeredY = centeredY + delta
         }
     }
+    #endif
 
     /// Paints the range's final colors: the positional base, then the
     /// matches, clipped against the spoken cue so the spoken word wins.
@@ -693,10 +763,16 @@ public final class TranscriptTextCoordinator: NSObject {
         return NSRange(location: lineRanges[line].location + readEnd, length: spokenEnd - readEnd)
     }
 
-    /// Applies one color edit.
+    /// Applies one color edit, as a rendering attribute on the layout
+    /// manager. Rendering attributes change drawing only, so a paint never
+    /// invalidates layout and never moves the content.
     private func paint(_ color: PlatformColor, range: NSRange) {
-        guard range.length > 0 else { return }
-        storage?.addAttribute(.foregroundColor, value: color, range: range)
+        guard range.length > 0,
+              let layoutManager = textView.textLayoutManager,
+              let contentManager = layoutManager.textContentManager,
+              let textRange = textRange(from: range, in: contentManager)
+        else { return }
+        layoutManager.addRenderingAttribute(.foregroundColor, value: color, for: textRange)
     }
 
     /// The storage range spanning the given line positions, clamped to the
@@ -722,11 +798,8 @@ public final class TranscriptTextCoordinator: NSObject {
         searchTask = nil
         guard !query.isEmpty else {
             if !matchRanges.isEmpty {
-                let previous = matchRanges
                 matchRanges = []
-                paintKeepingViewport {
-                    repaintBase(ofLinesHolding: previous)
-                }
+                invalidateAllColors()
             }
             matchIndex = 0
             completedQuery = ""
@@ -758,15 +831,8 @@ public final class TranscriptTextCoordinator: NSObject {
     private func finishSearch(query: String, caseSensitive: Bool, ranges: [NSRange]) {
         guard query == appliedQuery, caseSensitive == appliedCaseSensitive else { return }
         let isFreshQuery = query != completedQuery || caseSensitive != completedCaseSensitive
-        let previous = matchRanges
         matchRanges = ranges
-        paintKeepingViewport {
-            repaintBase(ofLinesHolding: previous)
-            let cue = spokenCueRange(currentLine, cue: spokenCueIndex)
-            for range in ranges {
-                paintMatch(range, clippedBy: cue)
-            }
-        }
+        invalidateAllColors()
         completedQuery = query
         completedCaseSensitive = caseSensitive
         if isFreshQuery {
@@ -808,35 +874,6 @@ public final class TranscriptTextCoordinator: NSObject {
             }
         }
         return low < matchRanges.count ? low : 0
-    }
-
-    /// Restores the positional colors over the lines holding the given
-    /// ranges.
-    private func repaintBase(ofLinesHolding ranges: [NSRange]) {
-        var lastLine = -1
-        for range in ranges {
-            let line = lineIndex(containing: range.location)
-            guard line != lastLine, lineRanges.indices.contains(line) else { continue }
-            lastLine = line
-            for segment in baseSegments(for: lineRanges[line]) {
-                paint(segment.color, range: segment.range)
-            }
-        }
-    }
-
-    /// The position of the line containing the storage location.
-    private func lineIndex(containing location: Int) -> Int {
-        var low = 0
-        var high = lineRanges.count
-        while low < high {
-            let mid = (low + high) / 2
-            if lineRanges[mid].location <= location {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
-        return low - 1
     }
 
     /// Upper bound on collected matches, so a one-letter query stays fast.
@@ -953,14 +990,18 @@ public final class TranscriptTextCoordinator: NSObject {
               let contentManager = layoutManager.textContentManager,
               let anchor = viewportAnchorRange()
         else { return }
+        #if canImport(AppKit)
         let before = frame(forStorageRange: anchor)?.minY
+        #endif
         let start = min(anchor.location, target.location)
         let end = max(anchor.location, target.location + target.length)
         guard let corridor = textRange(from: NSRange(location: start, length: end - start), in: contentManager) else { return }
         layoutManager.ensureLayout(for: corridor)
         updateContentGeometry()
+        #if canImport(AppKit)
         guard let before, let after = frame(forStorageRange: anchor)?.minY else { return }
         shiftScroll(by: after - before)
+        #endif
     }
 
     /// Pushes the laid-out extent into the view, so the scroll limit and
@@ -1030,7 +1071,7 @@ public final class TranscriptTextCoordinator: NSObject {
         scrollView.dropsMomentum = true
         let clip = scrollView.contentView
         let visible = clip.bounds.height - view.topInset - view.bottomInset
-        let limit = max(-view.topInset, textView.frame.height - clip.bounds.height + view.bottomInset)
+        let limit = max(-view.topInset, documentHeight() - clip.bounds.height + view.bottomInset)
         let target = min(max(y - view.topInset - visible / 2, -view.topInset), limit)
         let origin = NSPoint(x: clip.bounds.origin.x, y: target)
         if animated {
@@ -1049,7 +1090,7 @@ public final class TranscriptTextCoordinator: NSObject {
         }
         let inset = textView.contentInset
         let visible = textView.bounds.height - inset.top - inset.bottom
-        let limit = max(-inset.top, textView.contentSize.height - textView.bounds.height + inset.bottom)
+        let limit = max(-inset.top, documentHeight() - textView.bounds.height + inset.bottom)
         let target = min(max(y - inset.top - visible / 2, -inset.top), limit)
         let offset = CGPoint(x: 0, y: target)
         if animated {
@@ -1060,6 +1101,17 @@ public final class TranscriptTextCoordinator: NSObject {
             textView.contentOffset = offset
         }
         #endif
+    }
+
+    private func documentHeight() -> CGFloat {
+        guard let layoutManager = textView.textLayoutManager else {
+            #if canImport(AppKit)
+            return textView.frame.height
+            #else
+            return textView.contentSize.height
+            #endif
+        }
+        return layoutManager.usageBoundsForTextContainer.height
     }
 
     // MARK: - Clicks
