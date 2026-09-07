@@ -663,6 +663,27 @@ public final class TranscriptTextCoordinator: NSObject {
         updateContentGeometry()
     }
 
+    /// Repaints a viewport's worth of text around the range, for jumps that
+    /// land in text laid out before the last color invalidation. Fragments
+    /// already laid out do not re-ask the resolver when a scroll reaches
+    /// them, so without this a distant jump's destination keeps its stale
+    /// colors.
+    private func repaintDestination(ofStorageRange range: NSRange) {
+        guard let layoutManager = textView.textLayoutManager,
+              let y = frame(forStorageRange: range)?.midY
+        else { return }
+        #if canImport(AppKit)
+        let height = scrollView.contentView.bounds.height
+        #else
+        let height = textView.bounds.height
+        #endif
+        guard let first = layoutManager.textLayoutFragment(for: CGPoint(x: 0, y: max(0, y - height))) else { return }
+        let last = layoutManager.textLayoutFragment(for: CGPoint(x: 0, y: y + height))
+        let end = last?.rangeInElement.endLocation ?? layoutManager.documentRange.endLocation
+        guard let textRange = NSTextRange(location: first.rangeInElement.location, end: end) else { return }
+        nudgeRedraw(of: textRange, in: layoutManager)
+    }
+
     /// Runs the work, then shifts the scroll so the text at the top of the
     /// viewport keeps its place on screen when the work moved the content.
     /// Only the Mac needs the shift: UITextView adjusts its own offset when
@@ -848,6 +869,7 @@ public final class TranscriptTextCoordinator: NSObject {
             matchIndex = nearestForwardMatch()
             if !ranges.isEmpty {
                 center(onStorageRange: ranges[matchIndex], forced: true, animated: true)
+                repaintDestination(ofStorageRange: ranges[matchIndex])
                 view?.onUserScroll()
             }
         } else {
@@ -863,6 +885,7 @@ public final class TranscriptTextCoordinator: NSObject {
         guard count > 0 else { return }
         matchIndex = ((matchIndex + delta) % count + count) % count
         center(onStorageRange: matchRanges[matchIndex], forced: true, animated: true)
+        repaintDestination(ofStorageRange: matchRanges[matchIndex])
         view?.onUserScroll()
         publishMatchState()
     }
