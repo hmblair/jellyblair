@@ -124,6 +124,12 @@ public struct BookView: View {
         model.screenState.isShowingTranscript && hasTranscript
     }
 
+    #if os(macOS)
+    /// The chapter/transcript pane's height floor. With the header's
+    /// intrinsic height above it, it sets the window's minimum height.
+    private static let listMinHeight: CGFloat = 180
+    #endif
+
     /// Both panes stay alive; the toolbar toggle changes only which one
     /// shows. The hidden transcript keeps tracking the narration, so
     /// switching to it opens on the current word without any repositioning.
@@ -153,6 +159,9 @@ public struct BookView: View {
                 .allowsHitTesting(showsTranscriptPane)
             }
         }
+        #if os(macOS)
+        .frame(minHeight: Self.listMinHeight)
+        #endif
     }
 
     // MARK: - Header

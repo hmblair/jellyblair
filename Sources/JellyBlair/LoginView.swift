@@ -28,7 +28,9 @@ struct LoginView: View {
                 TextField("Username", text: $username)
                 SecureField("Password", text: $password)
             }
-            .frame(maxWidth: 360)
+            // The minimum keeps the fields usable; the window's minimum size
+            // follows from the content.
+            .frame(minWidth: 280, maxWidth: 360)
 
             if let message = session.loginErrorMessage {
                 Text(message)

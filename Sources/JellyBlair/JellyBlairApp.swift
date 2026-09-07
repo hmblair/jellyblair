@@ -10,7 +10,6 @@ struct JellyBlairApp: App {
     var body: some Scene {
         Window("JellyBlair", id: "main") {
             RootView(session: session)
-                .frame(minWidth: 760, minHeight: 480)
         }
         .commands {
             CommandGroup(after: .appSettings) {
@@ -92,22 +91,29 @@ struct ContentView: View {
         return .handled
     }
 
+    /// The detail pane's width floor. Together with the sidebar's minimum
+    /// column width it sets the window's minimum width; the minimum height
+    /// comes from the book screen's own content.
+    private static let detailMinWidth: CGFloat = 440
+
     /// The book screen for the selected book, or a placeholder. The book
     /// screen carries its own settings button. The placeholder declares one,
     /// so the title bar keeps the button with no selection.
-    @ViewBuilder
     private var detail: some View {
-        if let selectedBook {
-            BookView(book: selectedBook)
-                .id(selectedBook.id)
-        } else {
-            ContentUnavailableView("Select an audiobook", systemImage: "headphones")
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        SettingsToolbarButton()
+        Group {
+            if let selectedBook {
+                BookView(book: selectedBook)
+                    .id(selectedBook.id)
+            } else {
+                ContentUnavailableView("Select an audiobook", systemImage: "headphones")
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            SettingsToolbarButton()
+                        }
                     }
-                }
+            }
         }
+        .frame(minWidth: Self.detailMinWidth)
     }
 
     var body: some View {
