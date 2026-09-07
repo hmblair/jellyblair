@@ -102,6 +102,11 @@ final class AudioBarsLayerView: PlatformNativeView {
             barLayers.append(bar)
         }
         applyColors()
+        #if canImport(UIKit)
+        registerForTraitChanges(UITraitCollection.systemTraitsAffectingColorAppearance) { (view: AudioBarsLayerView, _: UITraitCollection) in
+            view.applyColors()
+        }
+        #endif
     }
 
     #if canImport(AppKit)
@@ -131,11 +136,6 @@ final class AudioBarsLayerView: PlatformNativeView {
     override func layoutSubviews() {
         super.layoutSubviews()
         renderBands()
-    }
-
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        applyColors()
     }
 
     override func tintColorDidChange() {

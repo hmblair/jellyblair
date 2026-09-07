@@ -76,6 +76,11 @@ final class ProgressBarLayerView: PlatformNativeView {
         backingLayer?.addSublayer(trackLayer)
         backingLayer?.addSublayer(fillLayer)
         applyColors()
+        #if canImport(UIKit)
+        registerForTraitChanges(UITraitCollection.systemTraitsAffectingColorAppearance) { (view: ProgressBarLayerView, _: UITraitCollection) in
+            view.applyColors()
+        }
+        #endif
     }
 
     #if canImport(AppKit)
@@ -93,11 +98,6 @@ final class ProgressBarLayerView: PlatformNativeView {
     override func layoutSubviews() {
         super.layoutSubviews()
         layoutLayers()
-    }
-
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        applyColors()
     }
 
     override func tintColorDidChange() {
