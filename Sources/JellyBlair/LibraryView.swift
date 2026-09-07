@@ -46,13 +46,16 @@ struct LibraryView: View {
         }
         .listStyle(.sidebar)
         .overlay {
-            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleBooks.isEmpty, searchQuery: filters.searchQuery)
+            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleBooks.isEmpty)
         }
     }
 
     private func row(for book: Book) -> some View {
         BookRow(book: book, isLoaded: book.id == player.book?.id)
             .tag(book.id)
+            .contextMenu {
+                BookActionsMenuItems(book: book)
+            }
     }
 
     private func exitScope() {

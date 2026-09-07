@@ -78,17 +78,15 @@ public struct LibraryFilterToolbarButtons: View {
 }
 
 /// The library list's empty states: loading, a failed first load, or no
-/// search matches. A refresh failure keeps the current list; these only
-/// cover an empty one.
+/// books passing the search and filters. A refresh failure keeps the
+/// current list; these only cover an empty one.
 public struct LibraryEmptyOverlay: View {
     let hasVisibleContent: Bool
-    let searchQuery: String
 
     @Environment(LibraryViewModel.self) private var library
 
-    public init(hasVisibleContent: Bool, searchQuery: String) {
+    public init(hasVisibleContent: Bool) {
         self.hasVisibleContent = hasVisibleContent
-        self.searchQuery = searchQuery
     }
 
     public var body: some View {
@@ -99,7 +97,9 @@ public struct LibraryEmptyOverlay: View {
                 ContentUnavailableView("Cannot load the library", systemImage: "exclamationmark.triangle", description: Text(message))
             }
         } else if !hasVisibleContent {
-            ContentUnavailableView.search(text: searchQuery)
+            // Emptiness can come from the search or the filter toggles, so
+            // the message stays generic.
+            ContentUnavailableView("No Results", systemImage: "magnifyingglass")
         }
     }
 }

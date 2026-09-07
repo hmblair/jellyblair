@@ -58,7 +58,7 @@ struct LibraryScreen: View {
             await library.load()
         }
         .overlay {
-            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleBooks.isEmpty, searchQuery: filters.searchQuery)
+            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleBooks.isEmpty)
         }
     }
 }
@@ -83,5 +83,8 @@ struct BookRowLink: View {
             }
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            BookActionsMenuItems(book: book)
+        }
     }
 }

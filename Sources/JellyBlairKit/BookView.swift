@@ -10,7 +10,6 @@ public struct BookView: View {
     @Environment(PlayerController.self) private var player
     @Environment(BookCatalog.self) private var catalog
     @Environment(ConnectionMonitor.self) private var connection
-    @Environment(LibraryViewModel.self) private var library
 
     @Environment(\.openAuthor) private var openAuthor
     @Environment(\.openNarrator) private var openNarrator
@@ -99,47 +98,11 @@ public struct BookView: View {
     /// they apply to.
     private var bookActionsMenu: some View {
         Menu {
-            Button("Refresh Metadata") {
-                refreshMetadata()
-            }
-            .disabled(!connection.isServerReachable)
-            Button("Reset") {
-                resetPlayback()
-            }
-            .disabled(!connection.isServerReachable)
+            BookActionsMenuItems(book: book)
         } label: {
             Image(systemName: "ellipsis.circle")
         }
         .menuIndicator(.hidden)
-    }
-
-    /// Re-reads everything the server and the file know about this book: the
-    /// cover, the chapter list, the transcript, the resume position, and the
-    /// library fields.
-    private func refreshMetadata() {
-        Task {
-            await CoverImageLoader.shared.refresh(for: book.id, from: model.coverURL)
-            if isLoaded {
-                await player.refreshChapters()
-                await player.refreshArtwork()
-            } else {
-                await model.refreshChapters()
-            }
-            await model.refreshLyrics()
-            await model.refreshUserData()
-            await library.load()
-        }
-    }
-
-    /// Resets the book: the loaded book closes first, so playback stops,
-    /// then the position returns to zero here and on the server.
-    private func resetPlayback() {
-        Task {
-            if isLoaded {
-                await player.close()
-            }
-            await model.resetPlayback()
-        }
     }
 
     /// True while the transcript pane is the visible one. A transcript that
@@ -564,4 +527,67 @@ public extension EnvironmentValues {
     @Entry var openNarrator: OpenBookGroupAction?
     @Entry var openGenre: OpenBookGroupAction?
     @Entry var openBook: OpenBookAction?
+}
+
+/// The actions on one book, shared by the book screen's title-bar menu and
+/// the library rows' context menus.
+public struct BookActionsMenuItems: View {
+    let book: Book
+
+    @Environment(PlayerController.self) private var player
+    @Environment(BookCatalog.self) private var catalog
+    @Environment(ConnectionMonitor.self) private var connection
+    @Environment(LibraryViewModel.self) private var library
+
+    public init(book: Book) {
+        self.book = book
+    }
+
+    private var model: BookModel {
+        catalog.model(for: book)
+    }
+
+    private var isLoaded: Bool {
+        player.book?.id == book.id
+    }
+
+    public var body: some View {
+        Button("Refresh Metadata") {
+            refreshMetadata()
+        }
+        .disabled(!connection.isServerReachable)
+        Button("Reset") {
+            resetPlayback()
+        }
+        .disabled(!connection.isServerReachable)
+    }
+
+    /// Re-reads everything the server and the file know about this book: the
+    /// cover, the chapter list, the transcript, the resume position, and the
+    /// library fields.
+    private func refreshMetadata() {
+        Task {
+            await CoverImageLoader.shared.refresh(for: book.id, from: model.coverURL)
+            if isLoaded {
+                await player.refreshChapters()
+                await player.refreshArtwork()
+            } else {
+                await model.refreshChapters()
+            }
+            await model.refreshLyrics()
+            await model.refreshUserData()
+            await library.load()
+        }
+    }
+
+    /// Resets the book: the loaded book closes first, so playback stops,
+    /// then the position returns to zero here and on the server.
+    private func resetPlayback() {
+        Task {
+            if isLoaded {
+                await player.close()
+            }
+            await model.resetPlayback()
+        }
+    }
 }
