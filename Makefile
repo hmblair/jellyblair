@@ -1,5 +1,8 @@
 APP_NAME := JellyBlair
-BUILD_DIR := .build/release
+
+# Build configuration: release, or debug via make run CONFIG=debug.
+CONFIG ?= release
+BUILD_DIR := .build/$(CONFIG)
 DIST_DIR := dist
 BUNDLE := $(DIST_DIR)/$(APP_NAME).app
 
@@ -23,7 +26,7 @@ CODESIGN_IDENTITY := Apple Development
 .PHONY: all dist run install iphone clean
 
 all:
-	swift build -c release
+	swift build -c $(CONFIG)
 
 dist: all
 	rm -rf $(BUNDLE)
