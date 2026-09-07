@@ -615,10 +615,14 @@ public final class PlayerController {
         progressReportTimer = nil
     }
 
+    /// Publishes the position from one read: the model and the server take
+    /// the same value. The two never disagree by more than one interval
+    /// while the book plays.
     private func reportProgressNow() {
         guard let book, hasActiveSession else { return }
         let position = currentTime
         let paused = !isPlaying
+        currentModel?.recordPosition(position)
         Task {
             await client.reportPlaybackProgress(bookID: book.id, positionSeconds: position, isPaused: paused)
         }

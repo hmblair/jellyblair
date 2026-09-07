@@ -49,6 +49,7 @@ struct MainScreen: View {
     let session: AppSession
     @State private var scope: SessionScope
     @State private var path: [LibraryRoute] = []
+    @State private var isShowingSettings = false
 
     init(session: AppSession, client: JellyfinClient) {
         self.session = session
@@ -62,7 +63,7 @@ struct MainScreen: View {
         // of the bar.
         VStack(spacing: 0) {
             NavigationStack(path: $path) {
-                LibraryScreen(session: session)
+                LibraryScreen()
                     .navigationDestination(for: LibraryRoute.self) { route in
                         switch route {
                         case .book(let book):
@@ -73,7 +74,7 @@ struct MainScreen: View {
                                 .id(book.id)
                                 .navigationBarTitleDisplayMode(.inline)
                         case .group(let group):
-                            LibraryScreen(session: session, scope: group)
+                            LibraryScreen(scope: group)
                         }
                     }
             }
@@ -83,6 +84,9 @@ struct MainScreen: View {
             OfflineIndicator()
                 .background(.bar)
         }
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsScreen(session: session)
+        }
         .task {
             scope.connection.start()
             await scope.library.load()
@@ -91,6 +95,9 @@ struct MainScreen: View {
             guard reachable, scope.library.errorMessage != nil else { return }
             Task { await scope.library.load() }
         }
+        .environment(\.openSettings, OpenSettingsAction {
+            isShowingSettings = true
+        })
         .environment(\.openBook, OpenBookAction { book in
             path.append(.book(book))
         })

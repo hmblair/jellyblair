@@ -88,6 +88,10 @@ public struct BookView: View {
             ToolbarItem(placement: .primaryAction) {
                 bookActionsMenu
             }
+            // Last, so the settings button keeps the same place on every screen.
+            ToolbarItem(placement: .primaryAction) {
+                SettingsToolbarButton()
+            }
         }
     }
 
@@ -355,7 +359,7 @@ public struct BookView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "play.fill")
-                Text(model.resumePositionSeconds > 0 ? "Resume" : "Play")
+                Text(model.isInProgress ? "Resume" : "Play")
                 if let title = resumeChapterTitle {
                     Text(title)
                         .fontWeight(.light)
@@ -377,7 +381,7 @@ public struct BookView: View {
 
     /// The chapter the Resume button will land in, once chapters are known.
     private var resumeChapterTitle: String? {
-        guard model.resumePositionSeconds > 0,
+        guard model.isInProgress,
               let index = markedChapterIndex,
               chapters.indices.contains(index)
         else { return nil }
@@ -390,7 +394,7 @@ public struct BookView: View {
         if isLoaded {
             return player.currentChapterIndex
         }
-        guard model.resumePositionSeconds > 0 else { return nil }
+        guard model.isInProgress else { return nil }
         return chapters.last(where: { $0.startSeconds <= model.resumePositionSeconds + Chapter.startSlackSeconds })?.index
     }
 
@@ -564,10 +568,10 @@ public struct BookActionsMenuItems: View {
             refreshMetadata()
         }
         .disabled(!connection.isServerReachable)
-        Button("Reset") {
+        Button("Reset Playback") {
             resetPlayback()
         }
-        .disabled(!connection.isServerReachable)
+        .disabled(!connection.isServerReachable || !catalog.isInProgress(book))
     }
 
     /// Re-reads everything the server and the file know about this book: the

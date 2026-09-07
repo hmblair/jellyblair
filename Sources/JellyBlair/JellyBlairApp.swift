@@ -64,6 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 struct ContentView: View {
+    @Environment(\.openSettings) private var openSettingsWindow: SwiftUI.OpenSettingsAction
+
     @State private var scope: SessionScope
 
     /// Selection is tracked by ID, so it survives library refreshes that
@@ -90,6 +92,24 @@ struct ContentView: View {
         return .handled
     }
 
+    /// The book screen for the selected book, or a placeholder. The book
+    /// screen carries its own settings button. The placeholder declares one,
+    /// so the title bar keeps the button with no selection.
+    @ViewBuilder
+    private var detail: some View {
+        if let selectedBook {
+            BookView(book: selectedBook)
+                .id(selectedBook.id)
+        } else {
+            ContentUnavailableView("Select an audiobook", systemImage: "headphones")
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        SettingsToolbarButton()
+                    }
+                }
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             NavigationSplitView {
@@ -99,12 +119,7 @@ struct ContentView: View {
                         OfflineIndicator()
                     }
             } detail: {
-                if let selectedBook {
-                    BookView(book: selectedBook)
-                        .id(selectedBook.id)
-                } else {
-                    ContentUnavailableView("Select an audiobook", systemImage: "headphones")
-                }
+                detail
             }
 
             PlaybackBar { book in
@@ -133,6 +148,9 @@ struct ContentView: View {
         .focusedSceneValue(\.refreshActions, RefreshActions(
             refreshLibrary: { [library = scope.library] in Task { await library.load() } }
         ))
+        .environment(\.openSettings, JellyBlairKit.OpenSettingsAction {
+            openSettingsWindow()
+        })
         .environment(\.openAuthor, OpenBookGroupAction { [library = scope.library] name in
             sidebarScope = library.group(ofKind: .author, named: name)
         })

@@ -4,14 +4,12 @@ import SwiftUI
 /// The book list, grouped by author, narrator, or genre, with navigation to
 /// each book's screen. With a scope it shows that one group's books instead.
 struct LibraryScreen: View {
-    let session: AppSession
     var scope: BookGroup?
 
     @Environment(LibraryViewModel.self) private var library
     @Environment(BookCatalog.self) private var catalog
     @Environment(PlayerController.self) private var player
 
-    @State private var isShowingSettings = false
     @State private var filters = LibraryFilters()
 
     private var visibleBooks: [Book] {
@@ -25,17 +23,8 @@ struct LibraryScreen: View {
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     LibraryFilterToolbarButtons(filters: $filters)
-                    if scope == nil {
-                        Button {
-                            isShowingSettings = true
-                        } label: {
-                            Image(systemName: "gearshape")
-                        }
-                    }
+                    SettingsToolbarButton()
                 }
-            }
-            .sheet(isPresented: $isShowingSettings) {
-                SettingsScreen(session: session)
             }
     }
 

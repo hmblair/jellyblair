@@ -147,8 +147,17 @@ public final class BookModel: Identifiable {
         resumePositionSeconds = fresh.resumePositionSeconds
     }
 
-    /// Playback records where it left the book, so reopening needs no fetch.
+    /// True when the position is past the start, which is what makes the
+    /// play button offer Resume and the reset available.
+    public var isInProgress: Bool {
+        resumePositionSeconds > 0
+    }
+
+    /// Playback records where it has reached, so reopening needs no fetch.
+    /// An unchanged position writes nothing, so a paused book's repeated
+    /// reports invalidate no observers.
     func recordPosition(_ seconds: Double) {
+        guard seconds != resumePositionSeconds else { return }
         resumePositionSeconds = seconds
     }
 
