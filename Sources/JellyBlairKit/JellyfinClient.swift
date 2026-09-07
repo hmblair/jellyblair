@@ -214,6 +214,13 @@ public final class JellyfinClient {
 
     // MARK: - Playback reports
 
+    /// Clears the book's played state and resume position for the user.
+    /// Throws when the server does not confirm.
+    func resetPlayback(bookID: String) async throws {
+        guard let userID else { throw JellyfinError.unauthorized }
+        _ = try await send(makeRequest(path: "Users/\(userID)/PlayedItems/\(bookID)", method: "DELETE"))
+    }
+
     func reportPlaybackStarted(bookID: String, positionSeconds: Double) async {
         await sendPlaybackReport(path: "Sessions/Playing", bookID: bookID, positionSeconds: positionSeconds, isPaused: false)
     }

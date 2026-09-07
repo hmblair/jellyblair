@@ -235,6 +235,11 @@ public final class PlayerController {
         return false
     }
 
+    /// Closes the loaded book: playback stops and the playback bar goes away.
+    public func close() async {
+        await closeCurrentBook()
+    }
+
     private func closeCurrentBook() async {
         guard let book else { return }
         player?.pause()

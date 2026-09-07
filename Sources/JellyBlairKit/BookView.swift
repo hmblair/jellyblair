@@ -103,6 +103,10 @@ public struct BookView: View {
                 refreshMetadata()
             }
             .disabled(!connection.isServerReachable)
+            Button("Reset") {
+                resetPlayback()
+            }
+            .disabled(!connection.isServerReachable)
         } label: {
             Image(systemName: "ellipsis.circle")
         }
@@ -124,6 +128,17 @@ public struct BookView: View {
             await model.refreshLyrics()
             await model.refreshUserData()
             await library.load()
+        }
+    }
+
+    /// Resets the book: the loaded book closes first, so playback stops,
+    /// then the position returns to zero here and on the server.
+    private func resetPlayback() {
+        Task {
+            if isLoaded {
+                await player.close()
+            }
+            await model.resetPlayback()
         }
     }
 

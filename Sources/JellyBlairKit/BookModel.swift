@@ -149,6 +149,13 @@ public final class BookModel: Identifiable {
         resumePositionSeconds = seconds
     }
 
+    /// Clears the played state and the resume position, on the server first
+    /// so the two never disagree. A failed call changes nothing.
+    public func resetPlayback() async {
+        guard (try? await client.resetPlayback(bookID: book.id)) != nil else { return }
+        resumePositionSeconds = 0
+    }
+
     // MARK: - Chapters
 
     /// Reads the chapters from the file unless they are already known.
