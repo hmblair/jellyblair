@@ -38,7 +38,7 @@ You can also generate the project with `cd ios && xcodegen generate`, open it in
 
 ## Versioning
 
-The app version lives in the `VERSION` file. The make targets stamp it into both platforms' bundles, and the client reports it to the server.
+The app version lives in the `VERSION` file. The make targets stamp it into both platforms' bundles, and the client reports it to the server. The build number is the repository's commit count. The make targets stamp it in the same way.
 
 ## Security note
 

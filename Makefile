@@ -9,6 +9,11 @@ BUNDLE := $(DIST_DIR)/$(APP_NAME).app
 # The one source of the app version, stamped into both bundles at build time.
 VERSION := $(shell cat VERSION)
 
+# The build number, stamped into both bundles at build time. The App Store
+# needs a number that rises with each upload, and the commit count does.
+# A source tree without git history falls back to 0.
+BUILD_NUMBER := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
+
 # Personal values live in an untracked Makefile.local:
 #   IPHONE  := <device name>       # for make iphone
 #   TEAM_ID := <Apple team ID>     # for iOS code signing
@@ -34,6 +39,7 @@ dist: all
 	cp $(BUILD_DIR)/$(APP_NAME) $(BUNDLE)/Contents/MacOS/
 	cp Packaging/Info.plist $(BUNDLE)/Contents/
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(BUNDLE)/Contents/Info.plist
+	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(BUILD_NUMBER)" $(BUNDLE)/Contents/Info.plist
 	codesign --force -s "$(CODESIGN_IDENTITY)" $(BUNDLE)
 	@echo "Built $(BUNDLE)"
 
@@ -54,7 +60,7 @@ iphone:
 		exit 1; \
 	fi
 	cd $(IOS_DIR) && xcodegen generate
-	cd $(IOS_DIR) && xcodebuild -project JellyBlairiOS.xcodeproj -scheme JellyBlairiOS -destination generic/platform=iOS -derivedDataPath build -allowProvisioningUpdates DEVELOPMENT_TEAM=$(TEAM_ID) MARKETING_VERSION=$(VERSION) -quiet build
+	cd $(IOS_DIR) && xcodebuild -project JellyBlairiOS.xcodeproj -scheme JellyBlairiOS -destination generic/platform=iOS -derivedDataPath build -allowProvisioningUpdates DEVELOPMENT_TEAM=$(TEAM_ID) MARKETING_VERSION=$(VERSION) CURRENT_PROJECT_VERSION=$(BUILD_NUMBER) -quiet build
 	xcrun devicectl device install app --device "$(IPHONE)" $(IOS_APP)
 	@echo "Installed on $(IPHONE)"
 
