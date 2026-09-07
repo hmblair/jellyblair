@@ -212,7 +212,7 @@ struct TransportControlsView: View {
             } label: {
                 Image(systemName: "gobackward.\(Int(skipBackSeconds))").font(.system(size: Self.skipButtonSize))
             }
-            .buttonStyle(HoverScaleButtonStyle())
+            .buttonStyle(HoverDimButtonStyle())
 
             Button {
                 player.togglePlayback()
@@ -222,36 +222,36 @@ struct TransportControlsView: View {
                     .contentTransition(.identity)
                     .animation(nil, value: player.isPlaying)
             }
-            .buttonStyle(HoverScaleButtonStyle())
+            .buttonStyle(HoverDimButtonStyle())
 
             Button {
                 Task { await player.skip(by: skipForwardSeconds) }
             } label: {
                 Image(systemName: "goforward.\(Int(skipForwardSeconds))").font(.system(size: Self.skipButtonSize))
             }
-            .buttonStyle(HoverScaleButtonStyle())
+            .buttonStyle(HoverDimButtonStyle())
         }
         .disabled(!player.isReady)
         .opacity(player.isReady ? 1 : 0.4)
     }
 }
 
-/// Plain button that grows slightly while the pointer hovers.
-private struct HoverScaleButtonStyle: ButtonStyle {
+/// Plain button that dims while the pointer hovers.
+private struct HoverDimButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HoverScaleBody(configuration: configuration)
+        HoverDimBody(configuration: configuration)
     }
 
-    private struct HoverScaleBody: View {
+    private struct HoverDimBody: View {
         let configuration: Configuration
 
         @State private var isHovering = false
 
         var body: some View {
             configuration.label
-                .scaleEffect(isHovering ? 1.08 : 1)
+                .opacity(isHovering ? 0.6 : 1)
                 .onHover { isHovering = $0 }
-                .animation(.easeOut(duration: 0.12), value: isHovering)
+                .animation(.easeOut(duration: 0.1), value: isHovering)
         }
     }
 }
