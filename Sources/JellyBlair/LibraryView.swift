@@ -3,7 +3,6 @@ import SwiftUI
 
 /// Sidebar list of audiobooks. Shows the full library grouped by author,
 /// narrator, or genre, or one group's books after its heading is clicked.
-/// The shared filter bar floats over the list; rows fade out beneath it.
 struct LibraryView: View {
     @Binding var selection: String?
     @Binding var scope: BookGroup?
@@ -19,14 +18,12 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            bookList
-                .fadedUnderFloatingBar()
-
-            LibraryFilterBar(filters: $filters, showsGroupToggle: scope == nil)
-            .padding(.horizontal, 10)
-        }
-        .navigationTitle("Audiobooks")
+        bookList
+            .searchable(text: $filters.searchQuery, placement: .sidebar, prompt: "Search")
+            .navigationTitle("Audiobooks")
+            .toolbar {
+                LibraryFilterToolbarButtons(filters: $filters)
+            }
     }
 
     private var bookList: some View {
@@ -56,9 +53,6 @@ struct LibraryView: View {
             }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Color.clear.frame(height: floatingBarClearance)
-        }
         .overlay {
             LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleGroups.isEmpty, searchQuery: filters.searchQuery)
         }

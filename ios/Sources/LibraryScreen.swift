@@ -3,7 +3,6 @@ import SwiftUI
 
 /// The book list, grouped by author, narrator, or genre, with navigation to
 /// each book's screen. With a scope it shows that one group's books instead.
-/// The shared filter bar floats over the list; rows fade out beneath it.
 struct LibraryScreen: View {
     let session: AppSession
     var scope: BookGroup?
@@ -22,26 +21,24 @@ struct LibraryScreen: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            bookList
-                .fadedUnderFloatingBar()
-
-            LibraryFilterBar(filters: $filters, showsGroupToggle: scope == nil)
-            .padding(.horizontal, 20)
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if scope == nil {
-                Button {
-                    isShowingSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
+        bookList
+            .searchable(text: $filters.searchQuery, placement: .navigationBarDrawer(displayMode: .always))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    LibraryFilterToolbarButtons(filters: $filters)
+                    if scope == nil {
+                        Button {
+                            isShowingSettings = true
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+                    }
                 }
             }
-        }
-        .sheet(isPresented: $isShowingSettings) {
-            SettingsScreen(session: session)
-        }
+            .sheet(isPresented: $isShowingSettings) {
+                SettingsScreen(session: session)
+            }
     }
 
     private var bookList: some View {
@@ -67,9 +64,6 @@ struct LibraryScreen: View {
                     }
                 }
             }
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Color.clear.frame(height: floatingBarZoneHeight + 6)
         }
         .refreshable {
             await library.load()

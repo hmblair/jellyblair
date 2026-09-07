@@ -36,59 +36,44 @@ public extension View {
     }
 }
 
-/// The floating bar over a library list: the search field, the grouping
-/// toggle when the list is unscoped, and the downloaded-only filter.
-public struct LibraryFilterBar: View {
+/// The library's filter toggles for a toolbar: books in progress, and
+/// downloaded books. A toggle shows the accent color while it is on.
+public struct LibraryFilterToolbarButtons: View {
     @Binding var filters: LibraryFilters
-    let showsGroupToggle: Bool
 
-    @Environment(LibraryViewModel.self) private var library
-
-    public init(filters: Binding<LibraryFilters>, showsGroupToggle: Bool) {
+    public init(filters: Binding<LibraryFilters>) {
         _filters = filters
-        self.showsGroupToggle = showsGroupToggle
     }
 
     public var body: some View {
-        // The bar's height comes from the search field; the capsule
-        // buttons stretch to match it exactly.
-        HStack(spacing: 8) {
-            CapsuleSearchField("Search", text: $filters.searchQuery)
-            if showsGroupToggle {
-                groupToggle
-            }
-            inProgressToggle
-            filterToggle
-        }
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    /// Cycles the library grouping through author, narrator, and genre.
-    private var groupToggle: some View {
-        CapsuleIconButton(library.groupKind.iconName, help: "Change the grouping") {
-            library.groupKind = library.groupKind.next
-        }
+        inProgressToggle
+        downloadedToggle
     }
 
     private var inProgressToggle: some View {
-        CapsuleIconButton(
+        toggleButton(
             "bookmark.fill",
-            isOn: filters.inProgressOnly,
+            isOn: $filters.inProgressOnly,
             help: filters.inProgressOnly ? "Show all books" : "Show only books in progress"
-        ) {
-            filters.inProgressOnly.toggle()
-        }
+        )
     }
 
-    private var filterToggle: some View {
-        CapsuleIconButton(
-            "arrow.down",
-            weight: .semibold,
-            isOn: filters.downloadedOnly,
+    private var downloadedToggle: some View {
+        toggleButton(
+            "arrow.down.circle.fill",
+            isOn: $filters.downloadedOnly,
             help: filters.downloadedOnly ? "Show all books" : "Show only downloaded books"
-        ) {
-            filters.downloadedOnly.toggle()
+        )
+    }
+
+    private func toggleButton(_ iconName: String, isOn: Binding<Bool>, help: String) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+        } label: {
+            Image(systemName: iconName)
         }
+        .foregroundStyle(isOn.wrappedValue ? Color.accentColor : Color.secondary)
+        .help(help)
     }
 }
 
