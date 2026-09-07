@@ -66,7 +66,11 @@ struct MainScreen: View {
                     .navigationDestination(for: LibraryRoute.self) { route in
                         switch route {
                         case .book(let book):
+                            // Identity per book: the playback bar replaces
+                            // the route in place, and without this the
+                            // screen keeps the previous book's list state.
                             BookView(book: book)
+                                .id(book.id)
                                 .navigationBarTitleDisplayMode(.inline)
                         case .group(let group):
                             LibraryScreen(session: session, scope: group)

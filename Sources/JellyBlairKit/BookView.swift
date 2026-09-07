@@ -1,5 +1,14 @@
 import SwiftUI
 
+/// What the book's screen remembers between visits. Stored per book on its
+/// model, which lives for the session; the screen itself is torn down and
+/// rebuilt with the book's identity.
+public struct BookScreenState {
+    public var isShowingTranscript = false
+
+    public init() {}
+}
+
 /// One book's screen. For the loaded book it is the playback screen with the
 /// full controls; for any other book it is a preview whose Play button or
 /// chapter tap switches playback here. Browsing previews never disturbs
@@ -15,7 +24,6 @@ public struct BookView: View {
     @Environment(\.openNarrator) private var openNarrator
     @Environment(\.openGenre) private var openGenre
 
-    @State private var isShowingTranscript = false
     @State private var isHoveringDownload = false
 
     /// Measured height of the header's metadata column, which sizes the
@@ -87,11 +95,11 @@ public struct BookView: View {
     /// The icon shows the view the button switches to.
     private var transcriptToggle: some View {
         Button {
-            isShowingTranscript.toggle()
+            model.screenState.isShowingTranscript.toggle()
         } label: {
-            Image(systemName: isShowingTranscript ? "list.bullet" : "text.quote")
+            Image(systemName: model.screenState.isShowingTranscript ? "list.bullet" : "text.quote")
         }
-        .help(isShowingTranscript ? "Show the chapters" : "Show the transcript")
+        .help(model.screenState.isShowingTranscript ? "Show the chapters" : "Show the transcript")
     }
 
     /// Actions on this book, in its title bar so it is clear which book
@@ -109,7 +117,7 @@ public struct BookView: View {
     /// disappears in a refresh falls back to the chapters, even though the
     /// toggle state remembers the choice.
     private var showsTranscriptPane: Bool {
-        isShowingTranscript && hasTranscript
+        model.screenState.isShowingTranscript && hasTranscript
     }
 
     /// Both panes stay alive; the toolbar toggle changes only which one

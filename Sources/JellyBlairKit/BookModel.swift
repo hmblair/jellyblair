@@ -16,6 +16,9 @@ public final class BookModel: Identifiable {
     public private(set) var chapters: [Chapter]
     public private(set) var isFetchingChapters = false
 
+    /// The book screen's remembered state; see BookScreenState.
+    public var screenState = BookScreenState()
+
     public private(set) var lyrics: [LyricLine] = []
     public private(set) var isFetchingLyrics = false
     private let lyricsStore = LyricsStore()
