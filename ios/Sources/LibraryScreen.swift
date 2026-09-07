@@ -55,6 +55,7 @@ struct LibraryScreen: View {
                 }
             }
         }
+        .listStyle(.plain)
         .refreshable {
             await library.load()
         }
