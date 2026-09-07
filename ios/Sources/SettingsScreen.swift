@@ -1,7 +1,8 @@
 import JellyBlairKit
 import SwiftUI
 
-/// Settings sheet showing the current server and account, with sign-out.
+/// Settings sheet. Signing out closes it, since the app returns to the
+/// login screen.
 struct SettingsScreen: View {
     let session: AppSession
 
@@ -10,14 +11,8 @@ struct SettingsScreen: View {
     var body: some View {
         NavigationStack {
             Form {
-                LabeledContent("Server", value: session.storedServerURLString)
-                LabeledContent("Account", value: session.storedUsername)
-                Button("Sign Out", role: .destructive) {
-                    session.signOut()
+                SettingsRows(session: session) {
                     dismiss()
-                }
-                Section("Playback") {
-                    SkipIntervalSettings()
                 }
             }
             .navigationTitle("Settings")
