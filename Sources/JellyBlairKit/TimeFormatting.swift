@@ -31,23 +31,14 @@ public func formatPlaybackSpeed(_ speed: Double) -> String {
     String(format: "%g×", speed)
 }
 
-/// Formats a duration as "13h 11m", or "42m" under one hour.
+/// Formats a duration in the locale's units, such as "13h 11m" or "42m".
+/// A unit with a zero value is left out, so an exact hour reads "1h".
 public func formatHoursMinutes(_ seconds: Double) -> String {
-    let minutes = Int((seconds / 60).rounded())
-    guard minutes >= 60 else { return "\(minutes)m" }
-    return "\(minutes / 60)h \(minutes % 60)m"
+    Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes], width: .narrow))
 }
 
-/// Formats a byte count with at most three digits, like "63.5 MB",
-/// "147 MB", or "2.38 GB".
+/// Formats a byte count in the locale's units, keeping at most three
+/// digits, such as "63.5 MB", "147 MB", or "2.38 GB".
 public func formatFileSize(_ bytes: Int64) -> String {
-    let units = ["bytes", "KB", "MB", "GB", "TB"]
-    var value = Double(bytes)
-    var index = 0
-    while value >= 1000, index + 1 < units.count {
-        value /= 1000
-        index += 1
-    }
-    let wholeDigits = value >= 100 ? 3 : (value >= 10 ? 2 : 1)
-    return String(format: "%.\(3 - wholeDigits)f %@", value, units[index])
+    bytes.formatted(.byteCount(style: .file, spellsOutZero: false))
 }
