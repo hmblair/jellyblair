@@ -243,6 +243,10 @@ public final class PlayerController {
     private func closeCurrentBook() async {
         guard let book else { return }
         player?.pause()
+        // Detaches the meter's tap before the item goes away. Releasing an
+        // item while the render thread can still be inside the tap is a
+        // use-after-free that corrupts the heap.
+        player?.currentItem?.audioMix = nil
         // The transition runs directly here: the observation's hop to the
         // main actor would land after the player is gone.
         updatePlayingState(false)
@@ -568,6 +572,8 @@ public final class PlayerController {
         updatePlayingState(false)
         isReady = false
         removeObservers()
+        // See closeCurrentBook: the tap must detach before the item goes away.
+        player?.currentItem?.audioMix = nil
         player = nil
         stopProgressReports()
         syncNowPlaying()

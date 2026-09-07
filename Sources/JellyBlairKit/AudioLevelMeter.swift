@@ -23,6 +23,11 @@ public final class AudioLevelMeter {
     private var bands = [Float](repeating: 0, count: AudioLevelMeter.bandCount)
     private let fftSetup: FFTSetup
 
+    /// True while the prepared stream is 32-bit float PCM, the only format
+    /// measure() can read. The tap's prepare callback writes it; guarded by
+    /// the lock, since prepare and process run on audio threads.
+    private var formatIsFloat32 = false
+
     init() {
         fftSetup = vDSP_create_fftsetup(Self.fftSizeLog2, FFTRadix(kFFTRadix2))!
     }
@@ -58,8 +63,14 @@ public final class AudioLevelMeter {
             finalize: { tap in
                 Unmanaged<AudioLevelMeter>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).release()
             },
-            prepare: nil,
-            unprepare: nil,
+            prepare: { tap, _, format in
+                let meter = Unmanaged<AudioLevelMeter>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
+                meter.noteFormat(format.pointee)
+            },
+            unprepare: { tap in
+                let meter = Unmanaged<AudioLevelMeter>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
+                meter.forgetFormat()
+            },
             process: { tap, numberFrames, _, bufferListInOut, numberFramesOut, flagsOut in
                 let status = MTAudioProcessingTapGetSourceAudio(tap, numberFrames, bufferListInOut, flagsOut, nil, numberFramesOut)
                 guard status == noErr else { return }
@@ -79,7 +90,26 @@ public final class AudioLevelMeter {
 
     // MARK: - Measurement
 
+    private func noteFormat(_ format: AudioStreamBasicDescription) {
+        let isFloat32 = format.mFormatID == kAudioFormatLinearPCM
+            && format.mFormatFlags & kAudioFormatFlagIsFloat != 0
+            && format.mBitsPerChannel == 32
+        lock.lock()
+        formatIsFloat32 = isFloat32
+        lock.unlock()
+    }
+
+    private func forgetFormat() {
+        lock.lock()
+        formatIsFloat32 = false
+        lock.unlock()
+    }
+
     private func measure(bufferList: UnsafeMutablePointer<AudioBufferList>, frameCount: Int) {
+        lock.lock()
+        let readable = formatIsFloat32
+        lock.unlock()
+        guard readable else { return }
         let buffers = UnsafeMutableAudioBufferListPointer(bufferList)
         guard let first = buffers.first(where: { $0.mData != nil }) else { return }
         let sampleCapacity = Int(first.mDataByteSize) / MemoryLayout<Float>.size
@@ -117,7 +147,9 @@ public final class AudioLevelMeter {
             let amplitude = sqrt(meanPower) / Float(Self.fftSize)
             let decibels = 20 * log10(max(amplitude, 1e-7))
             let level = (decibels - Self.floorDecibels) / (Self.ceilingDecibels - Self.floorDecibels)
-            newBands[index] = min(1, max(0, level))
+            // Unexpected sample content can turn the math non-finite, and a
+            // non-finite band would crash layout as a NaN view height.
+            newBands[index] = level.isFinite ? min(1, max(0, level)) : 0
         }
         lock.lock()
         for index in 0..<Self.bandCount {
