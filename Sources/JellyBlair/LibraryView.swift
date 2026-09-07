@@ -14,7 +14,7 @@ struct LibraryView: View {
     @State private var filters = LibraryFilters()
 
     private var visibleBooks: [Book] {
-        library.visibleBooks(filters: filters, catalog: catalog)
+        library.visibleBooks(filters: filters, catalog: catalog, loadedBookID: player.book?.id)
     }
 
     var body: some View {
@@ -30,7 +30,7 @@ struct LibraryView: View {
         List(selection: $selection) {
             if let scope {
                 Section {
-                    ForEach(library.visibleBooks(in: scope, filters: filters, catalog: catalog)) { book in
+                    ForEach(library.visibleBooks(in: scope, filters: filters, catalog: catalog, loadedBookID: player.book?.id)) { book in
                         row(for: book)
                     }
                 } header: {

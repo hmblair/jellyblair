@@ -42,6 +42,17 @@ public final class BookCatalog {
         return model
     }
 
+    /// Pushes fresh library snapshots into the existing models, so the
+    /// filters and rows agree with the server after a refresh. The loaded
+    /// book is skipped: the player owns its position and writes it back on
+    /// close.
+    public func applySnapshots(_ books: [Book], skippingBookID: String?) {
+        for book in books {
+            guard book.id != skippingBookID else { continue }
+            models[book.id]?.applySnapshot(book)
+        }
+    }
+
     public func isDownloaded(_ book: Book) -> Bool {
         model(for: book).downloadState == .downloaded
     }

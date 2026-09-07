@@ -149,6 +149,13 @@ public final class BookModel: Identifiable {
         resumePositionSeconds = seconds
     }
 
+    /// Adopts a fresh library snapshot's position, so a change made on
+    /// another device reaches displays that read the model without a visit
+    /// to the book's screen.
+    func applySnapshot(_ fresh: Book) {
+        resumePositionSeconds = fresh.resumePositionSeconds
+    }
+
     /// Clears the played state and the resume position, on the server first
     /// so the two never disagree. A failed call changes nothing.
     public func resetPlayback() async {

@@ -57,6 +57,10 @@ public final class LibraryViewModel {
     public private(set) var isLoading = true
     public private(set) var errorMessage: String?
 
+    /// Called after a successful load with the fresh snapshots, so the
+    /// session can sync them into state the view model does not know about.
+    @ObservationIgnored public var onBooksRefreshed: (([Book]) -> Void)?
+
     private let store = LibraryStore()
 
     public init(client: JellyfinClient) {
@@ -71,6 +75,7 @@ public final class LibraryViewModel {
         do {
             setBooks(try await client.fetchAudiobooks())
             store.save(books)
+            onBooksRefreshed?(books)
         } catch {
             // The cached snapshot stands; the overlay only shows the error
             // when there are no books at all.
@@ -113,24 +118,26 @@ public final class LibraryViewModel {
 
     /// All books sorted by name, matching the query and passing the active
     /// filters.
-    public func visibleBooks(filters: LibraryFilters, catalog: BookCatalog) -> [Book] {
+    public func visibleBooks(filters: LibraryFilters, catalog: BookCatalog, loadedBookID: String?) -> [Book] {
         booksByName.filter { book in
             (filters.searchQuery.isEmpty || book.matches(filters.searchQuery))
-                && passesFilters(book, filters: filters, catalog: catalog)
+                && passesFilters(book, filters: filters, catalog: catalog, loadedBookID: loadedBookID)
         }
     }
 
     /// One group's books matching the query, keeping only the books that
     /// pass the active filters.
-    public func visibleBooks(in group: BookGroup, filters: LibraryFilters, catalog: BookCatalog) -> [Book] {
+    public func visibleBooks(in group: BookGroup, filters: LibraryFilters, catalog: BookCatalog, loadedBookID: String?) -> [Book] {
         books(in: group, matching: filters.searchQuery)
-            .filter { passesFilters($0, filters: filters, catalog: catalog) }
+            .filter { passesFilters($0, filters: filters, catalog: catalog, loadedBookID: loadedBookID) }
     }
 
-    /// True when the book passes every filter that is on.
-    private func passesFilters(_ book: Book, filters: LibraryFilters, catalog: BookCatalog) -> Bool {
+    /// True when the book passes every filter that is on. The loaded book
+    /// counts as in progress: its live position is in the player, so the
+    /// model's value stands still while it plays.
+    private func passesFilters(_ book: Book, filters: LibraryFilters, catalog: BookCatalog, loadedBookID: String?) -> Bool {
         (!filters.downloadedOnly || catalog.isDownloaded(book))
-            && (!filters.inProgressOnly || catalog.isInProgress(book))
+            && (!filters.inProgressOnly || catalog.isInProgress(book) || book.id == loadedBookID)
     }
 
     /// One group's books, filtered by the query when it is not empty.

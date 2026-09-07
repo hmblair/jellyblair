@@ -9,12 +9,13 @@ struct LibraryScreen: View {
 
     @Environment(LibraryViewModel.self) private var library
     @Environment(BookCatalog.self) private var catalog
+    @Environment(PlayerController.self) private var player
 
     @State private var isShowingSettings = false
     @State private var filters = LibraryFilters()
 
     private var visibleBooks: [Book] {
-        library.visibleBooks(filters: filters, catalog: catalog)
+        library.visibleBooks(filters: filters, catalog: catalog, loadedBookID: player.book?.id)
     }
 
     var body: some View {
@@ -42,7 +43,7 @@ struct LibraryScreen: View {
         List {
             if let scope {
                 Section {
-                    ForEach(library.visibleBooks(in: scope, filters: filters, catalog: catalog)) { book in
+                    ForEach(library.visibleBooks(in: scope, filters: filters, catalog: catalog, loadedBookID: player.book?.id)) { book in
                         BookRowLink(book: book)
                     }
                 } header: {

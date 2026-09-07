@@ -17,5 +17,10 @@ public final class SessionScope {
         library = LibraryViewModel(client: client)
         player = PlayerController(client: client)
         connection = ConnectionMonitor(client: client)
+        // A library refresh syncs its snapshots into the existing book
+        // models, except the loaded book's, whose position the player owns.
+        library.onBooksRefreshed = { [weak catalog, weak player] books in
+            catalog?.applySnapshots(books, skippingBookID: player?.book?.id)
+        }
     }
 }
