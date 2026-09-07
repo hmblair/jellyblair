@@ -109,8 +109,19 @@ public final class AppSession {
             return "Wrong username or password."
         case JellyfinError.badStatus(let code):
             return "The server returned status \(code)."
+        case let error where isBlockedForInsecureTransport(error):
+            return "The system blocks plain HTTP to this address. Use https instead."
         default:
             return "Cannot reach the server."
         }
+    }
+
+    /// True when App Transport Security refused the request because the
+    /// address uses plain HTTP. The system exempts loopback, private
+    /// addresses, and local names, so only a public address gets refused.
+    private static func isBlockedForInsecureTransport(_ error: Error) -> Bool {
+        let error = error as NSError
+        return error.domain == NSURLErrorDomain
+            && error.code == NSURLErrorAppTransportSecurityRequiresSecureConnection
     }
 }
