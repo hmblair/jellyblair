@@ -4,14 +4,8 @@ import Foundation
 /// restarts and shows when the server is unreachable. Each book gets its own
 /// file, since a transcript can hold thousands of lines.
 struct LyricsStore {
-    private var directory: URL {
-        let directory = jellyBlairDataDirectory().appendingPathComponent("lyrics")
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
-    }
-
     private func fileURL(for bookID: String) -> URL {
-        directory.appendingPathComponent("\(sanitizedFileComponent(bookID)).json")
+        DataDirectory.lyrics.appendingPathComponent("\(sanitizedFileComponent(bookID)).json")
     }
 
     func load(bookID: String) -> [LyricLine] {

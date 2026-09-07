@@ -4,7 +4,7 @@ import Foundation
 /// before the network answers and when the server is unreachable.
 struct LibraryStore {
     private var fileURL: URL {
-        jellyBlairDataDirectory().appendingPathComponent("library.json")
+        DataDirectory.root.appendingPathComponent("library.json")
     }
 
     func load() -> [Book] {

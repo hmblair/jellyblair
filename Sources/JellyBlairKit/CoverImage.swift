@@ -9,12 +9,8 @@ public final class CoverImageLoader {
 
     private var memory: [String: PlatformImage] = [:]
 
-    private var directory: URL {
-        jellyBlairDataDirectory().appendingPathComponent("covers")
-    }
-
     private func fileURL(for bookID: String) -> URL {
-        directory.appendingPathComponent(sanitizedFileComponent(bookID))
+        DataDirectory.covers.appendingPathComponent(sanitizedFileComponent(bookID))
     }
 
     /// Returns the cover already held in memory, without any loading.
@@ -47,7 +43,6 @@ public final class CoverImageLoader {
             (response as? HTTPURLResponse)?.statusCode == 200,
             let image = PlatformImage(data: data)
         else { return nil }
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? data.write(to: fileURL(for: bookID))
         memory[bookID] = image
         return image

@@ -4,7 +4,7 @@ import Foundation
 /// and show when the server is unreachable.
 struct ChapterStore {
     private var fileURL: URL {
-        jellyBlairDataDirectory().appendingPathComponent("chapters.json")
+        DataDirectory.root.appendingPathComponent("chapters.json")
     }
 
     func load() -> [String: [Chapter]] {

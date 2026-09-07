@@ -78,10 +78,8 @@ public final class BookModel: Identifiable {
     // MARK: - Download
 
     private var downloadedFileURL: URL {
-        let directory = jellyBlairDataDirectory().appendingPathComponent("downloads")
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let name = "\(sanitizedFileComponent(book.id)).\(sanitizedFileComponent(book.container ?? "m4b"))"
-        return directory.appendingPathComponent(name)
+        return DataDirectory.downloads.appendingPathComponent(name)
     }
 
     /// Downloads the book's file for offline playback.
