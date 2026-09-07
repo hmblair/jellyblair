@@ -165,6 +165,9 @@ public final class PlayerController {
         // immediately and the Resume button does exactly what it said.
         let newBook = model.book
         currentModel = model
+        model.onDownloadCompleted = { [weak self] in
+            Task { await self?.adoptDownloadedFile() }
+        }
         book = newBook
         playbackErrorMessage = nil
         isReady = false
@@ -261,6 +264,7 @@ public final class PlayerController {
         recordPosition(position, for: book.id)
         let hadSession = hasActiveSession
         self.book = nil
+        currentModel?.onDownloadCompleted = nil
         currentModel = nil
         player = nil
         isReady = false
@@ -272,6 +276,70 @@ public final class PlayerController {
         if hadSession {
             await client.reportPlaybackStopped(bookID: book.id, positionSeconds: position)
         }
+    }
+
+    // MARK: - Download adoption
+
+    /// Moves the open book's playback onto its downloaded file the moment
+    /// the download completes. The stream and the download carry the same
+    /// file, so the position, the playing state, and the reporting session
+    /// all carry over.
+    private func adoptDownloadedFile() async {
+        guard let player, let currentModel, isReady else { return }
+        guard currentModel.downloadState == .downloaded else { return }
+        let generation = openGeneration
+
+        let asset = currentModel.streamAsset()
+        let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first
+        let item = await preparedItem(from: asset, near: currentTime)
+        guard swapStillApplies(generation, player) else { return }
+
+        // Muted until the seek below lands, so the swap is silence, not a repeat.
+        let volume = player.volume
+        defer { player.volume = volume }
+        player.volume = 0
+
+        let position = currentTime
+        replaceItem(of: player, with: item)
+
+        let ready = await waitUntilReady(item)
+        guard swapStillApplies(generation, player) else { return }
+        guard ready else {
+            handlePlaybackFailure(item.error?.localizedDescription ?? "Playback failed.")
+            return
+        }
+        observeTimebaseRate(of: item)
+        await seek(to: position)
+        guard swapStillApplies(generation, player) else { return }
+        if let audioTrack, let audioMix = audioMeter.makeAudioMix(for: audioTrack) {
+            item.audioMix = audioMix
+        }
+    }
+
+    /// Prewarms the asset and pre-seeks a new item to the target, so the
+    /// item becomes ready quickly and near the position once attached.
+    private func preparedItem(from asset: AVURLAsset, near seconds: Double) async -> AVPlayerItem {
+        _ = try? await asset.load(.isPlayable)
+        let item = AVPlayerItem(asset: asset)
+        let time = CMTime(seconds: seconds, preferredTimescale: Int32(ticksPerSecond))
+        await item.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+        return item
+    }
+
+    /// Swaps the player's item, moving the item observers and the meter's
+    /// tap with it. The player keeps its rate, so the playing state carries.
+    private func replaceItem(of player: AVPlayer, with item: AVPlayerItem) {
+        // See closeCurrentBook: the tap must detach before the item goes away.
+        player.currentItem?.audioMix = nil
+        removeItemObservers()
+        player.replaceCurrentItem(with: item)
+        observeFailure(of: item)
+        observePlaybackEnd(of: item)
+    }
+
+    /// False once another book opened or the player was rebuilt mid-swap.
+    private func swapStillApplies(_ generation: Int, _ player: AVPlayer) -> Bool {
+        generation == openGeneration && self.player === player
     }
 
     // MARK: - Chapters
@@ -560,10 +628,16 @@ public final class PlayerController {
 
     private func removeObservers() {
         removeChapterBoundaryObserver()
-        statusObservation?.invalidate()
-        statusObservation = nil
         timeControlObservation?.invalidate()
         timeControlObservation = nil
+        removeItemObservers()
+    }
+
+    /// Removes the observers tied to the current player item. An item swap
+    /// removes only these; the player-level observers stay in place.
+    private func removeItemObservers() {
+        statusObservation?.invalidate()
+        statusObservation = nil
         if let timebaseRateObserver {
             NotificationCenter.default.removeObserver(timebaseRateObserver)
         }

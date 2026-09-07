@@ -33,6 +33,10 @@ public final class BookModel: Identifiable {
     public private(set) var downloadState: DownloadState = .notDownloaded
     @ObservationIgnored private var downloader: Downloader?
 
+    /// The player's hook for a finished download, so playback moves onto
+    /// the file while the book is open. Set on open and cleared on close.
+    @ObservationIgnored var onDownloadCompleted: (() -> Void)?
+
     private let client: JellyfinClient
     private let onChaptersChanged: ([Chapter]) -> Void
     @ObservationIgnored private var cachedAsset: AVURLAsset?
@@ -94,8 +98,11 @@ public final class BookModel: Identifiable {
                 guard let self else { return }
                 self.downloader = nil
                 self.downloadState = succeeded ? .downloaded : .notDownloaded
-                // Playback switches source on the next open.
+                // The next streamAsset() call picks up the file.
                 self.releaseAsset()
+                if succeeded {
+                    self.onDownloadCompleted?()
+                }
             }
         )
         self.downloader = downloader
