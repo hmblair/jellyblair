@@ -166,7 +166,7 @@ struct ChapterListPane: View {
         let ids = matchingChapterIDs
         guard !ids.isEmpty else { return }
         matchIndex = (index % ids.count + ids.count) % ids.count
-        withAnimation { proxy.scrollTo(ids[matchIndex], anchor: .center) }
+        scrollAfterUpdate(proxy, to: ids[matchIndex], animated: true)
         isTracking = false
     }
 
@@ -181,9 +181,7 @@ struct ChapterListPane: View {
         ) {
             isTracking.toggle()
             guard isTracking else { return }
-            Task { @MainActor in
-                centerOnMarked(proxy, animated: true)
-            }
+            centerOnMarked(proxy, animated: true)
         }
     }
 
@@ -192,10 +190,19 @@ struct ChapterListPane: View {
     /// whole list.
     private func centerOnMarked(_ proxy: ScrollViewProxy, animated: Bool) {
         guard isTracking, let marked else { return }
-        if animated {
-            withAnimation { proxy.scrollTo(marked, anchor: .center) }
-        } else {
-            proxy.scrollTo(marked, anchor: .center)
+        scrollAfterUpdate(proxy, to: marked, animated: animated)
+    }
+
+    /// Scrolls after the in-flight view update: onChange handlers run inside
+    /// the update, and a scroll there re-enters the list's layout, which
+    /// AppKit reports as a reentrant table operation.
+    private func scrollAfterUpdate(_ proxy: ScrollViewProxy, to id: Int, animated: Bool) {
+        Task { @MainActor in
+            if animated {
+                withAnimation { proxy.scrollTo(id, anchor: .center) }
+            } else {
+                proxy.scrollTo(id, anchor: .center)
+            }
         }
     }
 }
