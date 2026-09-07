@@ -8,18 +8,6 @@ public struct BookGroup: Identifiable, Hashable {
         case narrator
         case genre
 
-        /// The kind after this one in the grouping picker's cycle.
-        public var next: Kind {
-            switch self {
-            case .author:
-                return .narrator
-            case .narrator:
-                return .genre
-            case .genre:
-                return .author
-            }
-        }
-
         /// The symbol for this role, shared by the book screen's metadata
         /// lines and the group views.
         public var iconName: String {
@@ -42,14 +30,6 @@ public struct BookGroup: Identifiable, Hashable {
     public let books: [Book]
 
     public var id: String { "\(kind):\(name)" }
-
-    /// The group narrowed to books passing the predicate, or nil when none do.
-    public func keeping(_ isIncluded: (Book) -> Bool) -> BookGroup? {
-        let kept = books.filter(isIncluded)
-        guard !kept.isEmpty else { return nil }
-        return BookGroup(name: name, kind: kind, books: kept)
-    }
-
 }
 
 /// The library list's filters, threaded whole from the filter bar to the
@@ -62,22 +42,18 @@ public struct LibraryFilters: Equatable {
     public init() {}
 }
 
-/// Holds the audiobook list and its sidebar grouping by author.
+/// Holds the audiobook list, sorted by name for the library list, and
+/// builds one author's, narrator's, or genre's group on demand for the
+/// scoped screens.
 @MainActor
 @Observable
 public final class LibraryViewModel {
     public let client: JellyfinClient
 
     public private(set) var books: [Book] = []
-    public private(set) var authorGroups: [BookGroup] = []
-    public private(set) var narratorGroups: [BookGroup] = []
-    public private(set) var genreGroups: [BookGroup] = []
+    /// The books sorted by name, each exactly once, for the flat library list.
+    public private(set) var booksByName: [Book] = []
 
-    /// The active grouping of the library list.
-    public var groupKind: BookGroup.Kind = .author
-
-    /// The heading of books whose grouped field is missing.
-    private static let unknownName = "Unknown"
     public private(set) var isLoading = true
     public private(set) var errorMessage: String?
 
@@ -103,58 +79,44 @@ public final class LibraryViewModel {
         isLoading = false
     }
 
-    /// Groups from the passed array, never from the freshly written
+    /// Sorts from the passed array, never from the freshly written
     /// property: reading an observable back inside its own update runs
     /// observation tracking mid-change, which can crash in the runtime's
     /// access list.
     private func setBooks(_ newBooks: [Book]) {
         books = newBooks
-        authorGroups = Self.group(newBooks, kind: .author, by: { book in
-            let authors = book.authors
-            return authors.isEmpty ? [Self.unknownName] : authors
-        })
-        narratorGroups = Self.group(newBooks, kind: .narrator, by: { book in
-            let narrators = book.narrators
-            return narrators.isEmpty ? [Self.unknownName] : narrators
-        })
-        genreGroups = Self.group(newBooks, kind: .genre, by: { book in
-            let genres = book.genres ?? []
-            return genres.isEmpty ? [Self.unknownName] : genres
-        })
+        booksByName = newBooks.sorted {
+            Self.sortKey($0.name).localizedStandardCompare(Self.sortKey($1.name)) == .orderedAscending
+        }
     }
 
-    public func groups(ofKind kind: BookGroup.Kind) -> [BookGroup] {
+    /// The named group of one kind, built on demand from the book list, or
+    /// nil when no book carries the name. Books keep the server's title order.
+    public func group(ofKind kind: BookGroup.Kind, named name: String) -> BookGroup? {
+        let matching = books.filter { Self.names(of: $0, for: kind).contains(name) }
+        guard !matching.isEmpty else { return nil }
+        return BookGroup(name: name, kind: kind, books: matching)
+    }
+
+    /// The book's names for one grouping kind: its authors, narrators, or
+    /// genres.
+    private static func names(of book: Book, for kind: BookGroup.Kind) -> [String] {
         switch kind {
         case .author:
-            return authorGroups
+            return book.authors
         case .narrator:
-            return narratorGroups
+            return book.narrators
         case .genre:
-            return genreGroups
+            return book.genres ?? []
         }
     }
 
-    /// Groups of the active kind whose books match the query, keeping their
-    /// headings. An empty query passes all.
-    public func groups(matching query: String) -> [BookGroup] {
-        let all = groups(ofKind: groupKind)
-        guard !query.isEmpty else { return all }
-        return all.compactMap { group in
-            group.keeping { $0.matches(query) }
-        }
-    }
-
-    /// The unfiltered group with the same identity, for scoping to the
-    /// full shelf after clicking a filtered subset.
-    public func fullGroup(matching group: BookGroup) -> BookGroup? {
-        groups(ofKind: group.kind).first { $0.id == group.id }
-    }
-
-    /// Groups of the active kind matching the query, keeping only the books
-    /// that pass the active filters.
-    public func visibleGroups(filters: LibraryFilters, catalog: BookCatalog) -> [BookGroup] {
-        groups(matching: filters.searchQuery).compactMap { group in
-            group.keeping { passesFilters($0, filters: filters, catalog: catalog) }
+    /// All books sorted by name, matching the query and passing the active
+    /// filters.
+    public func visibleBooks(filters: LibraryFilters, catalog: BookCatalog) -> [Book] {
+        booksByName.filter { book in
+            (filters.searchQuery.isEmpty || book.matches(filters.searchQuery))
+                && passesFilters(book, filters: filters, catalog: catalog)
         }
     }
 
@@ -177,23 +139,7 @@ public final class LibraryViewModel {
         return group.books.filter { $0.matches(query) }
     }
 
-    /// Groups books under derived names; a book with several names, such as
-    /// genres, appears in each group. Books keep the server's title order
-    /// within each group, and names sort ignoring a leading article, with
-    /// the Unknown group last.
-    private static func group(_ books: [Book], kind: BookGroup.Kind, by names: (Book) -> [String]) -> [BookGroup] {
-        var grouped: [String: [Book]] = [:]
-        for book in books {
-            for name in names(book) {
-                grouped[name, default: []].append(book)
-            }
-        }
-        let names = grouped.keys
-            .sorted { sortKey($0).localizedStandardCompare(sortKey($1)) == .orderedAscending }
-        let ordered = names.filter { $0 != unknownName } + names.filter { $0 == unknownName }
-        return ordered.map { BookGroup(name: $0, kind: kind, books: grouped[$0]!) }
-    }
-
+    /// The name without a leading article, for sorting.
     private static func sortKey(_ name: String) -> String {
         for article in ["The ", "A ", "An "] where name.hasPrefix(article) {
             return String(name.dropFirst(article.count))

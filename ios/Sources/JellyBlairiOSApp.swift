@@ -91,15 +91,15 @@ struct MainScreen: View {
             path.append(.book(book))
         })
         .environment(\.openAuthor, OpenBookGroupAction { [library = scope.library] name in
-            guard let group = library.authorGroups.first(where: { $0.name == name }) else { return }
+            guard let group = library.group(ofKind: .author, named: name) else { return }
             path.append(.group(group))
         })
         .environment(\.openNarrator, OpenBookGroupAction { [library = scope.library] name in
-            guard let group = library.narratorGroups.first(where: { $0.name == name }) else { return }
+            guard let group = library.group(ofKind: .narrator, named: name) else { return }
             path.append(.group(group))
         })
         .environment(\.openGenre, OpenBookGroupAction { [library = scope.library] name in
-            guard let group = library.genreGroups.first(where: { $0.name == name }) else { return }
+            guard let group = library.group(ofKind: .genre, named: name) else { return }
             path.append(.group(group))
         })
         .environment(scope.library)

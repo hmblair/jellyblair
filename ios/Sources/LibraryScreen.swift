@@ -9,15 +9,12 @@ struct LibraryScreen: View {
 
     @Environment(LibraryViewModel.self) private var library
     @Environment(BookCatalog.self) private var catalog
-    @Environment(\.openAuthor) private var openAuthor
-    @Environment(\.openNarrator) private var openNarrator
-    @Environment(\.openGenre) private var openGenre
 
     @State private var isShowingSettings = false
     @State private var filters = LibraryFilters()
 
-    private var visibleGroups: [BookGroup] {
-        library.visibleGroups(filters: filters, catalog: catalog)
+    private var visibleBooks: [Book] {
+        library.visibleBooks(filters: filters, catalog: catalog)
     }
 
     var body: some View {
@@ -52,16 +49,8 @@ struct LibraryScreen: View {
                     GroupHeading(name: scope.name, iconName: scope.iconName)
                 }
             } else {
-                ForEach(visibleGroups) { group in
-                    Section {
-                        ForEach(group.books) { book in
-                            BookRowLink(book: book)
-                        }
-                    } header: {
-                        GroupHeading(name: group.name) {
-                            openGroup(group)
-                        }
-                    }
+                ForEach(visibleBooks) { book in
+                    BookRowLink(book: book)
                 }
             }
         }
@@ -69,19 +58,7 @@ struct LibraryScreen: View {
             await library.load()
         }
         .overlay {
-            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleGroups.isEmpty, searchQuery: filters.searchQuery)
-        }
-    }
-
-    /// Navigates to a group through the action for its role.
-    private func openGroup(_ group: BookGroup) {
-        switch group.kind {
-        case .author:
-            openAuthor?(group.name)
-        case .narrator:
-            openNarrator?(group.name)
-        case .genre:
-            openGenre?(group.name)
+            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleBooks.isEmpty, searchQuery: filters.searchQuery)
         }
     }
 }

@@ -13,8 +13,8 @@ struct LibraryView: View {
 
     @State private var filters = LibraryFilters()
 
-    private var visibleGroups: [BookGroup] {
-        library.visibleGroups(filters: filters, catalog: catalog)
+    private var visibleBooks: [Book] {
+        library.visibleBooks(filters: filters, catalog: catalog)
     }
 
     var body: some View {
@@ -39,34 +39,20 @@ struct LibraryView: View {
                     }
                 }
             } else {
-                ForEach(visibleGroups) { group in
-                    Section {
-                        ForEach(group.books) { book in
-                            row(for: book)
-                        }
-                    } header: {
-                        GroupHeading(name: group.name) {
-                            enterScope(group)
-                        }
-                    }
+                ForEach(visibleBooks) { book in
+                    row(for: book)
                 }
             }
         }
         .listStyle(.sidebar)
         .overlay {
-            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleGroups.isEmpty, searchQuery: filters.searchQuery)
+            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleBooks.isEmpty, searchQuery: filters.searchQuery)
         }
     }
 
     private func row(for book: Book) -> some View {
         BookRow(book: book, isLoaded: book.id == player.book?.id)
             .tag(book.id)
-    }
-
-    private func enterScope(_ group: BookGroup) {
-        filters.searchQuery = ""
-        // The clicked group can be a filtered subset; scope to the full one.
-        scope = library.fullGroup(matching: group) ?? group
     }
 
     private func exitScope() {

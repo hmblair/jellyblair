@@ -134,13 +134,13 @@ struct ContentView: View {
             refreshLibrary: { [library = scope.library] in Task { await library.load() } }
         ))
         .environment(\.openAuthor, OpenBookGroupAction { [library = scope.library] name in
-            sidebarScope = library.authorGroups.first { $0.name == name }
+            sidebarScope = library.group(ofKind: .author, named: name)
         })
         .environment(\.openNarrator, OpenBookGroupAction { [library = scope.library] name in
-            sidebarScope = library.narratorGroups.first { $0.name == name }
+            sidebarScope = library.group(ofKind: .narrator, named: name)
         })
         .environment(\.openGenre, OpenBookGroupAction { [library = scope.library] name in
-            sidebarScope = library.genreGroups.first { $0.name == name }
+            sidebarScope = library.group(ofKind: .genre, named: name)
         })
         .environment(scope.library)
         .environment(scope.player)
