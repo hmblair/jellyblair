@@ -63,7 +63,7 @@ public struct Book: Codable, Identifiable, Hashable {
     public let id: String
     public let name: String
     public let runTimeTicks: Int64?
-    public let userData: BookUserData?
+    public var userData: BookUserData?
     public let albumArtist: String?
     public let artists: [String]?
     public let people: [Person]?
@@ -153,6 +153,13 @@ public struct Book: Codable, Identifiable, Hashable {
 
     public var resumePositionSeconds: Double {
         Double(userData?.playbackPositionTicks ?? 0) / ticksPerSecond
+    }
+
+    /// Returns a copy of the book at a different resume position.
+    public func withResumePosition(_ seconds: Double) -> Book {
+        var copy = self
+        copy.userData = BookUserData(playbackPositionTicks: Int64(seconds * ticksPerSecond))
+        return copy
     }
 }
 

@@ -81,6 +81,11 @@ public final class PlayerController {
     /// The model of the loaded book; playback reads from and records into it.
     private var currentModel: BookModel?
 
+    /// The session scope's hook for a settled position, which it writes
+    /// into the library's cached snapshot. The periodic report does not use
+    /// it, because each write replaces the whole snapshot file.
+    @ObservationIgnored public var onPositionRecorded: ((String, Double) -> Void)?
+
     /// True after a start report was sent, so stop reports only follow real sessions.
     private var hasActiveSession = false
 
@@ -253,7 +258,7 @@ public final class PlayerController {
         removeObservers()
         stopProgressReports()
         let position = currentTime
-        currentModel?.recordPosition(position)
+        recordPosition(position, for: book.id)
         let hadSession = hasActiveSession
         self.book = nil
         currentModel = nil
@@ -586,7 +591,7 @@ public final class PlayerController {
         guard let book else { return }
         updatePlayingState(false)
         setAnchor(position: duration, rate: 0)
-        currentModel?.recordPosition(duration)
+        recordPosition(duration, for: book.id)
         audioMeter.reset()
         stopProgressReports()
         // The stop report below ends the session; replaying starts a new one.
@@ -615,6 +620,13 @@ public final class PlayerController {
         progressReportTimer = nil
     }
 
+    /// Publishes a settled position to the book model and the library's
+    /// cached snapshot. Both hold it after the player closes the book.
+    private func recordPosition(_ seconds: Double, for bookID: String) {
+        currentModel?.recordPosition(seconds)
+        onPositionRecorded?(bookID, seconds)
+    }
+
     /// Publishes the position from one read: the model and the server take
     /// the same value. The two never disagree by more than one interval
     /// while the book plays.
@@ -628,8 +640,8 @@ public final class PlayerController {
         }
     }
 
-    /// Sends a final stop report before the process exits, blocking briefly so the
-    /// request has a chance to leave. Async reporting cannot finish during termination.
+    /// Records the final position and reports the stop before the process exits.
+    /// The report blocks briefly, because async work cannot finish during termination.
     private func observeAppTermination() {
         terminationObserver = NotificationCenter.default.addObserver(
             forName: Self.terminationNotification,
@@ -638,7 +650,11 @@ public final class PlayerController {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, let book = self.book, self.hasActiveSession else { return }
-                self.client.reportPlaybackStoppedBlocking(bookID: book.id, positionSeconds: self.currentTime)
+                let position = self.currentTime
+                // The local write comes first: the report below can block
+                // for a second.
+                self.recordPosition(position, for: book.id)
+                self.client.reportPlaybackStoppedBlocking(bookID: book.id, positionSeconds: position)
             }
         }
     }

@@ -22,5 +22,10 @@ public final class SessionScope {
         library.onBooksRefreshed = { [weak catalog, weak player] books in
             catalog?.applySnapshots(books, skippingBookID: player?.book?.id)
         }
+        // The player publishes each settled position into the cached
+        // snapshot, which an offline launch reads.
+        player.onPositionRecorded = { [weak library] bookID, seconds in
+            library?.recordPosition(seconds, for: bookID)
+        }
     }
 }

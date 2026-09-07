@@ -66,16 +66,20 @@ public final class LibraryViewModel {
     public init(client: JellyfinClient) {
         self.client = client
         // The last snapshot shows immediately and carries offline launches.
-        setBooks(store.load())
+        // The file is the source here, so the lists start equal to it and
+        // setBooks has nothing to write back.
+        let cached = store.load()
+        books = cached
+        booksByName = Self.sortedByName(cached)
     }
 
     public func load() async {
         isLoading = true
         errorMessage = nil
         do {
-            setBooks(try await client.fetchAudiobooks())
-            store.save(books)
-            onBooksRefreshed?(books)
+            let fetched = try await client.fetchAudiobooks()
+            applySnapshot(fetched)
+            onBooksRefreshed?(fetched)
         } catch {
             // The cached snapshot stands; the overlay only shows the error
             // when there are no books at all.
@@ -84,16 +88,56 @@ public final class LibraryViewModel {
         isLoading = false
     }
 
-    /// Sorts from the passed array, never from the freshly written
-    /// property: reading an observable back inside its own update runs
-    /// observation tracking mid-change, which can crash in the runtime's
-    /// access list. An unchanged list writes nothing, so a no-op refresh
-    /// invalidates no observers.
-    private func setBooks(_ newBooks: [Book]) {
+    /// Writes a book's position into the cached snapshot. A launch that
+    /// cannot reach the server then resumes where playback stopped, not
+    /// where the last fetch left the book. An unchanged position writes
+    /// nothing.
+    public func recordPosition(_ seconds: Double, for bookID: String) {
+        guard let index = books.firstIndex(where: { $0.id == bookID }) else { return }
+        // The books compare equal exactly when their stored ticks match, so
+        // the guard is immune to the lossy seconds-to-ticks conversion.
+        let updated = books[index].withResumePosition(seconds)
+        guard updated != books[index] else { return }
+        replace(updated, at: index)
+    }
+
+    /// Adopts a fresh list from the server. An unchanged list writes
+    /// nothing, so a no-op refresh invalidates no observers and leaves the
+    /// file alone.
+    private func applySnapshot(_ newBooks: [Book]) {
         guard newBooks != books else { return }
+        setBooks(newBooks, inNameOrder: Self.sortedByName(newBooks))
+    }
+
+    /// Puts a book at its index in the main list and in place of its ID in
+    /// the name order. The position is the only field that changes here, so
+    /// neither order moves and neither needs a sort.
+    private func replace(_ book: Book, at index: Int) {
+        var updated = books
+        updated[index] = book
+        var sorted = booksByName
+        if let sortedIndex = sorted.firstIndex(where: { $0.id == book.id }) {
+            sorted[sortedIndex] = book
+        }
+        setBooks(updated, inNameOrder: sorted)
+    }
+
+    /// The one writer of the two lists and the cached file after
+    /// initialization, so the three always hold the same books. Callers
+    /// build both orders; the caller's arrays are written, never the
+    /// freshly set property. Reading an observable back inside its own
+    /// update runs observation tracking mid-change, which can crash in the
+    /// runtime's access list.
+    private func setBooks(_ newBooks: [Book], inNameOrder sortedBooks: [Book]) {
         books = newBooks
-        booksByName = newBooks.sorted {
-            Self.sortKey($0.name).localizedStandardCompare(Self.sortKey($1.name)) == .orderedAscending
+        booksByName = sortedBooks
+        store.save(newBooks)
+    }
+
+    /// Sorts a list by name, the order the flat library list shows.
+    private static func sortedByName(_ books: [Book]) -> [Book] {
+        books.sorted {
+            sortKey($0.name).localizedStandardCompare(sortKey($1.name)) == .orderedAscending
         }
     }
 
