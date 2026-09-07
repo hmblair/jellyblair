@@ -154,8 +154,10 @@ public final class BookModel: Identifiable {
 
     /// Adopts a fresh library snapshot's position, so a change made on
     /// another device reaches displays that read the model without a visit
-    /// to the book's screen.
+    /// to the book's screen. An unchanged position writes nothing, so a
+    /// no-op refresh invalidates no observers.
     func applySnapshot(_ fresh: Book) {
+        guard fresh.resumePositionSeconds != resumePositionSeconds else { return }
         resumePositionSeconds = fresh.resumePositionSeconds
     }
 
@@ -176,18 +178,14 @@ public final class BookModel: Identifiable {
         _ = await loadAndStoreChapters()
     }
 
-    /// Reads the chapters again from the file. The old list and its disk
-    /// cache survive unless the re-read succeeds.
+    /// Reads the chapters again from the file. The old list stays in place
+    /// until the re-read succeeds, like the transcript's refresh.
     public func refreshChapters() async {
         guard !isFetchingChapters else { return }
         isFetchingChapters = true
         defer { isFetchingChapters = false }
-        let previous = chapters
-        chapters = []
         releaseAsset()
-        if await loadAndStoreChapters() == false {
-            chapters = previous
-        }
+        _ = await loadAndStoreChapters()
     }
 
     /// Reads the chapters, stores them, and notifies the catalog. An empty

@@ -87,8 +87,10 @@ public final class LibraryViewModel {
     /// Sorts from the passed array, never from the freshly written
     /// property: reading an observable back inside its own update runs
     /// observation tracking mid-change, which can crash in the runtime's
-    /// access list.
+    /// access list. An unchanged list writes nothing, so a no-op refresh
+    /// invalidates no observers.
     private func setBooks(_ newBooks: [Book]) {
+        guard newBooks != books else { return }
         books = newBooks
         booksByName = newBooks.sorted {
             Self.sortKey($0.name).localizedStandardCompare(Self.sortKey($1.name)) == .orderedAscending

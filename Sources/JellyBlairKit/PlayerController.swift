@@ -271,10 +271,10 @@ public final class PlayerController {
 
     // MARK: - Chapters
 
-    /// Discards the loaded book's cached chapters and reads them again.
+    /// Reads the loaded book's chapters again. The old list stays in place
+    /// until the re-read succeeds.
     public func refreshChapters() async {
         guard let model = currentModel else { return }
-        setChapters([])
         await model.refreshChapters()
         guard currentModel === model else { return }
         setChapters(model.chapters)
@@ -419,7 +419,10 @@ public final class PlayerController {
         setAnchor(position: position, rate: timebase.rate)
     }
 
+    /// An unchanged list writes nothing, so a no-op refresh invalidates no
+    /// observers and rebuilds no chapter list.
     private func setChapters(_ newChapters: [Chapter]) {
+        guard newChapters != chapters else { return }
         chapters = newChapters
         refreshCurrentChapterIndex()
         installChapterBoundaryObserver()
