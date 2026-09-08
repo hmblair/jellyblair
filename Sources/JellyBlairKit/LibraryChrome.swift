@@ -63,7 +63,7 @@ public struct LibraryFilterToolbarButtons: View {
             }
             .pickerStyle(.inline)
         } label: {
-            Image(systemName: "arrow.up.arrow.down")
+            Image(systemName: "arrow.up.arrow.down.circle.fill")
         }
         .menuIndicator(.hidden)
         .foregroundStyle(Color.secondary)
