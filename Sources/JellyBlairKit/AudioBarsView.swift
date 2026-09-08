@@ -186,10 +186,15 @@ final class AudioBarsLayerView: PlatformNativeView {
         }
     }
 
-    /// Sets the bar frames from the current band levels.
+    /// Sets the bar frames from the current band levels, or from rest while
+    /// paused. Reading the meter while paused would race the last audio
+    /// buffers, which can land after the meter is reset and leave the bars
+    /// frozen at their final levels with no redraw left to clear them.
     private func renderBands() {
         guard let meter else { return }
-        let bands = meter.currentBands()
+        let bands = isPlaying
+            ? meter.currentBands()
+            : [Float](repeating: 0, count: AudioLevelMeter.bandCount)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for (index, bar) in barLayers.enumerated() {
