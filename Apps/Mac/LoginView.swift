@@ -5,14 +5,11 @@ import SwiftUI
 struct LoginView: View {
     let session: AppSession
 
-    @State private var serverURLString: String
-    @State private var username: String
-    @State private var password = ""
+    @State private var form: LoginForm
 
     init(session: AppSession) {
         self.session = session
-        _serverURLString = State(initialValue: session.storedServerURLString)
-        _username = State(initialValue: session.storedUsername)
+        _form = State(initialValue: LoginForm(session: session))
     }
 
     var body: some View {
@@ -24,9 +21,9 @@ struct LoginView: View {
                 .font(.title2.bold())
 
             Form {
-                TextField("Server", text: $serverURLString, prompt: Text("https://jellyfin.example.com"))
-                TextField("Username", text: $username)
-                SecureField("Password", text: $password)
+                TextField("Server", text: $form.serverURLString, prompt: Text("https://jellyfin.example.com"))
+                TextField("Username", text: $form.username)
+                SecureField("Password", text: $form.password)
             }
             // The minimum keeps the fields usable; the window's minimum size
             // follows from the content.
@@ -39,10 +36,10 @@ struct LoginView: View {
             }
 
             Button("Connect") {
-                connect()
+                form.submit(to: session)
             }
             .keyboardShortcut(.defaultAction)
-            .disabled(session.isAuthenticating || serverURLString.isEmpty || username.isEmpty)
+            .disabled(!form.canSubmit(to: session))
 
             if session.isAuthenticating {
                 ProgressView()
@@ -51,11 +48,5 @@ struct LoginView: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func connect() {
-        Task {
-            await session.login(serverURLString: serverURLString, username: username, password: password)
-        }
     }
 }

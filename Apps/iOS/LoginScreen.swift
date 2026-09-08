@@ -5,9 +5,7 @@ import SwiftUI
 struct LoginScreen: View {
     let session: AppSession
 
-    @State private var serverURLString: String
-    @State private var username: String
-    @State private var password = ""
+    @State private var form: LoginForm
 
     @Environment(\.layoutDensity) private var density
 
@@ -24,24 +22,23 @@ struct LoginScreen: View {
 
     init(session: AppSession) {
         self.session = session
-        _serverURLString = State(initialValue: session.storedServerURLString)
-        _username = State(initialValue: session.storedUsername)
+        _form = State(initialValue: LoginForm(session: session))
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Server") {
-                    TextField("https://jellyfin.example.com", text: $serverURLString)
+                    TextField("https://jellyfin.example.com", text: $form.serverURLString)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
                 Section("Account") {
-                    TextField("Username", text: $username)
+                    TextField("Username", text: $form.username)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    SecureField("Password", text: $password)
+                    SecureField("Password", text: $form.password)
                 }
                 if let message = session.loginErrorMessage {
                     Text(message)
@@ -49,9 +46,9 @@ struct LoginScreen: View {
                 }
                 Section {
                     Button("Connect") {
-                        connect()
+                        form.submit(to: session)
                     }
-                    .disabled(session.isAuthenticating || serverURLString.isEmpty || username.isEmpty)
+                    .disabled(!form.canSubmit(to: session))
                 }
             }
             // The inner cap sizes the form; the outer frame centers it in
@@ -64,12 +61,6 @@ struct LoginScreen: View {
                     ProgressView()
                 }
             }
-        }
-    }
-
-    private func connect() {
-        Task {
-            await session.login(serverURLString: serverURLString, username: username, password: password)
         }
     }
 }
