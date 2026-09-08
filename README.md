@@ -52,10 +52,6 @@ make export PLATFORM=ios METHOD=app-store-connect
 
 The app version lives in the `VERSION` file. The make targets stamp it into both platforms' bundles, and the client reports it to the server. The build number is the repository's commit count. The make targets stamp it in the same way.
 
-## Security note
-
-The app stores your Jellyfin access token in UserDefaults, not in the Keychain. This is deliberate: Keychain access prompts on every rebuilt development binary, and a Jellyfin token grants only what your Jellyfin account can do. If your server is exposed to the open internet and you consider the token sensitive, weigh this before signing in.
-
 ## License
 
 MIT. See [LICENSE](LICENSE).
