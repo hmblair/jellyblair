@@ -1,0 +1,61 @@
+name: JellyBlair
+options:
+  bundleIdPrefix: com.hmblair
+  deploymentTarget:
+    macOS: "15.0"
+    iOS: "18.0"
+packages:
+  JellyBlair:
+    path: ..
+
+# Settings both apps share, so each value has one home.
+targetTemplates:
+  App:
+    type: application
+    dependencies:
+      - package: JellyBlair
+        product: JellyBlairKit
+    settings:
+      base:
+        PRODUCT_NAME: JellyBlair
+        # One identifier across the platforms, so the App Store treats
+        # both apps as one product.
+        PRODUCT_BUNDLE_IDENTIFIER: com.hmblair.jellyblair
+        CODE_SIGN_STYLE: Automatic
+        # Placeholders for builds outside make, such as running from Xcode.
+        # The make targets pass the version and the build number.
+        MARKETING_VERSION: "0"
+        CURRENT_PROJECT_VERSION: "0"
+
+targets:
+  JellyBlairMac:
+    templates: [App]
+    platform: macOS
+    sources: [Mac]
+    info:
+      path: Mac/Info.plist
+      properties:
+        CFBundleDisplayName: JellyBlair
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.books
+        NSHumanReadableCopyright: Hamish M. Blair
+        NSHighResolutionCapable: true
+
+  JellyBlairiOS:
+    templates: [App]
+    platform: iOS
+    sources: [iOS]
+    info:
+      path: iOS/Info.plist
+      properties:
+        CFBundleDisplayName: JellyBlair
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIBackgroundModes: [audio]
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1"

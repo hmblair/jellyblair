@@ -1,8 +1,9 @@
 .build/
-Makefile.local
+build/
 dist/
-ios/JellyBlairiOS.xcodeproj/
-ios/build/
-ios/Info.plist
+Makefile.local
+Apps/JellyBlair.xcodeproj/
+Apps/Mac/Info.plist
+Apps/iOS/Info.plist
 .DS_Store
 .swiftpm/
