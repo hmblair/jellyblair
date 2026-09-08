@@ -1,68 +1,6 @@
 import Foundation
 
-/// Number of Jellyfin ticks in one second.
-public let ticksPerSecond: Double = 10_000_000
-
-struct AuthResponse: Decodable {
-    let accessToken: String
-    let user: AuthUser
-
-    enum CodingKeys: String, CodingKey {
-        case accessToken = "AccessToken"
-        case user = "User"
-    }
-}
-
-struct AuthUser: Decodable {
-    let id: String
-
-    enum CodingKeys: String, CodingKey {
-        case id = "Id"
-    }
-}
-
-struct ItemsResponse: Decodable {
-    let items: [Book]
-
-    enum CodingKeys: String, CodingKey {
-        case items = "Items"
-    }
-}
-
-public struct BookUserData: Codable, Hashable {
-    public let playbackPositionTicks: Int64
-    /// When the user last played the book, as the server writes it, or nil
-    /// when the server has no record of a play.
-    public let lastPlayedTimestamp: String?
-
-    enum CodingKeys: String, CodingKey {
-        case playbackPositionTicks = "PlaybackPositionTicks"
-        case lastPlayedTimestamp = "LastPlayedDate"
-    }
-}
-
-public struct Person: Codable, Hashable {
-    public let name: String
-    public let type: String
-
-    enum CodingKeys: String, CodingKey {
-        case name = "Name"
-        case type = "Type"
-    }
-}
-
-public struct MediaSource: Codable, Hashable {
-    public let container: String?
-    public let size: Int64?
-    public let bitrate: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case container = "Container"
-        case size = "Size"
-        case bitrate = "Bitrate"
-    }
-}
-
+/// One audiobook, as the server describes it.
 public struct Book: Codable, Identifiable, Hashable {
     public let id: String
     public let name: String
@@ -177,72 +115,36 @@ public struct Book: Codable, Identifiable, Hashable {
     }
 }
 
-/// One line of a book's transcript, read from the lyric sidecar on the server.
-public struct LyricLine: Identifiable, Hashable, Codable {
-    public let index: Int
-    public let text: String
-    /// When the line is spoken, or nil when the sidecar has no timestamps.
-    public let startSeconds: Double?
-    /// Word timings within the line, when the sidecar carries them.
-    public let cues: [LyricCue]
-
-    public var id: Int { index }
-}
-
-/// One word's timing within a transcript line: when it is spoken, and the
-/// character range it covers in the line's text.
-public struct LyricCue: Hashable, Codable {
-    public let startSeconds: Double
-    public let startPosition: Int
-    public let endPosition: Int
-}
-
-struct LyricsResponse: Decodable {
-    let lyrics: [LyricsResponseLine]
+public struct BookUserData: Codable, Hashable {
+    public let playbackPositionTicks: Int64
+    /// When the user last played the book, as the server writes it, or nil
+    /// when the server has no record of a play.
+    public let lastPlayedTimestamp: String?
 
     enum CodingKeys: String, CodingKey {
-        case lyrics = "Lyrics"
+        case playbackPositionTicks = "PlaybackPositionTicks"
+        case lastPlayedTimestamp = "LastPlayedDate"
     }
 }
 
-struct LyricsResponseLine: Decodable {
-    let text: String
-    let startTicks: Int64?
-    let cues: [LyricsResponseCue]?
+public struct Person: Codable, Hashable {
+    public let name: String
+    public let type: String
 
     enum CodingKeys: String, CodingKey {
-        case text = "Text"
-        case startTicks = "Start"
-        case cues = "Cues"
+        case name = "Name"
+        case type = "Type"
     }
 }
 
-struct LyricsResponseCue: Decodable {
-    let position: Int
-    let endPosition: Int?
-    let startTicks: Int64
+public struct MediaSource: Codable, Hashable {
+    public let container: String?
+    public let size: Int64?
+    public let bitrate: Int?
 
     enum CodingKeys: String, CodingKey {
-        case position = "Position"
-        case endPosition = "EndPosition"
-        case startTicks = "Start"
-    }
-}
-
-/// A chapter marker read from the audio file itself.
-public struct Chapter: Identifiable, Hashable, Codable {
-    /// Tolerance around a chapter's start: a position this close before the
-    /// start counts as inside the chapter.
-    public static let startSlackSeconds: Double = 0.5
-
-    public let index: Int
-    public let title: String
-    public let startSeconds: Double
-    public let endSeconds: Double
-
-    public var id: Int { index }
-
-    public var durationSeconds: Double {
-        max(0, endSeconds - startSeconds)
+        case container = "Container"
+        case size = "Size"
+        case bitrate = "Bitrate"
     }
 }

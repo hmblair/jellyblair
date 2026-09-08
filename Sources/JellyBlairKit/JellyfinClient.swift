@@ -168,21 +168,7 @@ public final class JellyfinClient {
         } catch JellyfinError.badStatus(404) {
             return []
         }
-        let response = try decode(LyricsResponse.self, from: data)
-        return response.lyrics.enumerated().map { index, line in
-            LyricLine(
-                index: index,
-                text: line.text,
-                startSeconds: line.startTicks.map { Double($0) / ticksPerSecond },
-                cues: (line.cues ?? []).map { cue in
-                    LyricCue(
-                        startSeconds: Double(cue.startTicks) / ticksPerSecond,
-                        startPosition: cue.position,
-                        endPosition: cue.endPosition ?? line.text.count
-                    )
-                }
-            )
-        }
+        return try decode(LyricsResponse.self, from: data).transcriptLines
     }
 
     // MARK: - URLs
