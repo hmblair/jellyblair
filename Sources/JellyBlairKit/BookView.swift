@@ -217,12 +217,12 @@ public struct BookView: View {
     private var metadataColumn: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !book.authors.isEmpty {
-                metadataLine(icon: BookGroup.Kind.author.iconName) {
+                metadataLine(icon: authorIconName) {
                     NameListLine(names: book.authors, open: openAuthor)
                 }
             }
             if !book.narrators.isEmpty {
-                metadataLine(icon: BookGroup.Kind.narrator.iconName) {
+                metadataLine(icon: narratorIconName) {
                     NameListLine(names: book.narrators, open: openNarrator)
                 }
             }
@@ -230,7 +230,7 @@ public struct BookView: View {
                 metadataLine(icon: yearIconName) { Text(verbatim: String(year)) }
             }
             if let genres = book.genres, !genres.isEmpty {
-                metadataLine(icon: BookGroup.Kind.genre.iconName) {
+                metadataLine(icon: genreIconName) {
                     NameListLine(names: genres, open: openGenre)
                 }
             }

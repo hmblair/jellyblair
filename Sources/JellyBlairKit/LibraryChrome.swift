@@ -36,6 +36,32 @@ public extension View {
     }
 }
 
+/// Scrolls a library list back to its first book whenever the sort order
+/// changes, so a new order starts at the top instead of partway down where
+/// the old one left the list.
+private struct ScrollToTopOnSortChange: ViewModifier {
+    let sortOrder: BookSortOrder
+    let list: BookList
+
+    func body(content: Content) -> some View {
+        ScrollViewReader { proxy in
+            content.onChange(of: sortOrder) {
+                guard let firstBook = list.books.first else { return }
+                proxy.scrollTo(firstBook.id, anchor: .top)
+            }
+        }
+    }
+}
+
+public extension View {
+    /// Keeps a library list at its top through a change of sort order. The
+    /// list's rows carry the book IDs, so the first book names the row to
+    /// scroll to.
+    func scrolledToTopOnSortChange(_ list: BookList, filters: LibraryFilters) -> some View {
+        modifier(ScrollToTopOnSortChange(sortOrder: filters.sortOrder, list: list))
+    }
+}
+
 /// The library's sort menu and filter toggles for a toolbar: the sort
 /// order, the books in progress, and the downloaded books. A toggle shows
 /// the accent color while it is on; the sort menu keeps one color in every
@@ -101,12 +127,12 @@ public struct LibraryFilterToolbarButtons: View {
 /// books passing the search and filters. A refresh failure keeps the
 /// current list; these only cover an empty one.
 public struct LibraryEmptyOverlay: View {
-    let hasVisibleContent: Bool
+    let list: BookList
 
     @Environment(LibraryViewModel.self) private var library
 
-    public init(hasVisibleContent: Bool) {
-        self.hasVisibleContent = hasVisibleContent
+    public init(_ list: BookList) {
+        self.list = list
     }
 
     public var body: some View {
@@ -116,7 +142,7 @@ public struct LibraryEmptyOverlay: View {
             } else if let message = library.errorMessage {
                 ContentUnavailableView("Cannot load the library", systemImage: "exclamationmark.triangle", description: Text(message))
             }
-        } else if !hasVisibleContent {
+        } else if !list.hasVisibleContent {
             // Emptiness can come from the search or the filter toggles, so
             // the message stays generic.
             ContentUnavailableView("No Results", systemImage: "magnifyingglass")

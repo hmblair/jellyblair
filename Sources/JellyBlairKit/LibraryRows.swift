@@ -82,17 +82,15 @@ public struct BookRow: View {
 }
 
 /// A group section heading: plain text in the platform's header style,
-/// clickable across its full width when it has an action. A scoped list's
-/// heading carries the role icon, and on the Mac a back chevron.
+/// clickable across its full width when it has an action. It carries the
+/// group's role icon, and on the Mac a back chevron.
 public struct GroupHeading: View {
-    let name: String
-    let iconName: String?
+    let heading: BookListHeading
     let showsBackChevron: Bool
     let action: (() -> Void)?
 
-    public init(name: String, iconName: String? = nil, showsBackChevron: Bool = false, action: (() -> Void)? = nil) {
-        self.name = name
-        self.iconName = iconName
+    public init(_ heading: BookListHeading, showsBackChevron: Bool = false, action: (() -> Void)? = nil) {
+        self.heading = heading
         self.showsBackChevron = showsBackChevron
         self.action = action
     }
@@ -115,11 +113,9 @@ public struct GroupHeading: View {
                 Image(systemName: "chevron.left")
                     .font(.caption)
             }
-            if let iconName {
-                Image(systemName: iconName)
-                    .imageScale(.small)
-            }
-            Text(name)
+            Image(systemName: heading.iconName)
+                .imageScale(.small)
+            Text(heading.name)
                 .font(.callout)
             Spacer()
         }

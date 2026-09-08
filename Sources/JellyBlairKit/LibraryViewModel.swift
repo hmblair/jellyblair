@@ -1,106 +1,6 @@
 import Foundation
 import Observation
 
-/// A named shelf of books: one author's, one narrator's, or one genre's.
-public struct BookGroup: Identifiable, Hashable {
-    public enum Kind: Hashable {
-        case author
-        case narrator
-        case genre
-
-        /// The symbol for this role, shared by the book screen's metadata
-        /// lines and the group views.
-        public var iconName: String {
-            switch self {
-            case .author:
-                return "person.fill"
-            case .narrator:
-                return "mic.fill"
-            case .genre:
-                return "tag.fill"
-            }
-        }
-    }
-
-    /// The symbol for the group's role.
-    public var iconName: String { kind.iconName }
-
-    public let name: String
-    public let kind: Kind
-    public let books: [Book]
-
-    public var id: String { "\(kind):\(name)" }
-}
-
-/// The symbol for a book's length, shared by the book screen's metadata
-/// lines and the sort menu.
-public let durationIconName = "clock.fill"
-
-/// The symbol for a book's year, shared by the book screen's metadata lines
-/// and the sort menu.
-public let yearIconName = "calendar"
-
-/// The order a list of books is shown in. The titles start at A and the
-/// durations at the shortest book. The plays start at the most recent one,
-/// and the years at the newest.
-public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
-    case name
-    case lastPlayed
-    case year
-    case duration
-
-    public var id: Self { self }
-
-    /// The order's name in the sort menu.
-    public var label: String {
-        switch self {
-        case .name:
-            return "Title"
-        case .lastPlayed:
-            return "Last Played"
-        case .year:
-            return "Year"
-        case .duration:
-            return "Duration"
-        }
-    }
-
-    /// The symbol beside the order's name in the sort menu.
-    public var iconName: String {
-        switch self {
-        case .name:
-            return "textformat"
-        case .lastPlayed:
-            return "clock.arrow.circlepath"
-        case .year:
-            return yearIconName
-        case .duration:
-            return durationIconName
-        }
-    }
-}
-
-/// The library list's filters and sort order, threaded whole from the filter
-/// bar to the visibility functions, so a new filter touches neither
-/// platform's screen.
-public struct LibraryFilters: Equatable {
-    public var searchQuery = ""
-    public var downloadedOnly = false
-    public private(set) var inProgressOnly = false
-    public var sortOrder = BookSortOrder.name
-
-    public init() {}
-
-    /// Turns the in-progress filter on or off, and puts the list in the
-    /// order that suits it: the books in progress read most recently played
-    /// first, and the whole library reads by title. The sort menu can then
-    /// choose another order.
-    public mutating func setInProgressOnly(_ isOn: Bool) {
-        inProgressOnly = isOn
-        sortOrder = isOn ? .lastPlayed : .name
-    }
-}
-
 /// Holds the audiobook list in each order the library list can show, and
 /// builds one author's, narrator's, or genre's group on demand for the
 /// scoped screens.
@@ -277,9 +177,26 @@ public final class LibraryViewModel {
         }
     }
 
+    /// The list to show: one group's books under the group's heading when a
+    /// group is given, and the whole library's books without a heading
+    /// otherwise. Both match the query, pass the active filters, and read in
+    /// the filters' sort order.
+    public func visibleList(in group: BookGroup?, filters: LibraryFilters, catalog: BookCatalog, loadedBookID: String?) -> BookList {
+        guard let group else {
+            return BookList(
+                heading: nil,
+                books: visibleBooksInLibrary(filters: filters, catalog: catalog, loadedBookID: loadedBookID)
+            )
+        }
+        return BookList(
+            heading: BookListHeading(name: group.name, iconName: group.iconName),
+            books: visibleBooks(in: group, filters: filters, catalog: catalog, loadedBookID: loadedBookID)
+        )
+    }
+
     /// All books in the filters' sort order, matching the query and passing
     /// the active filters.
-    public func visibleBooks(filters: LibraryFilters, catalog: BookCatalog, loadedBookID: String?) -> [Book] {
+    private func visibleBooksInLibrary(filters: LibraryFilters, catalog: BookCatalog, loadedBookID: String?) -> [Book] {
         books(inOrder: filters.sortOrder).filter { book in
             (filters.searchQuery.isEmpty || book.matches(filters.searchQuery))
                 && passesFilters(book, filters: filters, catalog: catalog, loadedBookID: loadedBookID)
@@ -288,7 +205,7 @@ public final class LibraryViewModel {
 
     /// One group's books matching the query, keeping only the books that
     /// pass the active filters, in the filters' sort order.
-    public func visibleBooks(in group: BookGroup, filters: LibraryFilters, catalog: BookCatalog, loadedBookID: String?) -> [Book] {
+    private func visibleBooks(in group: BookGroup, filters: LibraryFilters, catalog: BookCatalog, loadedBookID: String?) -> [Book] {
         let matching = books(in: group, matching: filters.searchQuery)
             .filter { passesFilters($0, filters: filters, catalog: catalog, loadedBookID: loadedBookID) }
         return Self.sorted(matching, by: filters.sortOrder)

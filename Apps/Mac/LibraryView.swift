@@ -13,8 +13,8 @@ struct LibraryView: View {
 
     @State private var filters = LibraryFilters()
 
-    private var visibleBooks: [Book] {
-        library.visibleBooks(filters: filters, catalog: catalog, loadedBookID: player.book?.id)
+    private var list: BookList {
+        library.visibleList(in: scope, filters: filters, catalog: catalog, loadedBookID: player.book?.id)
     }
 
     var body: some View {
@@ -28,25 +28,28 @@ struct LibraryView: View {
 
     private var bookList: some View {
         List(selection: $selection) {
-            if let scope {
+            if let heading = list.heading {
                 Section {
-                    ForEach(library.visibleBooks(in: scope, filters: filters, catalog: catalog, loadedBookID: player.book?.id)) { book in
-                        row(for: book)
-                    }
+                    rows
                 } header: {
-                    GroupHeading(name: scope.name, iconName: scope.iconName, showsBackChevron: true) {
+                    GroupHeading(heading, showsBackChevron: true) {
                         exitScope()
                     }
                 }
             } else {
-                ForEach(visibleBooks) { book in
-                    row(for: book)
-                }
+                rows
             }
         }
         .listStyle(.sidebar)
+        .scrolledToTopOnSortChange(list, filters: filters)
         .overlay {
-            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleBooks.isEmpty)
+            LibraryEmptyOverlay(list)
+        }
+    }
+
+    private var rows: some View {
+        ForEach(list.books) { book in
+            row(for: book)
         }
     }
 

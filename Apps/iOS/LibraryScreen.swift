@@ -12,8 +12,8 @@ struct LibraryScreen: View {
 
     @State private var filters = LibraryFilters()
 
-    private var visibleBooks: [Book] {
-        library.visibleBooks(filters: filters, catalog: catalog, loadedBookID: player.book?.id)
+    private var list: BookList {
+        library.visibleList(in: scope, filters: filters, catalog: catalog, loadedBookID: player.book?.id)
     }
 
     var body: some View {
@@ -30,26 +30,29 @@ struct LibraryScreen: View {
 
     private var bookList: some View {
         List {
-            if let scope {
+            if let heading = list.heading {
                 Section {
-                    ForEach(library.visibleBooks(in: scope, filters: filters, catalog: catalog, loadedBookID: player.book?.id)) { book in
-                        BookRowLink(book: book)
-                    }
+                    rows
                 } header: {
-                    GroupHeading(name: scope.name, iconName: scope.iconName)
+                    GroupHeading(heading)
                 }
             } else {
-                ForEach(visibleBooks) { book in
-                    BookRowLink(book: book)
-                }
+                rows
             }
         }
         .listStyle(.plain)
+        .scrolledToTopOnSortChange(list, filters: filters)
         .refreshable {
             await library.load()
         }
         .overlay {
-            LibraryEmptyOverlay(hasVisibleContent: scope != nil || !visibleBooks.isEmpty)
+            LibraryEmptyOverlay(list)
+        }
+    }
+
+    private var rows: some View {
+        ForEach(list.books) { book in
+            BookRowLink(book: book)
         }
     }
 }
