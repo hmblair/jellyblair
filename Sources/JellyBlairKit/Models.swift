@@ -31,9 +31,13 @@ struct ItemsResponse: Decodable {
 
 public struct BookUserData: Codable, Hashable {
     public let playbackPositionTicks: Int64
+    /// When the user last played the book, as the server writes it, or nil
+    /// when the server has no record of a play.
+    public let lastPlayedTimestamp: String?
 
     enum CodingKeys: String, CodingKey {
         case playbackPositionTicks = "PlaybackPositionTicks"
+        case lastPlayedTimestamp = "LastPlayedDate"
     }
 }
 
@@ -155,10 +159,20 @@ public struct Book: Codable, Identifiable, Hashable {
         Double(userData?.playbackPositionTicks ?? 0) / ticksPerSecond
     }
 
+    /// When the book was last played, or nil when the server has never seen
+    /// it played.
+    public var lastPlayedDate: Date? {
+        guard let timestamp = userData?.lastPlayedTimestamp else { return nil }
+        return parseServerDate(timestamp)
+    }
+
     /// Returns a copy of the book at a different resume position.
     public func withResumePosition(_ seconds: Double) -> Book {
         var copy = self
-        copy.userData = BookUserData(playbackPositionTicks: Int64(seconds * ticksPerSecond))
+        copy.userData = BookUserData(
+            playbackPositionTicks: Int64(seconds * ticksPerSecond),
+            lastPlayedTimestamp: userData?.lastPlayedTimestamp
+        )
         return copy
     }
 }

@@ -36,8 +36,10 @@ public extension View {
     }
 }
 
-/// The library's filter toggles for a toolbar: books in progress, and
-/// downloaded books. A toggle shows the accent color while it is on.
+/// The library's sort menu and filter toggles for a toolbar: the sort
+/// order, the books in progress, and the downloaded books. A toggle shows
+/// the accent color while it is on; the sort menu keeps one color in every
+/// order. The in-progress toggle also puts the list in last-played order.
 public struct LibraryFilterToolbarButtons: View {
     @Binding var filters: LibraryFilters
 
@@ -46,15 +48,33 @@ public struct LibraryFilterToolbarButtons: View {
     }
 
     public var body: some View {
+        sortMenu
         inProgressToggle
         downloadedToggle
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort By", selection: $filters.sortOrder) {
+                ForEach(BookSortOrder.allCases) { order in
+                    Label(order.label, systemImage: order.iconName)
+                        .tag(order)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+        }
+        .menuIndicator(.hidden)
+        .foregroundStyle(Color.secondary)
+        .help("Sort the books")
     }
 
     private var inProgressToggle: some View {
         toggleButton(
             "bookmark.fill",
-            isOn: $filters.inProgressOnly,
-            help: filters.inProgressOnly ? "Show all books" : "Show only books in progress"
+            isOn: Binding(get: { filters.inProgressOnly }, set: { filters.setInProgressOnly($0) }),
+            help: filters.inProgressOnly ? "Show all books" : "Show only books in progress, most recently played first"
         )
     }
 

@@ -227,14 +227,14 @@ public struct BookView: View {
                 }
             }
             if let year = book.productionYear {
-                metadataLine(icon: "calendar") { Text(verbatim: String(year)) }
+                metadataLine(icon: yearIconName) { Text(verbatim: String(year)) }
             }
             if let genres = book.genres, !genres.isEmpty {
                 metadataLine(icon: BookGroup.Kind.genre.iconName) {
                     NameListLine(names: genres, open: openGenre)
                 }
             }
-            metadataLine(icon: "clock.fill") { lengthLine }
+            metadataLine(icon: durationIconName) { lengthLine }
             if let kbps = book.bitrateKbps {
                 metadataLine(icon: "waveform") { Text("\(kbps) kbps") }
             }

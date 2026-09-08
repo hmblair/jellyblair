@@ -32,17 +32,76 @@ public struct BookGroup: Identifiable, Hashable {
     public var id: String { "\(kind):\(name)" }
 }
 
-/// The library list's filters, threaded whole from the filter bar to the
-/// visibility functions, so a new filter touches neither platform's screen.
+/// The symbol for a book's length, shared by the book screen's metadata
+/// lines and the sort menu.
+public let durationIconName = "clock.fill"
+
+/// The symbol for a book's year, shared by the book screen's metadata lines
+/// and the sort menu.
+public let yearIconName = "calendar"
+
+/// The order a list of books is shown in. The titles start at A and the
+/// durations at the shortest book. The plays start at the most recent one,
+/// and the years at the newest.
+public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
+    case name
+    case lastPlayed
+    case year
+    case duration
+
+    public var id: Self { self }
+
+    /// The order's name in the sort menu.
+    public var label: String {
+        switch self {
+        case .name:
+            return "Title"
+        case .lastPlayed:
+            return "Last Played"
+        case .year:
+            return "Year"
+        case .duration:
+            return "Duration"
+        }
+    }
+
+    /// The symbol beside the order's name in the sort menu.
+    public var iconName: String {
+        switch self {
+        case .name:
+            return "textformat"
+        case .lastPlayed:
+            return "clock.arrow.circlepath"
+        case .year:
+            return yearIconName
+        case .duration:
+            return durationIconName
+        }
+    }
+}
+
+/// The library list's filters and sort order, threaded whole from the filter
+/// bar to the visibility functions, so a new filter touches neither
+/// platform's screen.
 public struct LibraryFilters: Equatable {
     public var searchQuery = ""
     public var downloadedOnly = false
-    public var inProgressOnly = false
+    public private(set) var inProgressOnly = false
+    public var sortOrder = BookSortOrder.name
 
     public init() {}
+
+    /// Turns the in-progress filter on or off, and puts the list in the
+    /// order that suits it: the books in progress read most recently played
+    /// first, and the whole library reads by title. The sort menu can then
+    /// choose another order.
+    public mutating func setInProgressOnly(_ isOn: Bool) {
+        inProgressOnly = isOn
+        sortOrder = isOn ? .lastPlayed : .name
+    }
 }
 
-/// Holds the audiobook list, sorted by name for the library list, and
+/// Holds the audiobook list in each order the library list can show, and
 /// builds one author's, narrator's, or genre's group on demand for the
 /// scoped screens.
 @MainActor
@@ -51,8 +110,9 @@ public final class LibraryViewModel {
     public let client: JellyfinClient
 
     public private(set) var books: [Book] = []
-    /// The books sorted by name, each exactly once, for the flat library list.
-    public private(set) var booksByName: [Book] = []
+    /// The books in each sort order, each exactly once, so the flat library
+    /// list sorts when the books change rather than on every view pass.
+    private var sortedBooks: [BookSortOrder: [Book]] = [:]
 
     public private(set) var isLoading = true
     public private(set) var errorMessage: String?
@@ -70,7 +130,7 @@ public final class LibraryViewModel {
         // setBooks has nothing to write back.
         let cached = store.load()
         books = cached
-        booksByName = Self.sortedByName(cached)
+        sortedBooks = Self.sortedInEveryOrder(cached)
     }
 
     public func load() async {
@@ -106,39 +166,94 @@ public final class LibraryViewModel {
     /// file alone.
     private func applySnapshot(_ newBooks: [Book]) {
         guard newBooks != books else { return }
-        setBooks(newBooks, inNameOrder: Self.sortedByName(newBooks))
+        setBooks(newBooks, sortedAs: Self.sortedInEveryOrder(newBooks))
     }
 
     /// Puts a book at its index in the main list and in place of its ID in
-    /// the name order. The position is the only field that changes here, so
-    /// neither order moves and neither needs a sort.
+    /// every sorted list. The resume position is the only field that changes
+    /// here, and no order reads it, so no list moves and none needs a sort.
     private func replace(_ book: Book, at index: Int) {
         var updated = books
         updated[index] = book
-        var sorted = booksByName
-        if let sortedIndex = sorted.firstIndex(where: { $0.id == book.id }) {
-            sorted[sortedIndex] = book
+        var sorted = sortedBooks
+        for (order, list) in sorted {
+            guard let sortedIndex = list.firstIndex(where: { $0.id == book.id }) else { continue }
+            sorted[order]?[sortedIndex] = book
         }
-        setBooks(updated, inNameOrder: sorted)
+        setBooks(updated, sortedAs: sorted)
     }
 
-    /// The one writer of the two lists and the cached file after
-    /// initialization, so the three always hold the same books. Callers
-    /// build both orders; the caller's arrays are written, never the
-    /// freshly set property. Reading an observable back inside its own
-    /// update runs observation tracking mid-change, which can crash in the
-    /// runtime's access list.
-    private func setBooks(_ newBooks: [Book], inNameOrder sortedBooks: [Book]) {
+    /// The one writer of the lists and the cached file after initialization,
+    /// so they always hold the same books. Callers build every order; the
+    /// caller's arrays are written, never the freshly set property. Reading
+    /// an observable back inside its own update runs observation tracking
+    /// mid-change, which can crash in the runtime's access list.
+    private func setBooks(_ newBooks: [Book], sortedAs newSortedBooks: [BookSortOrder: [Book]]) {
         books = newBooks
-        booksByName = sortedBooks
+        sortedBooks = newSortedBooks
         store.save(newBooks)
     }
 
-    /// Sorts a list by name, the order the flat library list shows.
-    private static func sortedByName(_ books: [Book]) -> [Book] {
-        books.sorted {
-            sortKey($0.name).localizedStandardCompare(sortKey($1.name)) == .orderedAscending
+    /// The books in each order the library list can show.
+    public func books(inOrder order: BookSortOrder) -> [Book] {
+        sortedBooks[order] ?? []
+    }
+
+    /// Sorts a list once for every order.
+    private static func sortedInEveryOrder(_ books: [Book]) -> [BookSortOrder: [Book]] {
+        Dictionary(uniqueKeysWithValues: BookSortOrder.allCases.map { ($0, sorted(books, by: $0)) })
+    }
+
+    /// Sorts a list in one order.
+    private static func sorted(_ books: [Book], by order: BookSortOrder) -> [Book] {
+        switch order {
+        case .name:
+            return sortedByName(books)
+        case .lastPlayed:
+            return sortedLargestFirst(books) { $0.lastPlayedDate }
+        case .year:
+            return sortedLargestFirst(books) { $0.productionYear }
+        case .duration:
+            return sortedSmallestFirst(books) { $0.runTimeTicks }
         }
+    }
+
+    /// Sorts a list by name.
+    private static func sortedByName(_ books: [Book]) -> [Book] {
+        books.sorted { comesFirstByName($0, $1) }
+    }
+
+    /// Sorts a list by one of the books' values, largest first.
+    private static func sortedLargestFirst<Value: Comparable>(_ books: [Book], by value: (Book) -> Value?) -> [Book] {
+        sortedByValue(books, by: value) { $0 > $1 }
+    }
+
+    /// Sorts a list by one of the books' values, smallest first.
+    private static func sortedSmallestFirst<Value: Comparable>(_ books: [Book], by value: (Book) -> Value?) -> [Book] {
+        sortedByValue(books, by: value) { $0 < $1 }
+    }
+
+    /// Sorts a list by one of the books' values, in the order the comparison
+    /// gives. A book the server reports no value for comes after every book
+    /// that has one, and books with equal values read by name.
+    private static func sortedByValue<Value: Comparable>(
+        _ books: [Book],
+        by value: (Book) -> Value?,
+        comesFirst: (Value, Value) -> Bool
+    ) -> [Book] {
+        books.sorted { left, right in
+            let leftValue = value(left)
+            let rightValue = value(right)
+            guard leftValue != rightValue else { return comesFirstByName(left, right) }
+            guard let leftValue else { return false }
+            guard let rightValue else { return true }
+            return comesFirst(leftValue, rightValue)
+        }
+    }
+
+    /// True when the first book's name sorts before the second's.
+    private static func comesFirstByName(_ left: Book, _ right: Book) -> Bool {
+        sortKey(left.name).localizedStandardCompare(sortKey(right.name)) == .orderedAscending
     }
 
     /// The named group of one kind, built on demand from the book list, or
@@ -162,20 +277,21 @@ public final class LibraryViewModel {
         }
     }
 
-    /// All books sorted by name, matching the query and passing the active
-    /// filters.
+    /// All books in the filters' sort order, matching the query and passing
+    /// the active filters.
     public func visibleBooks(filters: LibraryFilters, catalog: BookCatalog, loadedBookID: String?) -> [Book] {
-        booksByName.filter { book in
+        books(inOrder: filters.sortOrder).filter { book in
             (filters.searchQuery.isEmpty || book.matches(filters.searchQuery))
                 && passesFilters(book, filters: filters, catalog: catalog, loadedBookID: loadedBookID)
         }
     }
 
     /// One group's books matching the query, keeping only the books that
-    /// pass the active filters.
+    /// pass the active filters, in the filters' sort order.
     public func visibleBooks(in group: BookGroup, filters: LibraryFilters, catalog: BookCatalog, loadedBookID: String?) -> [Book] {
-        books(in: group, matching: filters.searchQuery)
+        let matching = books(in: group, matching: filters.searchQuery)
             .filter { passesFilters($0, filters: filters, catalog: catalog, loadedBookID: loadedBookID) }
+        return Self.sorted(matching, by: filters.sortOrder)
     }
 
     /// True when the book passes every filter that is on. The loaded book
