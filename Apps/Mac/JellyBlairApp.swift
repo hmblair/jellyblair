@@ -89,7 +89,7 @@ struct ContentView: View {
     }
 
     private var selectedBook: Book? {
-        scope.library.books.first { $0.id == selectedBookID }
+        scope.library.book(withID: selectedBookID)
     }
 
     /// Runs a playback key action unless a text field is being edited, which
@@ -129,7 +129,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             NavigationSplitView(columnVisibility: $columnVisibility) {
-                LibraryView(selection: $selectedBookID, scope: $sidebarScope, isShowing: isSidebarShowing)
+                LibraryList(selection: $selectedBookID, scope: $sidebarScope, isShowing: isSidebarShowing)
                     .navigationSplitViewColumnWidth(min: 220, ideal: 260)
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         OfflineIndicator()

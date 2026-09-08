@@ -156,6 +156,13 @@ public final class LibraryViewModel {
         sortKey(left.name).localizedStandardCompare(sortKey(right.name)) == .orderedAscending
     }
 
+    /// The book carrying the identifier, or nil once a refresh has dropped
+    /// it from the library.
+    public func book(withID id: String?) -> Book? {
+        guard let id else { return nil }
+        return books.first { $0.id == id }
+    }
+
     /// The named group of one kind, built on demand from the book list, or
     /// nil when no book carries the name. Books keep the server's title order.
     public func group(ofKind kind: BookGroup.Kind, named name: String) -> BookGroup? {

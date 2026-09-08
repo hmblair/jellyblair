@@ -490,8 +490,8 @@ private struct NameListLine: View {
     }
 }
 
-/// Navigates to a group's books; injected per shell, since the sidebar
-/// scopes on the Mac and the stack pushes on the phone.
+/// Navigates to a group's books; injected per shell, since a regular
+/// layout scopes its list in place and a compact one pushes a screen.
 public struct OpenBookGroupAction {
     private let handler: (String) -> Void
 
@@ -504,24 +504,10 @@ public struct OpenBookGroupAction {
     }
 }
 
-/// Navigates to a book's screen; injected per shell.
-public struct OpenBookAction {
-    private let handler: (Book) -> Void
-
-    public init(_ handler: @escaping (Book) -> Void) {
-        self.handler = handler
-    }
-
-    public func callAsFunction(_ book: Book) {
-        handler(book)
-    }
-}
-
 public extension EnvironmentValues {
     @Entry var openAuthor: OpenBookGroupAction?
     @Entry var openNarrator: OpenBookGroupAction?
     @Entry var openGenre: OpenBookGroupAction?
-    @Entry var openBook: OpenBookAction?
 }
 
 /// The actions on one book, shared by the book screen's title-bar menu and

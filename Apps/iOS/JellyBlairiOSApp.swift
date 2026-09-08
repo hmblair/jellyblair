@@ -57,6 +57,18 @@ struct MainScreen: View {
         _scope = State(initialValue: SessionScope(client: client))
     }
 
+    /// The stack has no detail pane to fill, so a chosen book is pushed and
+    /// no selection is left behind. Choosing the same book again pushes again.
+    private var pushingSelection: Binding<String?> {
+        Binding(
+            get: { nil },
+            set: { [library = scope.library] id in
+                guard let book = library.book(withID: id) else { return }
+                path.append(.book(book))
+            }
+        )
+    }
+
     var body: some View {
         // The bar is a stack sibling, not a safe-area inset: an inset lets
         // scrollable screens extend their frames beneath it, which would
@@ -64,7 +76,7 @@ struct MainScreen: View {
         // of the bar.
         VStack(spacing: 0) {
             NavigationStack(path: $path) {
-                LibraryScreen()
+                LibraryList(selection: pushingSelection, scope: .constant(nil))
                     .navigationDestination(for: LibraryRoute.self) { route in
                         switch route {
                         case .book(let book):
@@ -75,7 +87,7 @@ struct MainScreen: View {
                                 .id(book.id)
                                 .navigationBarTitleDisplayMode(.inline)
                         case .group(let group):
-                            LibraryScreen(scope: group)
+                            LibraryList(selection: pushingSelection, scope: .constant(group))
                         }
                     }
             }
@@ -98,9 +110,6 @@ struct MainScreen: View {
         }
         .environment(\.openSettings, OpenSettingsAction {
             isShowingSettings = true
-        })
-        .environment(\.openBook, OpenBookAction { book in
-            path.append(.book(book))
         })
         .environment(\.openAuthor, OpenBookGroupAction { [library = scope.library] name in
             guard let group = library.group(ofKind: .author, named: name) else { return }
