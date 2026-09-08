@@ -74,8 +74,17 @@ struct ContentView: View {
     /// The sidebar's group scope, owned here so the book screen can set it.
     @State private var sidebarScope: BookGroup?
 
+    /// Which columns the split view shows, read so the library's toolbar
+    /// buttons can leave with the sidebar.
+    @State private var columnVisibility = NavigationSplitViewVisibility.all
+
     init(client: JellyfinClient) {
         _scope = State(initialValue: SessionScope(client: client))
+    }
+
+    /// True while the split view shows its sidebar.
+    private var isSidebarShowing: Bool {
+        columnVisibility != .detailOnly
     }
 
     private var selectedBook: Book? {
@@ -118,8 +127,8 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            NavigationSplitView {
-                LibraryView(selection: $selectedBookID, scope: $sidebarScope)
+            NavigationSplitView(columnVisibility: $columnVisibility) {
+                LibraryView(selection: $selectedBookID, scope: $sidebarScope, isShowing: isSidebarShowing)
                     .navigationSplitViewColumnWidth(min: 220, ideal: 260)
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         OfflineIndicator()

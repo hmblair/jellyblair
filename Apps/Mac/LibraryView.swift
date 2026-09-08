@@ -6,6 +6,10 @@ import SwiftUI
 struct LibraryView: View {
     @Binding var selection: String?
     @Binding var scope: BookGroup?
+    /// True while the sidebar is showing. The sort menu and the filter
+    /// toggles act on this list, so they leave the window's toolbar when the
+    /// list does.
+    let isShowing: Bool
 
     @Environment(LibraryViewModel.self) private var library
     @Environment(PlayerController.self) private var player
@@ -22,7 +26,9 @@ struct LibraryView: View {
             .searchable(text: $filters.searchQuery, placement: .sidebar, prompt: "Search")
             .navigationTitle("Audiobooks")
             .toolbar {
-                LibraryFilterToolbarButtons(filters: $filters)
+                if isShowing {
+                    LibraryFilterToolbarButtons(filters: $filters)
+                }
             }
     }
 
