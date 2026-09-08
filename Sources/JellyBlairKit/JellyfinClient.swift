@@ -89,11 +89,25 @@ public final class JellyfinClient {
 
     // MARK: - Health
 
-    /// Returns whether the server answers within a few seconds.
-    func pingServer() async -> Bool {
+    /// Asks for the server's public information, which needs no token, and
+    /// gives up after a few seconds.
+    private func publicInfoRequest() -> URLRequest {
         var request = makeRequest(path: "System/Info/Public")
         request.timeoutInterval = 5
-        return (try? await send(request)) != nil
+        return request
+    }
+
+    /// Returns whether the server answers within a few seconds.
+    func pingServer() async -> Bool {
+        (try? await send(publicInfoRequest())) != nil
+    }
+
+    /// The version the server reports. Returns nil when the server does not
+    /// answer, or when it reports no version the parser can read.
+    func fetchServerVersion() async -> ServerVersion? {
+        guard let data = try? await send(publicInfoRequest()) else { return nil }
+        guard let info = try? decode(PublicSystemInfo.self, from: data) else { return nil }
+        return info.version.flatMap(ServerVersion.init)
     }
 
     // MARK: - Authentication

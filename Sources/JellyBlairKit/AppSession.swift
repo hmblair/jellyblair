@@ -52,6 +52,10 @@ public final class AppSession {
         isAuthenticating = true
         defer { isAuthenticating = false }
         let client = JellyfinClient(serverURL: url)
+        if let version = await client.fetchServerVersion(), version < .minimumSupported {
+            loginErrorMessage = Self.outdatedServerText(for: version)
+            return
+        }
         do {
             try await client.authenticate(username: username, password: password)
             guard let token = client.sessionToken else {
@@ -101,6 +105,10 @@ public final class AppSession {
         }
         guard let url = URL(string: trimmed), url.host != nil else { return nil }
         return url
+    }
+
+    private static func outdatedServerText(for version: ServerVersion) -> String {
+        "This server runs Jellyfin \(version). The app needs \(ServerVersion.minimumSupported) or newer."
     }
 
     private static func loginErrorText(for error: Error) -> String {

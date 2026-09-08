@@ -4,7 +4,7 @@ JellyBlair is a native audiobook client for [Jellyfin](https://jellyfin.org), fo
 
 ## Requirements
 
-- A Jellyfin server with audiobook libraries.
+- A Jellyfin server with audiobook libraries, version 10.9 or newer. Word-synced transcripts need 10.11 or newer.
 - macOS 15 or iOS 18.
 - Xcode 16 or newer, and [xcodegen](https://github.com/yonaskolb/XcodeGen).
 

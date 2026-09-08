@@ -11,6 +11,14 @@ struct AuthResponse: Decodable {
     }
 }
 
+struct PublicSystemInfo: Decodable {
+    let version: String?
+
+    enum CodingKeys: String, CodingKey {
+        case version = "Version"
+    }
+}
+
 struct ItemsResponse: Decodable {
     let items: [Book]
 
