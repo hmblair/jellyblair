@@ -22,7 +22,6 @@ struct SessionStore {
     var username: String? { defaults.string(forKey: Self.usernameKey) }
 
     func loadStoredSession() -> StoredSession? {
-        moveTokenFromDefaults()
         guard
             let urlString = serverURLString,
             let url = URL(string: urlString),
@@ -45,13 +44,5 @@ struct SessionStore {
     func clearCredentials() {
         defaults.removeObject(forKey: Self.userIDKey)
         storedToken.delete()
-    }
-
-    /// Moves a token that an earlier version left in UserDefaults into the
-    /// keychain. Does nothing once no such token remains.
-    private func moveTokenFromDefaults() {
-        guard let strayToken = defaults.string(forKey: Self.tokenKey) else { return }
-        storedToken.write(strayToken)
-        defaults.removeObject(forKey: Self.tokenKey)
     }
 }
