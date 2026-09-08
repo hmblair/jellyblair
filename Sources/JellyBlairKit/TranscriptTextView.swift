@@ -1,10 +1,14 @@
 // The transcript never measures estimated text. Whenever the view has a
-// real width, the whole document is laid out in one eager pass — well
-// under a second even for a large book — and nothing centers before that
-// pass has run. This one rule keeps the rest simple:
+// real width, the whole document is installed and laid out in one eager
+// pass — well under a second even for a large book — and nothing centers
+// before that pass has run. This one rule keeps the rest simple:
 //
-// - Positions read from the layout are exact, so centering is: measure
-//   the target's frame, scroll to it.
+// - Positions read from the layout are exact, so centering is: measure the
+//   target's frame, scroll to it. They are exact only because the pass
+//   installs the text fresh. A text system asked to lay out a document it
+//   already holds revises the layout it has, which leaves fragment
+//   positions estimated and corrects them over the seconds that follow;
+//   deep in a long book that is wrong by thousands of points.
 //
 // - Colors. Rendering attributes always hold TranscriptColorResolver's
 //   current output: every color change repaints its whole range at once
@@ -12,15 +16,17 @@
 //   redraw. Off-screen text draws its updated attributes when a scroll
 //   reaches it.
 //
-// - A width change re-lays the whole document. The reader's place is kept
-//   by keepingViewport on the Mac and by the text view itself on iOS, and
-//   tracking recenters afterwards. The view reports its own sizing, so
-//   the first layout never depends on a SwiftUI update arriving.
+// - A width change lays the document out again, through the same one pass a
+//   content change uses, and gives every position a new value. The reader's
+//   place is kept by keepingViewport on the Mac and by the text view itself
+//   on iOS, and tracking recenters afterwards. The view reports its own
+//   sizing, so the first layout never depends on a SwiftUI update arriving.
 //
 // The concerns split into components with one owner each:
 // TranscriptContent (the pure text model), TranscriptColorEngine (colors),
 // TranscriptSearchModel (matches), TranscriptScroller (centering and scroll
-// compensation), and TranscriptTextGeometry (layout queries and forcing).
+// compensation), and TranscriptTextGeometry (the document's layout and the
+// queries against it).
 // The coordinator below only orchestrates: it tracks the playback position
 // and wires view events to the components.
 
@@ -195,8 +201,10 @@ public final class TranscriptTextCoordinator: NSObject {
     private var colorEngine: TranscriptColorEngine!
     private var scroller: TranscriptScroller!
 
-    /// The width the document was last fully laid out at: zero until the
-    /// first eager pass, and nothing centers before that pass has run.
+    /// The width the document was last laid out at: zero until the first
+    /// eager pass, and nothing centers before that pass has run. It is also
+    /// what says the view's text is this content's: the pass installs the
+    /// text, so until it has run the storage still holds the text before it.
     private var laidOutWidth: CGFloat = 0
     /// Wakes the coordinator at the next line or cue boundary.
     private var tickTimer: Timer?
@@ -461,49 +469,60 @@ public final class TranscriptTextCoordinator: NSObject {
 
     // MARK: - Content
 
-    /// Rebuilds the text model from the view's lines and chapters, installs
-    /// it in the storage, and resets everything keyed to the old text. The
-    /// eager layout pass follows through layOutDocumentIfNeeded.
+    /// Rebuilds the text model from the view's lines and chapters and
+    /// resets everything keyed to the old text. The eager layout pass
+    /// follows through layOutDocumentIfNeeded, and installs the new text.
     private func rebuildContent() {
         guard let view else { return }
         content = TranscriptContent(sourceLines: view.lines, chapters: view.chapters)
         searchModel.reset()
-        scroller.resetCentering()
+        // The layout pass installs the text. Clearing the width sends it
+        // through that pass, which runs as soon as the view has a width.
         laidOutWidth = 0
         let seconds = projectedPosition()
         currentLine = content.lineIndex(at: seconds)
         spokenCueIndex = currentLine.flatMap { content.spokenCueIndex(inLine: $0, at: seconds) }
         requestedSeconds = view.anchor.requestedSeconds
         refreshColorState()
-        geometry.storage?.setAttributedString(content.attributedString)
     }
 
     // MARK: - Eager layout
 
-    /// Lays the whole document out at the view's width and repaints its
-    /// colors, so every position and color the transcript works with
-    /// afterwards is exact. Runs once per content or width, and only when
-    /// the view has a real width: until then nothing centers, and the view
-    /// reports its first sizing through handleViewLayout. A live window
-    /// resize changes the width every frame, so the pass waits for the end
-    /// notification. Returns true when it ran, so the caller recenters.
+    /// Lays the document out and repaints its colors, keeping the reader's
+    /// place. This is the one place the document is laid out, whether the
+    /// content or the width brought it here. Returns false when the view has
+    /// nothing to lay out into.
+    private func layOutDocument() -> Bool {
+        // Every position the previous layout produced is void, the center
+        // the scroller settled on among them.
+        scroller.resetCentering()
+        let laidOut = scroller.keepingViewport {
+            geometry.layOutDocument(content.attributedString)
+        }
+        guard laidOut else { return false }
+        colorEngine.repaintAllColors()
+        return true
+    }
+
+    /// Lays the document out when the content or the width has changed, and
+    /// only when the view has a real width: until then nothing centers, and
+    /// the view reports its first sizing through handleViewLayout. A live
+    /// window resize changes the width every frame, so the pass waits for
+    /// the end notification. Returns true when it ran, so the caller
+    /// recenters.
     private func layOutDocumentIfNeeded() -> Bool {
         #if canImport(AppKit)
         if textView.inLiveResize { return false }
         #endif
         let width = textView.bounds.width
-        guard width > 0, width != laidOutWidth, let storage = geometry.storage else { return false }
+        guard width > 0, width != laidOutWidth else { return false }
+        guard layOutDocument() else { return false }
         laidOutWidth = width
-        scroller.keepingViewport {
-            geometry.ensureLayout(forStorage: NSRange(location: 0, length: storage.length))
-            geometry.updateContentGeometry()
-        }
-        colorEngine.repaintAllColors()
         return true
     }
 
     /// Runs on every layout of the view itself: the first real width and
-    /// every width change re-lay the document and recenter.
+    /// every width change lay the document out and recenter.
     private func handleViewLayout() {
         if layOutDocumentIfNeeded() {
             followPosition(recentered: true)

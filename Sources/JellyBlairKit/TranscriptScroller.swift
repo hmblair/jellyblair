@@ -35,7 +35,8 @@ final class TranscriptScroller {
     }
     #endif
 
-    /// Forgets the centered position when the content is replaced.
+    /// Forgets the centered position when the document is laid out again,
+    /// since that gives every position in it a new value.
     func resetCentering() {
         centeredY = nil
     }
@@ -49,20 +50,21 @@ final class TranscriptScroller {
         scroll(toCenterY: targetY, animated: animated)
     }
 
-    /// Runs the work, then shifts the scroll so the text at the top of the
-    /// viewport keeps its place on screen when the work moved the content.
-    /// Only the Mac needs the shift: UITextView adjusts its own offset when
-    /// the geometry above the viewport changes, and a manual shift there
-    /// would double the move.
-    func keepingViewport(_ work: () -> Void) {
+    /// Runs the work and returns its result, then shifts the scroll so the
+    /// text at the top of the viewport keeps its place on screen when the
+    /// work moved the content. Only the Mac needs the shift: UITextView
+    /// adjusts its own offset when the geometry above the viewport changes,
+    /// and a manual shift there would double the move.
+    func keepingViewport<Result>(_ work: () -> Result) -> Result {
         #if canImport(AppKit)
         let anchor = geometry.viewportAnchorRange()
         let before = anchor.flatMap { geometry.frame(forStorageRange: $0)?.minY }
-        work()
-        guard let anchor, let before, let after = geometry.frame(forStorageRange: anchor)?.minY else { return }
+        let result = work()
+        guard let anchor, let before, let after = geometry.frame(forStorageRange: anchor)?.minY else { return result }
         shiftScroll(by: after - before)
+        return result
         #else
-        work()
+        return work()
         #endif
     }
 

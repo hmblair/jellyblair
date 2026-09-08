@@ -134,7 +134,7 @@ final class TranscriptColorEngine {
 
     /// Repaints the whole document.
     func repaintAllColors() {
-        repaintColors(in: NSRange(location: 0, length: geometry.storage?.length ?? 0))
+        repaintColors(in: geometry.documentRange)
     }
 
     /// Paints one fragment's final colors through the resolver.

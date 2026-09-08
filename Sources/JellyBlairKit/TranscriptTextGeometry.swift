@@ -33,6 +33,11 @@ final class TranscriptTextGeometry {
         textView.textStorage
     }
 
+    /// The whole document, in UTF-16 storage offsets.
+    var documentRange: NSRange {
+        NSRange(location: 0, length: storage?.length ?? 0)
+    }
+
     // MARK: - Range conversion
 
     /// The text range for the UTF-16 storage range.
@@ -112,19 +117,32 @@ final class TranscriptTextGeometry {
         layoutManager?.usageBoundsForTextContainer.height ?? 0
     }
 
-    // MARK: - Layout forcing
+    // MARK: - Layout
 
-    /// Lays the storage range out, so its positions are exact.
-    func ensureLayout(forStorage range: NSRange) {
-        guard let layoutManager,
-              let textRange = textRange(forStorage: range)
-        else { return }
-        layoutManager.ensureLayout(for: textRange)
+    /// Installs the text and lays the whole document out, so every position
+    /// the layout reports afterwards is exact. Returns false when the view
+    /// has no storage to install into.
+    ///
+    /// Installing and laying out are one operation on purpose, and the text
+    /// goes in even when it has not changed. A text system asked to lay out
+    /// a document it already holds revises the layout it has, which leaves
+    /// fragment positions estimated and corrects them over the seconds that
+    /// follow; deep in a long book that is wrong by thousands of points, and
+    /// it moves the text under a centering that has already run. Building
+    /// from nothing is what makes the positions exact, so nothing can lay
+    /// the document out without installing it first.
+    func layOutDocument(_ text: NSAttributedString) -> Bool {
+        guard let storage, let layoutManager else { return false }
+        storage.setAttributedString(text)
+        guard let wholeDocument = textRange(forStorage: documentRange) else { return false }
+        layoutManager.ensureLayout(for: wholeDocument)
+        updateContentGeometry()
+        return true
     }
 
     /// Pushes the laid-out extent into the view, so the scroll limit and
     /// the clip constraint see the true size right away instead of the
-    /// stale document height.
+    /// stale document height. Changes no position on its own.
     func updateContentGeometry() {
         #if canImport(AppKit)
         textView.needsLayout = true
