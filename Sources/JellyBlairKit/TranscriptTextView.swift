@@ -187,6 +187,8 @@ public final class TranscriptTextCoordinator: NSObject {
     private var content = TranscriptContent(sourceLines: [], chapters: [])
     private var currentLine: Int?
     private var spokenCueIndex: Int?
+    /// The anchor's requested position, which the colors depend on.
+    private var requestedSeconds: Double = 0
 
     private let searchModel = TranscriptSearchModel()
     private var geometry: TranscriptTextGeometry!
@@ -426,11 +428,13 @@ public final class TranscriptTextCoordinator: NSObject {
         let seconds = projectedPosition()
         let line = content.lineIndex(at: seconds)
         let cue = line.flatMap { content.spokenCueIndex(inLine: $0, at: seconds) }
-        let moved = line != currentLine || cue != spokenCueIndex
+        let requested = view.anchor.requestedSeconds
+        let moved = line != currentLine || cue != spokenCueIndex || requested != requestedSeconds
         guard moved || recentered else { return }
         let previousLine = currentLine
         currentLine = line
         spokenCueIndex = cue
+        requestedSeconds = requested
         refreshColorState()
         if moved {
             recolor(fromLine: previousLine, toLine: line)
@@ -452,7 +456,7 @@ public final class TranscriptTextCoordinator: NSObject {
     /// the next repaint reflects them. Must run before any repaint that
     /// should show a change.
     private func refreshColorState() {
-        colorEngine.state = content.colorState(currentLine: currentLine, spokenCue: spokenCueIndex, matches: searchModel.matches)
+        colorEngine.state = content.colorState(currentLine: currentLine, spokenCue: spokenCueIndex, requestedSeconds: requestedSeconds, matches: searchModel.matches)
     }
 
     // MARK: - Content
@@ -469,6 +473,7 @@ public final class TranscriptTextCoordinator: NSObject {
         let seconds = projectedPosition()
         currentLine = content.lineIndex(at: seconds)
         spokenCueIndex = currentLine.flatMap { content.spokenCueIndex(inLine: $0, at: seconds) }
+        requestedSeconds = view.anchor.requestedSeconds
         refreshColorState()
         geometry.storage?.setAttributedString(content.attributedString)
     }

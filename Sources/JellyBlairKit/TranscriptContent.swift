@@ -232,18 +232,25 @@ struct TranscriptContent {
     // MARK: - Color state
 
     /// The color inputs for the given position and matches, in storage
-    /// offsets, for the color resolver.
-    func colorState(currentLine: Int?, spokenCue cue: Int?, matches: [NSRange]) -> TranscriptColorState {
+    /// offsets, for the color resolver. A word that starts before the
+    /// requested position counts as read, not spoken, so a manual jump
+    /// marks none of the words it moved past.
+    func colorState(currentLine: Int?, spokenCue cue: Int?, requestedSeconds: Double, matches: [NSRange]) -> TranscriptColorState {
         var state = TranscriptColorState(readEnd: lineStart(of: currentLine), matches: matches)
         guard let currentLine, lineRanges.indices.contains(currentLine) else { return state }
         state.currentLineRange = lineRanges[currentLine]
         guard let cue, lines[currentLine].cues.indices.contains(cue) else { return state }
         let line = lines[currentLine]
+        let location = lineRanges[currentLine].location
         let start = utf16Offset(ofCharacter: line.cues[cue].startPosition, in: line.text)
         let end = utf16Offset(ofCharacter: line.cues[cue].endPosition, in: line.text)
-        state.spokenCueStart = lineRanges[currentLine].location + start
+        guard line.cues[cue].startSeconds >= requestedSeconds else {
+            state.spokenCueStart = location + end
+            return state
+        }
+        state.spokenCueStart = location + start
         if end > start {
-            state.spokenCueRange = NSRange(location: lineRanges[currentLine].location + start, length: end - start)
+            state.spokenCueRange = NSRange(location: location + start, length: end - start)
         }
         return state
     }

@@ -14,10 +14,15 @@ public struct PlaybackAnchor: Equatable {
     public let positionSeconds: Double
     public let date: Date
     public let rate: Double
+    /// The position the listener last asked for. The projection never
+    /// falls below it, because the item timebase can report a time just
+    /// before a seek target while the audio starts.
+    public let requestedSeconds: Double
 
-    /// The position the anchor projects to at the given moment.
+    /// The position the anchor projects to at the given moment, never
+    /// before the requested position.
     public func position(at date: Date = Date()) -> Double {
-        positionSeconds + max(0, date.timeIntervalSince(self.date)) * rate
+        max(requestedSeconds, positionSeconds + max(0, date.timeIntervalSince(self.date)) * rate)
     }
 
     /// The moment playback reaches a position, or nil while not moving.
@@ -44,7 +49,7 @@ public final class PlayerController {
 
     /// The position anchor, written on playback events: open, seek, pause,
     /// playback end, and every effective timebase rate change.
-    public private(set) var anchor = PlaybackAnchor(positionSeconds: 0, date: .distantPast, rate: 0)
+    public private(set) var anchor = PlaybackAnchor(positionSeconds: 0, date: .distantPast, rate: 0, requestedSeconds: 0)
 
     public private(set) var duration: Double = 0
 
@@ -93,6 +98,9 @@ public final class PlayerController {
     /// still reads the pre-seek position, so reanchors wait and the anchor
     /// stays pinned at the seek target.
     private var seeksInFlight = 0
+
+    /// The position the listener last asked for. Every anchor carries it.
+    private var requestedSeconds: Double = 0
 
     /// Seconds between progress reports to the server.
     private static let progressReportInterval: TimeInterval = 10
@@ -174,6 +182,7 @@ public final class PlayerController {
         duration = newBook.runTimeSeconds
         setChapters(model.chapters)
         let startPosition = startAtSeconds ?? model.resumePositionSeconds
+        requestedSeconds = startPosition
         setAnchor(position: startPosition, rate: 0)
 
         let asset = model.streamAsset()
@@ -414,6 +423,7 @@ public final class PlayerController {
     public func seek(to seconds: Double) async {
         guard isReady, player != nil else { return }
         let target = max(0, min(seconds, duration))
+        requestedSeconds = target
         // The displays sit at the target while the seek lands.
         setAnchor(position: target, rate: 0)
         seeksInFlight += 1
@@ -473,7 +483,7 @@ public final class PlayerController {
     // MARK: - Time and chapter tracking
 
     private func setAnchor(position: Double, rate: Double) {
-        anchor = PlaybackAnchor(positionSeconds: position, date: Date(), rate: rate)
+        anchor = PlaybackAnchor(positionSeconds: position, date: Date(), rate: rate, requestedSeconds: requestedSeconds)
         refreshCurrentChapterIndex()
     }
 

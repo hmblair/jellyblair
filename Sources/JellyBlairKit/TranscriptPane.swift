@@ -54,7 +54,7 @@ struct TranscriptPane: View {
     private var listeningAnchor: PlaybackAnchor {
         isLoaded
             ? player.anchor
-            : PlaybackAnchor(positionSeconds: model.resumePositionSeconds, date: .distantPast, rate: 0)
+            : PlaybackAnchor(positionSeconds: model.resumePositionSeconds, date: .distantPast, rate: 0, requestedSeconds: model.resumePositionSeconds)
     }
 
     private func transcriptText(anchor: PlaybackAnchor, lines: [LyricLine], chapters: [Chapter]) -> some View {
