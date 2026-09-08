@@ -33,7 +33,7 @@ public final class AppSession {
             state = .needsLogin
             return
         }
-        let client = JellyfinClient(serverURL: stored.serverURL, accessToken: stored.token, userID: stored.userID)
+        let client = JellyfinClient(serverURL: stored.serverURL, accessToken: stored.token)
         switch await client.verifyStoredToken() {
         case .valid, .unreachable:
             activate(client)
@@ -54,11 +54,11 @@ public final class AppSession {
         let client = JellyfinClient(serverURL: url)
         do {
             try await client.authenticate(username: username, password: password)
-            guard let token = client.sessionToken, let userID = client.sessionUserID else {
+            guard let token = client.sessionToken else {
                 loginErrorMessage = "The server did not return a session."
                 return
             }
-            store.save(serverURL: url, username: username, userID: userID, token: token)
+            store.save(serverURL: url, username: username, token: token)
             loginErrorMessage = nil
             activate(client)
         } catch {

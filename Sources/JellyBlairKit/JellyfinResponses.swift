@@ -5,19 +5,9 @@ public let ticksPerSecond: Double = 10_000_000
 
 struct AuthResponse: Decodable {
     let accessToken: String
-    let user: AuthUser
 
     enum CodingKeys: String, CodingKey {
         case accessToken = "AccessToken"
-        case user = "User"
-    }
-}
-
-struct AuthUser: Decodable {
-    let id: String
-
-    enum CodingKeys: String, CodingKey {
-        case id = "Id"
     }
 }
 

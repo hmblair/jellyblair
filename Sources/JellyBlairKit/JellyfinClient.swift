@@ -21,7 +21,6 @@ public final class JellyfinClient {
     private static var deviceID: String { DeviceIdentifier.value }
 
     private var accessToken: String?
-    private var userID: String?
 
     /// Called when the server rejects the stored token mid-session.
     var onUnauthorized: (() -> Void)?
@@ -30,14 +29,12 @@ public final class JellyfinClient {
     /// Kept until a later report for the same book succeeds, then flushed on reconnect.
     private var unsentProgress: (bookID: String, positionSeconds: Double)?
 
-    init(serverURL: URL, accessToken: String? = nil, userID: String? = nil) {
+    init(serverURL: URL, accessToken: String? = nil) {
         self.serverURL = serverURL
         self.accessToken = accessToken
-        self.userID = userID
     }
 
     var sessionToken: String? { accessToken }
-    var sessionUserID: String? { userID }
 
     private var authorizationHeader: String {
         var fields = [
@@ -105,9 +102,7 @@ public final class JellyfinClient {
         let body = try JSONEncoder().encode(["Username": username, "Pw": password])
         let request = makeRequest(path: "Users/AuthenticateByName", method: "POST", body: body)
         let data = try await send(request)
-        let auth = try decode(AuthResponse.self, from: data)
-        accessToken = auth.accessToken
-        userID = auth.user.id
+        accessToken = try decode(AuthResponse.self, from: data).accessToken
     }
 
     enum TokenCheck {
@@ -116,14 +111,11 @@ public final class JellyfinClient {
         case unreachable
     }
 
-    /// Checks the stored token against the server and refreshes the user ID.
+    /// Checks the stored token against the server.
     func verifyStoredToken() async -> TokenCheck {
         let request = makeRequest(path: "Users/Me")
         do {
-            let data = try await send(request)
-            if let user = try? decode(AuthUser.self, from: data) {
-                userID = user.id
-            }
+            _ = try await send(request)
             return .valid
         } catch JellyfinError.unauthorized {
             return .invalid
@@ -142,7 +134,6 @@ public final class JellyfinClient {
             URLQueryItem(name: "Recursive", value: "true"),
             URLQueryItem(name: "SortBy", value: "SortName"),
             URLQueryItem(name: "Fields", value: "People,MediaSources,Genres"),
-            URLQueryItem(name: "UserId", value: userID),
         ]
         let request = makeRequest(path: "Items", query: query)
         let data = try await send(request)
@@ -151,8 +142,7 @@ public final class JellyfinClient {
 
     /// Fetches a single book with fresh user data, such as the resume position.
     public func fetchBook(id: String) async -> Book? {
-        guard let userID else { return nil }
-        let request = makeRequest(path: "Users/\(userID)/Items/\(id)")
+        let request = makeRequest(path: "Items/\(id)")
         guard let data = try? await send(request) else { return nil }
         return try? decode(Book.self, from: data)
     }
@@ -203,8 +193,7 @@ public final class JellyfinClient {
     /// Clears the book's played state and resume position for the user.
     /// Throws when the server does not confirm.
     func resetPlayback(bookID: String) async throws {
-        guard let userID else { throw JellyfinError.unauthorized }
-        _ = try await send(makeRequest(path: "Users/\(userID)/PlayedItems/\(bookID)", method: "DELETE"))
+        _ = try await send(makeRequest(path: "UserPlayedItems/\(bookID)", method: "DELETE"))
     }
 
     func reportPlaybackStarted(bookID: String, positionSeconds: Double) async {
