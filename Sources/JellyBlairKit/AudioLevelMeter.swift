@@ -4,7 +4,8 @@ import Foundation
 import MediaToolbox
 
 /// Measures per-band levels of the playing audio through an MTAudioProcessingTap.
-/// The tap writes on the audio render thread; the UI reads at frame rate.
+/// The tap only captures samples, on the audio render thread. The transform
+/// runs in currentBands(), so audio that nothing displays costs nothing.
 public final class AudioLevelMeter {
     public static let bandCount = 3
 
@@ -19,14 +20,25 @@ public final class AudioLevelMeter {
     /// Bin ranges for the bands, roughly logarithmic across speech frequencies.
     private static let bandBinRanges: [Range<Int>] = [1..<12, 12..<64, 64..<256]
 
+    /// Guards the captured samples, which the audio thread writes and the
+    /// reader takes, and the format flag, which the tap's callbacks write.
     private let lock = NSLock()
-    private var bands = [Float](repeating: 0, count: AudioLevelMeter.bandCount)
-    private let fftSetup: FFTSetup
+    private var capturedSamples = [Float](repeating: 0, count: AudioLevelMeter.fftSize)
+    private var hasCapturedSamples = false
 
     /// True while the prepared stream is 32-bit float PCM, the only format
-    /// measure() can read. The tap's prepare callback writes it; guarded by
-    /// the lock, since prepare and process run on audio threads.
+    /// the tap can read. The tap's prepare callback writes it.
     private var formatIsFloat32 = false
+
+    /// Buffers the reader alone touches, held so that no read allocates.
+    /// The reader runs on the main actor, so these need no lock.
+    private var samples = [Float](repeating: 0, count: AudioLevelMeter.fftSize)
+    private var real = [Float](repeating: 0, count: AudioLevelMeter.fftSize / 2)
+    private var imaginary = [Float](repeating: 0, count: AudioLevelMeter.fftSize / 2)
+    private var magnitudes = [Float](repeating: 0, count: AudioLevelMeter.fftSize / 2)
+    private var bands = [Float](repeating: 0, count: AudioLevelMeter.bandCount)
+
+    private let fftSetup: FFTSetup
 
     init() {
         fftSetup = vDSP_create_fftsetup(Self.fftSizeLog2, FFTRadix(kFFTRadix2))!
@@ -36,16 +48,23 @@ public final class AudioLevelMeter {
         vDSP_destroy_fftsetup(fftSetup)
     }
 
+    /// The current band levels. Transforms the newest captured samples, so
+    /// the work happens once for each read and not at all without one.
+    @MainActor
     public func currentBands() -> [Float] {
-        lock.lock()
-        defer { lock.unlock() }
+        if takeCapturedSamples() {
+            transformSamples()
+            updateBands()
+        }
         return bands
     }
 
+    @MainActor
     func reset() {
         lock.lock()
-        bands = [Float](repeating: 0, count: Self.bandCount)
+        hasCapturedSamples = false
         lock.unlock()
+        bands = [Float](repeating: 0, count: Self.bandCount)
     }
 
     // MARK: - Tap plumbing
@@ -75,7 +94,7 @@ public final class AudioLevelMeter {
                 let status = MTAudioProcessingTapGetSourceAudio(tap, numberFrames, bufferListInOut, flagsOut, nil, numberFramesOut)
                 guard status == noErr else { return }
                 let meter = Unmanaged<AudioLevelMeter>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
-                meter.measure(bufferList: bufferListInOut, frameCount: Int(numberFramesOut.pointee))
+                meter.capture(bufferList: bufferListInOut, frameCount: Int(numberFramesOut.pointee))
             }
         )
         var tap: MTAudioProcessingTap?
@@ -88,7 +107,7 @@ public final class AudioLevelMeter {
         return mix
     }
 
-    // MARK: - Measurement
+    // MARK: - Capture
 
     private func noteFormat(_ format: AudioStreamBasicDescription) {
         let isFloat32 = format.mFormatID == kAudioFormatLinearPCM
@@ -105,7 +124,9 @@ public final class AudioLevelMeter {
         lock.unlock()
     }
 
-    private func measure(bufferList: UnsafeMutablePointer<AudioBufferList>, frameCount: Int) {
+    /// Copies one buffer of audio aside for the next read. Runs on the audio
+    /// render thread, so it checks the buffer and copies it, nothing more.
+    private func capture(bufferList: UnsafeMutablePointer<AudioBufferList>, frameCount: Int) {
         lock.lock()
         let readable = formatIsFloat32
         lock.unlock()
@@ -115,33 +136,49 @@ public final class AudioLevelMeter {
         let sampleCapacity = Int(first.mDataByteSize) / MemoryLayout<Float>.size
         let count = min(frameCount, sampleCapacity, Self.fftSize)
         guard count >= 64 else { return }
-        let samples = first.mData!.assumingMemoryBound(to: Float.self)
-        computeBands(samples: samples, count: count)
+        let source = first.mData!.assumingMemoryBound(to: Float.self)
+        lock.lock()
+        capturedSamples.withUnsafeMutableBufferPointer { destination in
+            destination.update(repeating: 0)
+            destination.baseAddress!.update(from: source, count: count)
+        }
+        hasCapturedSamples = true
+        lock.unlock()
     }
 
-    private func computeBands(samples: UnsafePointer<Float>, count: Int) {
-        var padded = [Float](repeating: 0, count: Self.fftSize)
-        padded.withUnsafeMutableBufferPointer { destination in
-            destination.baseAddress!.update(from: samples, count: count)
+    // MARK: - Measurement
+
+    /// Moves the newest captured buffer into the reader's buffer, and reports
+    /// whether one arrived since the last read.
+    private func takeCapturedSamples() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard hasCapturedSamples else { return false }
+        hasCapturedSamples = false
+        samples.withUnsafeMutableBufferPointer { destination in
+            capturedSamples.withUnsafeBufferPointer { source in
+                destination.baseAddress!.update(from: source.baseAddress!, count: Self.fftSize)
+            }
         }
-        var real = [Float](repeating: 0, count: Self.fftSize / 2)
-        var imaginary = [Float](repeating: 0, count: Self.fftSize / 2)
-        var magnitudes = [Float](repeating: 0, count: Self.fftSize / 2)
+        return true
+    }
+
+    /// Fills the magnitudes with the samples' power spectrum.
+    private func transformSamples() {
         real.withUnsafeMutableBufferPointer { realPointer in
             imaginary.withUnsafeMutableBufferPointer { imaginaryPointer in
                 var split = DSPSplitComplex(realp: realPointer.baseAddress!, imagp: imaginaryPointer.baseAddress!)
-                padded.withUnsafeBytes { raw in
+                samples.withUnsafeBytes { raw in
                     vDSP_ctoz(raw.bindMemory(to: DSPComplex.self).baseAddress!, 2, &split, 1, vDSP_Length(Self.fftSize / 2))
                 }
                 vDSP_fft_zrip(fftSetup, &split, 1, Self.fftSizeLog2, FFTDirection(FFT_FORWARD))
                 vDSP_zvmags(&split, 1, &magnitudes, 1, vDSP_Length(Self.fftSize / 2))
             }
         }
-        updateBands(magnitudes: magnitudes)
     }
 
-    private func updateBands(magnitudes: [Float]) {
-        var newBands = [Float](repeating: 0, count: Self.bandCount)
+    /// Folds the magnitudes into the bars' levels.
+    private func updateBands() {
         for (index, range) in Self.bandBinRanges.enumerated() {
             let meanPower = magnitudes[range].reduce(0, +) / Float(range.count)
             let amplitude = sqrt(meanPower) / Float(Self.fftSize)
@@ -149,13 +186,9 @@ public final class AudioLevelMeter {
             let level = (decibels - Self.floorDecibels) / (Self.ceilingDecibels - Self.floorDecibels)
             // Unexpected sample content can turn the math non-finite, and a
             // non-finite band would crash layout as a NaN view height.
-            newBands[index] = level.isFinite ? min(1, max(0, level)) : 0
-        }
-        lock.lock()
-        for index in 0..<Self.bandCount {
+            let bounded = level.isFinite ? min(1, max(0, level)) : 0
             // Fast attack with slow decay reads as natural motion.
-            bands[index] = max(newBands[index], bands[index] * 0.75)
+            bands[index] = max(bounded, bands[index] * 0.75)
         }
-        lock.unlock()
     }
 }

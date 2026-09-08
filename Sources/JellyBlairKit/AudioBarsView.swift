@@ -15,13 +15,22 @@ public struct AudioBarsView: View {
     /// so the bars whiten exactly when the system whitens the row's text.
     @Environment(\.backgroundProminence) private var backgroundProminence
 
+    /// The bars stop with the scene, which on the phone includes a locked
+    /// screen during background playback.
+    @Environment(\.scenePhase) private var scenePhase
+
     public init(meter: AudioLevelMeter, isPlaying: Bool) {
         self.meter = meter
         self.isPlaying = isPlaying
     }
 
     public var body: some View {
-        AudioBarsHost(meter: meter, isPlaying: isPlaying, isProminent: backgroundProminence == .increased)
+        AudioBarsHost(
+            meter: meter,
+            isPlaying: isPlaying,
+            isSceneActive: scenePhase == .active,
+            isProminent: backgroundProminence == .increased
+        )
             .frame(width: AudioBarsLayerView.totalWidth, height: AudioBarsLayerView.barMaxHeight)
     }
 }
@@ -30,6 +39,7 @@ public struct AudioBarsView: View {
 private struct AudioBarsHost {
     let meter: AudioLevelMeter
     let isPlaying: Bool
+    let isSceneActive: Bool
     let isProminent: Bool
 }
 
@@ -40,7 +50,7 @@ extension AudioBarsHost: NSViewRepresentable {
     }
 
     func updateNSView(_ view: AudioBarsLayerView, context: Context) {
-        view.configure(meter: meter, isPlaying: isPlaying, isProminent: isProminent)
+        view.configure(meter: meter, isPlaying: isPlaying, isSceneActive: isSceneActive, isProminent: isProminent)
     }
 }
 #else
@@ -50,7 +60,7 @@ extension AudioBarsHost: UIViewRepresentable {
     }
 
     func updateUIView(_ view: AudioBarsLayerView, context: Context) {
-        view.configure(meter: meter, isPlaying: isPlaying, isProminent: isProminent)
+        view.configure(meter: meter, isPlaying: isPlaying, isSceneActive: isSceneActive, isProminent: isProminent)
     }
 }
 #endif
@@ -72,6 +82,8 @@ final class AudioBarsLayerView: PlatformNativeView {
     private var isPlaying = false
     private var isProminent = false
     private var timer: Timer?
+
+    private var isSceneActive = true
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -144,9 +156,10 @@ final class AudioBarsLayerView: PlatformNativeView {
     }
     #endif
 
-    func configure(meter: AudioLevelMeter, isPlaying: Bool, isProminent: Bool) {
+    func configure(meter: AudioLevelMeter, isPlaying: Bool, isSceneActive: Bool, isProminent: Bool) {
         self.meter = meter
         self.isPlaying = isPlaying
+        self.isSceneActive = isSceneActive
         if isProminent != self.isProminent {
             self.isProminent = isProminent
             applyColors()
@@ -155,9 +168,11 @@ final class AudioBarsLayerView: PlatformNativeView {
         renderBands()
     }
 
-    /// Runs the tick timer exactly while playing on screen.
+    /// Runs the tick timer exactly while playing bars are on screen. The
+    /// timer's reads are what drive the meter's transform, so a stopped
+    /// timer stops that work too.
     private func syncTimer() {
-        let shouldRun = isPlaying && window != nil
+        let shouldRun = isPlaying && isSceneActive && window != nil
         if shouldRun, timer == nil {
             let timer = Timer(timeInterval: Self.tickInterval, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.renderBands() }
