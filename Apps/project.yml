@@ -12,6 +12,8 @@ packages:
 targetTemplates:
   App:
     type: application
+    # One manifest for both apps, since they use the same declared APIs.
+    sources: [PrivacyInfo.xcprivacy]
     dependencies:
       - package: JellyBlair
         product: JellyBlairKit
