@@ -145,17 +145,16 @@ private struct LibraryListChrome: ViewModifier {
                 .searchable(text: $searchQuery, placement: .sidebar, prompt: "Search")
                 .navigationTitle("Audiobooks")
         case .compact:
-            compactChrome(content)
+            compactSearchField(content)
+                .inlineNavigationTitle()
         }
     }
 
-    /// The navigation bar drawer and its display mode belong to iOS alone.
+    /// The navigation bar drawer belongs to iOS alone.
     @ViewBuilder
-    private func compactChrome(_ content: Content) -> some View {
+    private func compactSearchField(_ content: Content) -> some View {
         #if os(iOS)
-        content
-            .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .always))
-            .navigationBarTitleDisplayMode(.inline)
+        content.searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .always))
         #else
         content.searchable(text: $searchQuery, prompt: "Search")
         #endif
