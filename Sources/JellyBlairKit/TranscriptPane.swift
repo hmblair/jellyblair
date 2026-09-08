@@ -14,6 +14,7 @@ struct TranscriptPane: View {
     let isVisible: Bool
 
     @Environment(PlayerController.self) private var player
+    @Environment(\.layoutMetrics) private var metrics
 
     @State private var query = ""
     @State private var isCaseSensitive = false
@@ -68,7 +69,7 @@ struct TranscriptPane: View {
             searchIsCaseSensitive: isCaseSensitive,
             topInset: floatingBarClearance,
             bottomInset: PaneLayout.bottomRestingInset,
-            horizontalPadding: PaneLayout.transcriptHorizontalPadding,
+            horizontalPadding: metrics.pane.transcriptHorizontalPadding,
             controller: controller,
             onWordTap: { cue in
                 jump(toSeconds: cue.startSeconds)

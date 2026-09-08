@@ -4,33 +4,32 @@ import SwiftUI
 enum PaneLayout {
     /// Resting clearance for the last row, past the bottom fade.
     static let bottomRestingInset: CGFloat = 16
+}
 
-    /// Side padding of the transcript text: the phone's content padding, and
-    /// the inset list's margin on the Mac.
-    static var transcriptHorizontalPadding: CGFloat {
-        #if os(iOS)
-        return 20
-        #else
-        return 12
-        #endif
+/// Floats a pane's search bar over its list, whose rows fade to nothing in
+/// the bar's zone.
+private struct FloatingSearchBar<Items: View>: ViewModifier {
+    @ViewBuilder let items: Items
+
+    @Environment(\.layoutMetrics) private var metrics
+
+    func body(content: Content) -> some View {
+        ZStack(alignment: .top) {
+            content.fadedUnderFloatingBar(fadesBottom: true)
+            HStack(spacing: 8) {
+                items
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, metrics.pane.searchBarHorizontalPadding)
+        }
     }
 }
 
 extension View {
-    /// Floats a pane's search bar over its list, whose rows fade to nothing
-    /// in the bar's zone. The bar's height comes from the search field; the
-    /// capsule buttons stretch to match it exactly.
+    /// Floats a pane's search bar over its list. The bar's height comes from
+    /// the search field; the capsule buttons stretch to match it exactly.
     func floatingSearchBar(@ViewBuilder items: () -> some View) -> some View {
-        ZStack(alignment: .top) {
-            fadedUnderFloatingBar(fadesBottom: true)
-            HStack(spacing: 8) {
-                items()
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            #if os(iOS)
-            .padding(.horizontal, 20)
-            #endif
-        }
+        modifier(FloatingSearchBar(items: items))
     }
 
     /// Steps a search's matches from the keyboard: return steps forward,

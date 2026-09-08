@@ -7,25 +7,15 @@ public struct PlaybackBar: View {
 
     @Environment(PlayerController.self) private var player
     @Environment(BookCatalog.self) private var catalog
+    @Environment(\.layoutMetrics) private var metrics
 
-    /// Width cap of the Mac bar's info block; longer names truncate.
+    /// Width cap of the single-row bar's info block; longer names truncate.
     private static let infoMaxWidth: CGFloat = 280
 
-    /// Width cap of the Mac bar's seek cluster, so the bar reads as one
+    /// Width cap of the single-row bar's seek cluster, so the bar reads as one
     /// control instead of a line spanning the window. The time labels and
     /// the speed menu take roughly 250 points of it; the rest is the bar.
     private static let seekClusterMaxWidth: CGFloat = 720
-
-    /// The info block's measurements, a step larger on the Mac.
-    #if os(macOS)
-    private static let coverSize: CGFloat = 48
-    private static let titleFont: Font = .body.weight(.semibold)
-    private static let subtitleFont: Font = .subheadline
-    #else
-    private static let coverSize: CGFloat = 40
-    private static let titleFont: Font = .callout.weight(.semibold)
-    private static let subtitleFont: Font = .caption
-    #endif
 
     public init(onOpen: @escaping (Book) -> Void) {
         self.onOpen = onOpen
@@ -40,13 +30,8 @@ public struct PlaybackBar: View {
                 controls(for: book)
             }
             .padding(.horizontal, 16)
-            // The Mac window edge needs clearance below; the phone's safe
-            // area already provides it.
-            #if os(macOS)
-            .padding(.vertical, 10)
-            #else
-            .padding(.top, 8)
-            #endif
+            .padding(.top, metrics.playbackBar.topPadding)
+            .padding(.bottom, metrics.playbackBar.bottomPadding)
             .background(.bar)
             .overlay(alignment: .top) {
                 Divider()
@@ -54,20 +39,28 @@ public struct PlaybackBar: View {
         }
     }
 
-    #if os(macOS)
+    @ViewBuilder
+    private func controls(for book: Book) -> some View {
+        if metrics.playbackBar.usesSingleRow {
+            singleRowControls(for: book)
+        } else {
+            stackedControls(for: book)
+        }
+    }
+
     /// One row: the info at the leading edge, the transport at the trailing
     /// edge, and the seek cluster centered in the space between them. The
     /// bar layout sizes and places each element independently.
-    private func controls(for book: Book) -> some View {
+    private func singleRowControls(for book: Book) -> some View {
         BarLayout(infoMaximum: Self.infoMaxWidth, clusterMaximum: Self.seekClusterMaxWidth, spacing: 16) {
             info(for: book)
             seekCluster
             TransportControlsView()
         }
     }
-    #else
+
     /// Two rows: the seek cluster, then the info with the transport.
-    private func controls(for book: Book) -> some View {
+    private func stackedControls(for book: Book) -> some View {
         VStack(spacing: 8) {
             seekCluster
             HStack(spacing: 12) {
@@ -77,7 +70,6 @@ public struct PlaybackBar: View {
             }
         }
     }
-    #endif
 
     /// The seek bar with the speed menu beside it.
     private var seekCluster: some View {
@@ -92,15 +84,15 @@ public struct PlaybackBar: View {
     private func info(for book: Book) -> some View {
         HStack(spacing: 12) {
             BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fill)
-                .frame(width: Self.coverSize, height: Self.coverSize)
+                .frame(width: metrics.playbackBar.coverSize, height: metrics.playbackBar.coverSize)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 2) {
                 Text(player.currentChapter?.title ?? book.name)
-                    .font(Self.titleFont)
+                    .font(metrics.playbackBar.titleFont)
                     .lineLimit(1)
                 if player.currentChapter != nil {
                     Text(book.name)
-                        .font(Self.subtitleFont)
+                        .font(metrics.playbackBar.subtitleFont)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -125,7 +117,6 @@ public struct PlaybackBar: View {
     }
 }
 
-#if os(macOS)
 /// Places the bar's three elements independently of each other: the first
 /// at the leading edge, the third at the trailing edge, and the second
 /// centered in the space between its two neighbors, each centered
@@ -208,4 +199,3 @@ private struct BarLayout: Layout {
         element.sizeThatFits(ProposedViewSize(width: width, height: nil)).height
     }
 }
-#endif

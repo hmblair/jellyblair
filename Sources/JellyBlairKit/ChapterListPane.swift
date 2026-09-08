@@ -65,7 +65,7 @@ struct ChapterListPane: View {
                     }
                 }
             }
-            .platformChapterListStyle()
+            .chapterListStyle()
             // Keeps the resting rows clear of the floating filter bar.
             .safeAreaInset(edge: .top, spacing: 0) {
                 Color.clear.frame(height: floatingBarClearance)
@@ -207,13 +207,23 @@ struct ChapterListPane: View {
     }
 }
 
+/// Edge-to-edge rows when compact; the inset style when regular.
+private struct ChapterListStyle: ViewModifier {
+    @Environment(\.layoutDensity) private var density
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch density {
+        case .compact:
+            content.listStyle(.plain)
+        case .regular:
+            content.listStyle(.inset)
+        }
+    }
+}
+
 private extension View {
-    /// Edge-to-edge rows on the phone; the inset style on the Mac.
-    func platformChapterListStyle() -> some View {
-        #if os(iOS)
-        return listStyle(.plain)
-        #else
-        return listStyle(.inset)
-        #endif
+    func chapterListStyle() -> some View {
+        modifier(ChapterListStyle())
     }
 }

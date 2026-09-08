@@ -43,6 +43,7 @@ struct RootView: View {
                     .id(ObjectIdentifier(client))
             }
         }
+        .resolvingLayoutDensity()
         .task {
             await session.start()
         }

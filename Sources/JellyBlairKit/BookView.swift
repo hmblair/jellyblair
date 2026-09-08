@@ -24,6 +24,8 @@ public struct BookView: View {
     @Environment(\.openNarrator) private var openNarrator
     @Environment(\.openGenre) private var openGenre
 
+    @Environment(\.layoutMetrics) private var metrics
+
     @State private var isHoveringDownload = false
 
     /// Measured height of the header's metadata column, which sizes the
@@ -57,9 +59,9 @@ public struct BookView: View {
     }
 
     public var body: some View {
-        // On the phone the list runs edge to edge; only the upper content
-        // keeps side padding. The Mac pads the whole page. The loaded book's
-        // controls live in the app-wide playback bar, not here.
+        // When compact the list runs edge to edge and only the upper content
+        // keeps side padding; a regular page pads as a whole. The loaded
+        // book's controls live in the app-wide playback bar, not here.
         VStack(spacing: 16) {
             Group {
                 header
@@ -67,18 +69,12 @@ public struct BookView: View {
                     playButton
                 }
             }
-            #if os(iOS)
-            .padding(.horizontal, 20)
-            #endif
+            .padding(.horizontal, metrics.bookScreen.contentHorizontalPadding)
             Divider()
             listSection
         }
-        #if os(macOS)
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
-        #else
-        .padding(.top, 8)
-        #endif
+        .padding(.horizontal, metrics.bookScreen.pageHorizontalPadding)
+        .padding(.top, metrics.bookScreen.pageTopPadding)
         .toolbar {
             if hasTranscript {
                 ToolbarItem(placement: .primaryAction) {
@@ -126,7 +122,8 @@ public struct BookView: View {
 
     #if os(macOS)
     /// The chapter/transcript pane's height floor. With the header's
-    /// intrinsic height above it, it sets the window's minimum height.
+    /// intrinsic height above it, it sets the Mac window's minimum
+    /// height, which no other platform has.
     private static let listMinHeight: CGFloat = 180
     #endif
 
@@ -166,19 +163,6 @@ public struct BookView: View {
 
     // MARK: - Header
 
-    // The header layout is shared; only its measurements differ per platform.
-    #if os(macOS)
-    private static let coverCornerRadius: CGFloat = 10
-    private static let coverSpacing: CGFloat = 12
-    private static let titleFont = Font.title.bold()
-    private static let lineFont = Font.title3
-    #else
-    private static let coverCornerRadius: CGFloat = 12
-    private static let coverSpacing: CGFloat = 10
-    private static let titleFont = Font.title2.bold()
-    private static let lineFont = Font.callout
-    #endif
-
     /// Centered title over a side-by-side section: cover at the left,
     /// left-aligned metadata lines beside it. The cover is a square with
     /// the metadata column's height, so the two sides always share one
@@ -186,16 +170,16 @@ public struct BookView: View {
     private var header: some View {
         VStack(spacing: 12) {
             Text(book.name)
-                .font(Self.titleFont)
+                .font(metrics.bookScreen.titleFont)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
 
             // Two equal halves: the measured metadata column sizes the
             // cover, and each half claims its side of the center seam.
-            HStack(alignment: .top, spacing: Self.coverSpacing) {
+            HStack(alignment: .top, spacing: metrics.bookScreen.coverSpacing) {
                 cover
                     .frame(width: metadataHeight, height: metadataHeight)
-                    .clipShape(RoundedRectangle(cornerRadius: Self.coverCornerRadius))
+                    .clipShape(RoundedRectangle(cornerRadius: metrics.bookScreen.coverCornerRadius))
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                 metadataColumn
@@ -207,11 +191,7 @@ public struct BookView: View {
                     }
             }
         }
-        #if os(iOS)
-        // The chapter list below competes for vertical space; without this the
-        // stack compresses the text into truncation instead of wrapping it.
-        .fixedSize(horizontal: false, vertical: true)
-        #endif
+        .fixedSize(horizontal: false, vertical: metrics.bookScreen.headerKeepsIntrinsicHeight)
     }
 
     private var metadataColumn: some View {
@@ -240,7 +220,7 @@ public struct BookView: View {
             }
             downloadRow
         }
-        .font(Self.lineFont)
+        .font(metrics.bookScreen.lineFont)
     }
 
     /// A metadata row: a small dimmed icon beside its text.
@@ -378,13 +358,7 @@ public struct BookView: View {
             .frame(minWidth: 100)
         }
         .buttonStyle(.borderedProminent)
-        // The large control is a modest button on the Mac but a thick
-        // capsule on the phone; the regular size matches the Mac's look.
-        #if os(macOS)
-        .controlSize(.large)
-        #else
-        .controlSize(.regular)
-        #endif
+        .controlSize(metrics.bookScreen.playButtonControlSize)
         .disabled(!canStartPlayback)
     }
 

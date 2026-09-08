@@ -26,17 +26,10 @@ public struct RemainingTimeView: View {
     }
 }
 
-/// The font of the seek row's time labels and the speed menu's label, one
-/// notch above a caption on each platform.
-#if os(macOS)
-private let playbackReadoutFont: Font = .subheadline.monospacedDigit()
-#else
-private let playbackReadoutFont: Font = .footnote.monospacedDigit()
-#endif
-
 /// The playback speed as a menu of the preset speeds.
 struct PlaybackSpeedMenu: View {
     @Environment(PlayerController.self) private var player
+    @Environment(\.layoutMetrics) private var metrics
 
     @State private var isHovering = false
 
@@ -55,7 +48,7 @@ struct PlaybackSpeedMenu: View {
             .pickerStyle(.inline)
         } label: {
             Text(formatPlaybackSpeed(player.playbackSpeed))
-                .font(playbackReadoutFont)
+                .font(metrics.transport.readoutFont)
                 .foregroundStyle(.secondary)
         }
         .fixedSize()
@@ -81,6 +74,7 @@ struct PlaybackSpeedMenu: View {
 /// drives no frequent view updates.
 struct SeekTimeRow: View {
     @Environment(PlayerController.self) private var player
+    @Environment(\.layoutMetrics) private var metrics
 
     /// The fraction under the pointer during a scrub. Stays set until the
     /// seek lands, so the bar does not flash back to the pre-seek time.
@@ -91,12 +85,12 @@ struct SeekTimeRow: View {
             TimelineView(.periodic(from: .now, by: tickInterval)) { context in
                 Text(elapsedText(at: context.date))
             }
-            .font(playbackReadoutFont)
+            .font(metrics.transport.readoutFont)
             .foregroundStyle(.secondary)
             seekBar
                 .opacity(player.isReady ? 1 : 0.4)
             Text(totalText)
-                .font(playbackReadoutFont)
+                .font(metrics.transport.readoutFont)
                 .foregroundStyle(.secondary)
         }
     }
@@ -191,26 +185,17 @@ struct SeekTimeRow: View {
 /// list.
 struct TransportControlsView: View {
     @Environment(PlayerController.self) private var player
+    @Environment(\.layoutMetrics) private var metrics
 
     @AppStorage(SkipIntervals.backKey) private var skipBackSeconds: Double = SkipIntervals.defaultSeconds
     @AppStorage(SkipIntervals.forwardKey) private var skipForwardSeconds: Double = SkipIntervals.defaultSeconds
 
-    #if os(macOS)
-    private static let playButtonSize: CGFloat = 34
-    private static let skipButtonSize: CGFloat = 20
-    private static let buttonSpacing: CGFloat = 12
-    #else
-    private static let playButtonSize: CGFloat = 40
-    private static let skipButtonSize: CGFloat = 22
-    private static let buttonSpacing: CGFloat = 16
-    #endif
-
     var body: some View {
-        HStack(spacing: Self.buttonSpacing) {
+        HStack(spacing: metrics.transport.buttonSpacing) {
             Button {
                 Task { await player.skip(by: -skipBackSeconds) }
             } label: {
-                Image(systemName: "gobackward.\(Int(skipBackSeconds))").font(.system(size: Self.skipButtonSize))
+                Image(systemName: "gobackward.\(Int(skipBackSeconds))").font(.system(size: metrics.transport.skipButtonSize))
             }
             .buttonStyle(HoverDimButtonStyle())
 
@@ -218,7 +203,7 @@ struct TransportControlsView: View {
                 player.togglePlayback()
             } label: {
                 Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: Self.playButtonSize))
+                    .font(.system(size: metrics.transport.playButtonSize))
                     .contentTransition(.identity)
                     .animation(nil, value: player.isPlaying)
             }
@@ -227,7 +212,7 @@ struct TransportControlsView: View {
             Button {
                 Task { await player.skip(by: skipForwardSeconds) }
             } label: {
-                Image(systemName: "goforward.\(Int(skipForwardSeconds))").font(.system(size: Self.skipButtonSize))
+                Image(systemName: "goforward.\(Int(skipForwardSeconds))").font(.system(size: metrics.transport.skipButtonSize))
             }
             .buttonStyle(HoverDimButtonStyle())
         }
