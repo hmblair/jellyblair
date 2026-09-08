@@ -56,8 +56,18 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
+        # The phone holds one column, so it stays upright. The iPad turns
+        # freely, since either orientation fits a layout.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     settings:
       base:
-        TARGETED_DEVICE_FAMILY: "1"
+        # The phone and the iPad. UIRequiresFullScreen stays unset, so the
+        # app takes part in Split View and Stage Manager, whose narrow
+        # windows the compact layout covers.
+        TARGETED_DEVICE_FAMILY: "1,2"

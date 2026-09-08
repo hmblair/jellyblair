@@ -9,6 +9,19 @@ struct LoginScreen: View {
     @State private var username: String
     @State private var password = ""
 
+    @Environment(\.layoutDensity) private var density
+
+    /// Width cap of the form. A regular layout has far more width than three
+    /// fields need, and a stretched row leaves its label and its field at
+    /// opposite edges of the screen.
+    private static let formMaxWidth: CGFloat = 420
+
+    /// A compact layout is already narrower than the cap, so it fills its
+    /// screen as before.
+    private var formWidth: CGFloat {
+        density == .regular ? Self.formMaxWidth : .infinity
+    }
+
     init(session: AppSession) {
         self.session = session
         _serverURLString = State(initialValue: session.storedServerURLString)
@@ -41,6 +54,10 @@ struct LoginScreen: View {
                     .disabled(session.isAuthenticating || serverURLString.isEmpty || username.isEmpty)
                 }
             }
+            // The inner cap sizes the form; the outer frame centers it in
+            // the width the cap leaves over.
+            .frame(maxWidth: formWidth)
+            .frame(maxWidth: .infinity)
             .navigationTitle("Connect to Jellyfin")
             .overlay {
                 if session.isAuthenticating {
