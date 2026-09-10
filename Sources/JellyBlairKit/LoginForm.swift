@@ -5,6 +5,11 @@ import Foundation
 /// and what happens to them is written once here.
 @MainActor
 public struct LoginForm {
+    /// The example server address both platforms show in the empty server
+    /// field. It is a String, not a localized key, because SwiftUI parses a
+    /// localized key as markdown and draws a bare URL in it as a link.
+    public nonisolated static let exampleServerURL = "https://jellyfin.example.com"
+
     public var serverURLString: String
     public var username: String
     public var password = ""

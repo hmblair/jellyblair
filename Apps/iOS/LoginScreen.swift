@@ -29,7 +29,7 @@ struct LoginScreen: View {
         NavigationStack {
             Form {
                 Section("Server") {
-                    TextField("https://jellyfin.example.com", text: $form.serverURLString)
+                    TextField(LoginForm.exampleServerURL, text: $form.serverURLString)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()

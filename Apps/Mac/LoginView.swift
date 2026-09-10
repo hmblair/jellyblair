@@ -21,7 +21,7 @@ struct LoginView: View {
                 .font(.title2.bold())
 
             Form {
-                TextField("Server", text: $form.serverURLString, prompt: Text("https://jellyfin.example.com"))
+                TextField("Server", text: $form.serverURLString, prompt: Text(verbatim: LoginForm.exampleServerURL))
                 TextField("Username", text: $form.username)
                 SecureField("Password", text: $form.password)
             }
