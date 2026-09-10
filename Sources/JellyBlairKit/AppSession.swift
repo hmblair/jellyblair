@@ -45,7 +45,7 @@ public final class AppSession {
     }
 
     public func login(serverURLString: String, username: String, password: String) async {
-        guard let url = Self.normalizeServerURL(serverURLString) else {
+        guard let url = ServerURL.parse(serverURLString) else {
             loginErrorMessage = "Enter a valid server URL."
             return
         }
@@ -94,17 +94,6 @@ public final class AppSession {
         store.clearCredentials()
         loginErrorMessage = "Your session expired. Sign in again."
         state = .needsLogin
-    }
-
-    /// Accepts a bare host and defaults its scheme to https.
-    private static func normalizeServerURL(_ text: String) -> URL? {
-        var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        if !trimmed.contains("://") {
-            trimmed = "https://" + trimmed
-        }
-        guard let url = URL(string: trimmed), url.host != nil else { return nil }
-        return url
     }
 
     private static func outdatedServerText(for version: ServerVersion) -> String {

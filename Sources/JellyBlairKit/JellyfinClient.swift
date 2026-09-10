@@ -51,12 +51,20 @@ public final class JellyfinClient {
 
     // MARK: - Requests
 
+    /// Builds a URL under the server URL. The server URL comes through
+    /// ServerURL.parse, so composition cannot practically fail; if it ever
+    /// does, the query is dropped and the request fails as a server error
+    /// instead of crashing here.
+    private func url(path: String, query: [URLQueryItem] = []) -> URL {
+        let base = serverURL.appendingPathComponent(path)
+        guard !query.isEmpty else { return base }
+        guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else { return base }
+        components.queryItems = query
+        return components.url ?? base
+    }
+
     private func makeRequest(path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil) -> URLRequest {
-        var components = URLComponents(url: serverURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
-        if !query.isEmpty {
-            components.queryItems = query
-        }
-        var request = URLRequest(url: components.url!)
+        var request = URLRequest(url: url(path: path, query: query))
         request.httpMethod = method
         request.httpBody = body
         request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
@@ -178,9 +186,7 @@ public final class JellyfinClient {
     // MARK: - URLs
 
     public func imageURL(for book: Book) -> URL {
-        var components = URLComponents(url: serverURL.appendingPathComponent("Items/\(book.id)/Images/Primary"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "maxWidth", value: "600")]
-        return components.url!
+        url(path: "Items/\(book.id)/Images/Primary", query: [URLQueryItem(name: "maxWidth", value: "600")])
     }
 
     /// Builds the asset for a book's audio stream. The token travels in an
@@ -197,9 +203,7 @@ public final class JellyfinClient {
     }
 
     private func streamURL(for book: Book) -> URL {
-        var components = URLComponents(url: serverURL.appendingPathComponent("Audio/\(book.id)/stream"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "static", value: "true")]
-        return components.url!
+        url(path: "Audio/\(book.id)/stream", query: [URLQueryItem(name: "static", value: "true")])
     }
 
     // MARK: - Playback reports

@@ -22,7 +22,7 @@ struct SessionStore {
     func loadStoredSession() -> StoredSession? {
         guard
             let urlString = serverURLString,
-            let url = URL(string: urlString),
+            let url = ServerURL.parse(urlString),
             let username,
             let token = storedToken.read()
         else { return nil }
