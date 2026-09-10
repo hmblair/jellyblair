@@ -79,6 +79,8 @@ public struct ChapterRow: View {
         // Zero side insets: the gutters are the row's whole margin, so the
         // icon's centering within them holds against the pane's edge.
         .listRowInsets(EdgeInsets())
+        // Clear rows, so the pane's backdrop shows through them.
+        .listRowBackground(Color.clear)
         // The separator spans only the content between the gutters, so its
         // ends stay symmetric and clear of the marker icons.
         .alignmentGuide(.listRowSeparatorLeading) { dimensions in

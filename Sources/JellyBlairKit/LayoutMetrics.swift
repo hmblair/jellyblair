@@ -55,6 +55,14 @@ public struct TransportMetrics {
     public let buttonSpacing: CGFloat
 }
 
+/// What a pane draws behind its rows.
+public enum PaneBackdrop {
+    /// Nothing: the cover wash runs behind the rows to the screen edges.
+    case clear
+    /// A rounded glass card floating in the page.
+    case card
+}
+
 /// The book screen's chapter and transcript panes.
 public struct PaneMetrics {
     /// Side padding of the transcript text: the compact layout's content
@@ -65,10 +73,7 @@ public struct PaneMetrics {
     /// row, so the panes hold a centered column; a compact one fills the
     /// screen.
     public let maxWidth: CGFloat
-    /// True where the panes sit in a rounded card that bounds them visually.
-    /// The card replaces the header divider as the separation below the
-    /// header.
-    public let hasCardBackground: Bool
+    public let backdrop: PaneBackdrop
 }
 
 public extension LayoutMetrics {
@@ -103,7 +108,7 @@ public extension LayoutMetrics {
             transcriptHorizontalPadding: 20,
             searchBarHorizontalPadding: 20,
             maxWidth: .infinity,
-            hasCardBackground: false
+            backdrop: .clear
         )
     )
 
@@ -140,7 +145,7 @@ public extension LayoutMetrics {
             transcriptHorizontalPadding: 12,
             searchBarHorizontalPadding: 12,
             maxWidth: 680,
-            hasCardBackground: true
+            backdrop: .card
         )
     )
 }

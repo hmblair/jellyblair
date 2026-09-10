@@ -172,7 +172,7 @@ public struct BookView: View {
         #if os(macOS)
         .frame(minHeight: Self.listMinHeight)
         #endif
-        .paneCard(metrics.pane.hasCardBackground)
+        .paneBackdrop(metrics.pane.backdrop)
         // The inner cap keeps the rows readable; the outer frame centers
         // the card in the width the cap leaves over.
         .frame(maxWidth: metrics.pane.maxWidth)

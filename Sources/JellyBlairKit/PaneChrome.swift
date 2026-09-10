@@ -9,21 +9,22 @@ enum PaneLayout {
     static let cardTopInset: CGFloat = 12
 }
 
-/// Bounds a pane in a rounded card of the system's glass, so its rows read
-/// as one grouped surface instead of loose lines on the bare background,
-/// and the card matches the other glass surfaces around it.
-private struct PaneCard: ViewModifier {
-    let isEnabled: Bool
+/// Draws a pane's backdrop. Either way the pane's own background goes,
+/// so the cover wash shows through the rows.
+private struct PaneBackdropModifier: ViewModifier {
+    let backdrop: PaneBackdrop
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if isEnabled {
+        switch backdrop {
+        case .card:
             content
                 .padding(.top, PaneLayout.cardTopInset)
                 .scrollContentBackground(.hidden)
                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: PaneLayout.cardCornerRadius))
-        } else {
+        case .clear:
             content
+                .scrollContentBackground(.hidden)
         }
     }
 }
@@ -54,9 +55,9 @@ extension View {
         modifier(FloatingSearchBar(items: items))
     }
 
-    /// Bounds a pane in a rounded card where the metrics call for one.
-    func paneCard(_ isEnabled: Bool) -> some View {
-        modifier(PaneCard(isEnabled: isEnabled))
+    /// Draws the pane backdrop the metrics call for.
+    func paneBackdrop(_ backdrop: PaneBackdrop) -> some View {
+        modifier(PaneBackdropModifier(backdrop: backdrop))
     }
 
     /// Steps a search's matches from the keyboard: return steps forward,
