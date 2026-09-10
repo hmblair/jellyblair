@@ -98,6 +98,7 @@ clean:
 	swift package clean
 	rm -rf $(BUILD_DIR) $(DIST_DIR) $(PROJECT)
 	rm -f $(APPS_DIR)/Mac/Info.plist $(APPS_DIR)/iOS/Info.plist
+	rm -f $(APPS_DIR)/Mac/JellyBlair.entitlements
 
 # Regenerates the Xcode project from the spec, the one description of both apps.
 project:

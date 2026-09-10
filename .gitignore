@@ -4,6 +4,7 @@ dist/
 Makefile.local
 Apps/JellyBlair.xcodeproj/
 Apps/Mac/Info.plist
+Apps/Mac/JellyBlair.entitlements
 Apps/iOS/Info.plist
 Apps/Assets.xcassets/AppIcon.appiconset/*.png
 Apps/Assets.xcassets/JellyBlairGlyph.imageset/*.svg

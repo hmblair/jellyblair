@@ -38,6 +38,15 @@ targets:
     templates: [App]
     platform: macOS
     sources: [Mac]
+    # The Mac App Store requires the App Sandbox. The network entitlement
+    # covers the outgoing connections to the Jellyfin server. Everything
+    # the app writes lives in Application Support, which the sandbox maps
+    # into the app container.
+    entitlements:
+      path: Mac/JellyBlair.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
     info:
       path: Mac/Info.plist
       properties:
@@ -47,6 +56,8 @@ targets:
         LSApplicationCategoryType: public.app-category.books
         NSHumanReadableCopyright: Hamish M. Blair
         NSHighResolutionCapable: true
+        # The app uses only HTTPS, which is exempt from export compliance.
+        ITSAppUsesNonExemptEncryption: false
 
   JellyBlairiOS:
     templates: [App]
@@ -58,6 +69,8 @@ targets:
         CFBundleDisplayName: JellyBlair
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # The app uses only HTTPS, which is exempt from export compliance.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         # The phone holds one column, so it stays upright. The iPad turns
