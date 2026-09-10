@@ -69,6 +69,7 @@ targets:
         CFBundleDisplayName: JellyBlair
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.books
         # The app uses only HTTPS, which is exempt from export compliance.
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
