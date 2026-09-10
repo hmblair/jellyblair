@@ -12,6 +12,14 @@ enum TranscriptTapTarget {
     case word(LyricCue)
 }
 
+/// The cue the playback position points at within a line: the last cue
+/// started, and whether the position is still inside it. A cue past its
+/// end shows as read, not spoken.
+struct SpokenCue: Equatable {
+    let index: Int
+    let isSpoken: Bool
+}
+
 /// The text styles, from the platform's semantic fonts and colors so the
 /// view follows the system appearance.
 enum TranscriptStyle {
@@ -163,18 +171,29 @@ struct TranscriptContent {
         return position > 0 ? timedLines[position - 1].position : nil
     }
 
-    /// The index of the line's last cue starting at or before the position.
-    func spokenCueIndex(inLine line: Int, at seconds: Double) -> Int? {
-        lines[line].cues.lastIndex(where: { $0.startSeconds <= seconds })
+    /// The line's cue at the position: the last cue starting at or before
+    /// the position, and whether the position is before the cue's end. A
+    /// cue without an end stays spoken.
+    func spokenCue(inLine line: Int, at seconds: Double) -> SpokenCue? {
+        guard let index = lines[line].cues.lastIndex(where: { $0.startSeconds <= seconds }) else { return nil }
+        let end = lines[line].cues[index].endSeconds
+        return SpokenCue(index: index, isSpoken: end.map { seconds < $0 } ?? true)
     }
 
     /// The next moment the current line or spoken cue changes: the first cue
-    /// of the current line past the position, or the next timed line's start.
+    /// of the current line past the position, the spoken cue's end, or the
+    /// next timed line's start.
     func nextBoundarySeconds(after seconds: Double, currentLine: Int?) -> Double? {
         var next: Double?
-        if let currentLine, lines.indices.contains(currentLine),
-           let cue = lines[currentLine].cues.first(where: { $0.startSeconds > seconds }) {
-            next = cue.startSeconds
+        if let currentLine, lines.indices.contains(currentLine) {
+            let cues = lines[currentLine].cues
+            if let cue = cues.first(where: { $0.startSeconds > seconds }) {
+                next = cue.startSeconds
+            }
+            if let end = cues.last(where: { $0.startSeconds <= seconds })?.endSeconds,
+               end > seconds, end < next ?? .infinity {
+                next = end
+            }
         }
         if let lineStart = nextTimedLineStart(after: seconds), lineStart < next ?? .infinity {
             next = lineStart
@@ -212,19 +231,21 @@ struct TranscriptContent {
     // MARK: - Color state
 
     /// The color inputs for the given position and matches, in storage
-    /// offsets, for the color resolver. A word that starts before the
-    /// requested position counts as read, not spoken, so a manual jump
-    /// marks none of the words it moved past.
-    func colorState(currentLine: Int?, spokenCue cue: Int?, requestedSeconds: Double, matches: [NSRange]) -> TranscriptColorState {
+    /// offsets, for the color resolver. A word past its end, or one that
+    /// starts before the requested position, counts as read, not spoken,
+    /// so a finished word turns grey and a manual jump marks none of the
+    /// words it moved past.
+    func colorState(currentLine: Int?, spokenCue: SpokenCue?, requestedSeconds: Double, matches: [NSRange]) -> TranscriptColorState {
         var state = TranscriptColorState(readEnd: lineStart(of: currentLine), matches: matches)
         guard let currentLine, lineRanges.indices.contains(currentLine) else { return state }
         state.currentLineRange = lineRanges[currentLine]
-        guard let cue, lines[currentLine].cues.indices.contains(cue) else { return state }
+        guard let spokenCue, lines[currentLine].cues.indices.contains(spokenCue.index) else { return state }
+        let cue = spokenCue.index
         let line = lines[currentLine]
         let location = lineRanges[currentLine].location
         let start = utf16Offset(ofCharacter: line.cues[cue].startPosition, in: line.text)
         let end = utf16Offset(ofCharacter: line.cues[cue].endPosition, in: line.text)
-        guard line.cues[cue].startSeconds >= requestedSeconds else {
+        guard spokenCue.isSpoken, line.cues[cue].startSeconds >= requestedSeconds else {
             state.spokenCueStart = location + end
             return state
         }

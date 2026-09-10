@@ -177,7 +177,7 @@ public final class TranscriptTextCoordinator: NSObject {
     /// The text model on display.
     private var content = TranscriptContent(sourceLines: [], chapters: [])
     private var currentLine: Int?
-    private var spokenCueIndex: Int?
+    private var spokenCue: SpokenCue?
     /// The anchor's requested position, which the colors depend on.
     private var requestedSeconds: Double = 0
 
@@ -309,13 +309,13 @@ public final class TranscriptTextCoordinator: NSObject {
         guard let view else { return }
         let seconds = projectedPosition()
         let line = content.lineIndex(at: seconds)
-        let cue = line.flatMap { content.spokenCueIndex(inLine: $0, at: seconds) }
+        let cue = line.flatMap { content.spokenCue(inLine: $0, at: seconds) }
         let requested = view.anchor.requestedSeconds
-        let moved = line != currentLine || cue != spokenCueIndex || requested != requestedSeconds
+        let moved = line != currentLine || cue != spokenCue || requested != requestedSeconds
         guard moved || recentered else { return }
         let previousLine = currentLine
         currentLine = line
-        spokenCueIndex = cue
+        spokenCue = cue
         requestedSeconds = requested
         if moved {
             refreshColorState(invalidating: linesSpan(previousLine, line))
@@ -338,7 +338,7 @@ public final class TranscriptTextCoordinator: NSObject {
     /// the cached lines the change invalidates. Must run before any repaint
     /// that should show a change.
     private func refreshColorState(invalidating lines: ClosedRange<Int>?) {
-        let state = content.colorState(currentLine: currentLine, spokenCue: spokenCueIndex, requestedSeconds: requestedSeconds, matches: searchModel.matches)
+        let state = content.colorState(currentLine: currentLine, spokenCue: spokenCue, requestedSeconds: requestedSeconds, matches: searchModel.matches)
         viewport.painter.setState(state, invalidating: lines)
     }
 
@@ -353,7 +353,7 @@ public final class TranscriptTextCoordinator: NSObject {
         searchModel.reset()
         let seconds = projectedPosition()
         currentLine = content.lineIndex(at: seconds)
-        spokenCueIndex = currentLine.flatMap { content.spokenCueIndex(inLine: $0, at: seconds) }
+        spokenCue = currentLine.flatMap { content.spokenCue(inLine: $0, at: seconds) }
         requestedSeconds = view.anchor.requestedSeconds
         viewport.setContent(lines: renderLines(), ranges: content.lineRanges)
         refreshColorState(invalidating: nil)
@@ -421,7 +421,7 @@ public final class TranscriptTextCoordinator: NSObject {
     /// unforced form skips targets on the already-centered visual line, so
     /// tracking steps once per line of text.
     func centerOnSpokenWord(forced: Bool, animated: Bool) {
-        guard let range = content.spokenTargetRange(line: currentLine, cue: spokenCueIndex) else { return }
+        guard let range = content.spokenTargetRange(line: currentLine, cue: spokenCue?.index) else { return }
         center(onStorageRange: range, forced: forced, animated: animated)
     }
 

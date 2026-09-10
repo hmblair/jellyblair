@@ -51,11 +51,13 @@ struct LyricsResponseCue: Decodable {
     let position: Int
     let endPosition: Int?
     let startTicks: Int64
+    let endTicks: Int64?
 
     enum CodingKeys: String, CodingKey {
         case position = "Position"
         case endPosition = "EndPosition"
         case startTicks = "Start"
+        case endTicks = "End"
     }
 }
 
@@ -85,6 +87,7 @@ extension LyricsResponseCue {
     func transcriptCue(lineLength: Int) -> LyricCue {
         LyricCue(
             startSeconds: Double(startTicks) / ticksPerSecond,
+            endSeconds: endTicks.map { Double($0) / ticksPerSecond },
             startPosition: position,
             endPosition: endPosition ?? lineLength
         )

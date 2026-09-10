@@ -16,6 +16,8 @@ public struct LyricLine: Identifiable, Hashable, Codable {
 /// character range it covers in the line's text.
 public struct LyricCue: Hashable, Codable {
     public let startSeconds: Double
+    /// When the word ends, or nil when the sidecar gives no end.
+    public let endSeconds: Double?
     public let startPosition: Int
     public let endPosition: Int
 }
