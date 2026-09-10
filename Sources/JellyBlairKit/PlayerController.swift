@@ -129,6 +129,7 @@ public final class PlayerController {
         MainActor.assumeIsolated {
             stopProgressReports()
             removeObservers()
+            nowPlaying.detach()
             if let terminationObserver {
                 NotificationCenter.default.removeObserver(terminationObserver)
             }

@@ -10,9 +10,21 @@ import MediaPlayer
 final class NowPlayingCenter {
     private weak var player: PlayerController?
 
+    /// The registered command handlers, kept so detach can remove them.
+    private var commandTargets: [(MPRemoteCommand, Any)] = []
+
     func attach(to player: PlayerController) {
         self.player = player
         configureCommands()
+    }
+
+    /// Unregisters every command handler. The command center is a process-wide
+    /// singleton, so a center that goes away must take its targets with it.
+    func detach() {
+        for (command, token) in commandTargets {
+            command.removeTarget(token)
+        }
+        commandTargets = []
     }
 
     func update(bookTitle: String?, author: String?, chapterTitle: String?, elapsed: Double, duration: Double, rate: Double, isPlaying: Bool, artwork: PlatformImage?) {
@@ -59,33 +71,34 @@ final class NowPlayingCenter {
 
     private func configureCommands() {
         let center = MPRemoteCommandCenter.shared()
-        center.playCommand.addTarget { [weak self] _ in
-            self?.dispatch { $0.play() } ?? .commandFailed
-        }
-        center.pauseCommand.addTarget { [weak self] _ in
-            self?.dispatch { $0.pause() } ?? .commandFailed
-        }
-        center.togglePlayPauseCommand.addTarget { [weak self] _ in
-            self?.dispatch { $0.togglePlayback() } ?? .commandFailed
-        }
-        center.skipForwardCommand.addTarget { [weak self] _ in
-            self?.dispatch { player in Task { await player.skip(by: SkipIntervals.forward) } } ?? .commandFailed
-        }
-        center.skipBackwardCommand.addTarget { [weak self] _ in
-            self?.dispatch { player in Task { await player.skip(by: -SkipIntervals.back) } } ?? .commandFailed
-        }
+        register(center.playCommand) { $0.play() }
+        register(center.pauseCommand) { $0.pause() }
+        register(center.togglePlayPauseCommand) { $0.togglePlayback() }
+        register(center.skipForwardCommand) { player in Task { await player.skip(by: SkipIntervals.forward) } }
+        register(center.skipBackwardCommand) { player in Task { await player.skip(by: -SkipIntervals.back) } }
         syncSkipIntervals()
-        center.nextTrackCommand.addTarget { [weak self] _ in
-            self?.dispatch { player in Task { await player.nextChapter() } } ?? .commandFailed
+        register(center.nextTrackCommand) { player in Task { await player.nextChapter() } }
+        register(center.previousTrackCommand) { player in Task { await player.previousChapter() } }
+        registerScrub(center.changePlaybackPositionCommand)
+    }
+
+    /// Registers one command handler and keeps its token for detach.
+    private func register(_ command: MPRemoteCommand, action: @escaping @MainActor (PlayerController) -> Void) {
+        let token = command.addTarget { [weak self] _ in
+            self?.dispatch(action) ?? .commandFailed
         }
-        center.previousTrackCommand.addTarget { [weak self] _ in
-            self?.dispatch { player in Task { await player.previousChapter() } } ?? .commandFailed
-        }
-        center.changePlaybackPositionCommand.addTarget { [weak self] event in
+        commandTargets.append((command, token))
+    }
+
+    /// Registers the scrub handler, which is the one command that reads its
+    /// event, and keeps its token for detach.
+    private func registerScrub(_ command: MPChangePlaybackPositionCommand) {
+        let token = command.addTarget { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             let position = event.positionTime
             return self?.dispatch { player in Task { await player.seekWithinCurrentChapter(to: position) } } ?? .commandFailed
         }
+        commandTargets.append((command, token))
     }
 
     /// Runs a command against the player on the main actor. Remote command
