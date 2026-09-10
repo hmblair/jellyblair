@@ -204,6 +204,12 @@ public final class JellyfinClient {
 
     // MARK: - Playback reports
 
+    /// The route for the started report, which is also the base the other
+    /// two routes extend.
+    private static let startedPath = "Sessions/Playing"
+    private static let progressPath = startedPath + "/Progress"
+    private static let stoppedPath = startedPath + "/Stopped"
+
     /// Clears the book's played state and resume position for the user.
     /// Throws when the server does not confirm.
     func resetPlayback(bookID: String) async throws {
@@ -211,27 +217,30 @@ public final class JellyfinClient {
     }
 
     func reportPlaybackStarted(bookID: String, positionSeconds: Double) async {
-        await sendPlaybackReport(path: "Sessions/Playing", bookID: bookID, positionSeconds: positionSeconds, isPaused: false)
+        let request = makeStartedReportRequest(bookID: bookID, positionSeconds: positionSeconds)
+        await sendPlaybackReport(request, bookID: bookID, positionSeconds: positionSeconds)
     }
 
     func reportPlaybackProgress(bookID: String, positionSeconds: Double, isPaused: Bool) async {
-        await sendPlaybackReport(path: "Sessions/Playing/Progress", bookID: bookID, positionSeconds: positionSeconds, isPaused: isPaused)
+        let request = makeProgressReportRequest(bookID: bookID, positionSeconds: positionSeconds, isPaused: isPaused)
+        await sendPlaybackReport(request, bookID: bookID, positionSeconds: positionSeconds)
     }
 
     func reportPlaybackStopped(bookID: String, positionSeconds: Double) async {
-        await sendPlaybackReport(path: "Sessions/Playing/Stopped", bookID: bookID, positionSeconds: positionSeconds, isPaused: true)
+        let request = makeStopReportRequest(bookID: bookID, positionSeconds: positionSeconds)
+        await sendPlaybackReport(request, bookID: bookID, positionSeconds: positionSeconds)
     }
 
     /// Re-sends the last failed position report, if any.
     func flushUnsentProgressReport() async {
         guard let unsent = unsentProgress else { return }
-        await sendPlaybackReport(path: "Sessions/Playing/Progress", bookID: unsent.bookID, positionSeconds: unsent.positionSeconds, isPaused: true)
+        await reportPlaybackProgress(bookID: unsent.bookID, positionSeconds: unsent.positionSeconds, isPaused: true)
     }
 
     /// Sends a stop report and blocks up to one second for it to leave.
     /// Used only during app termination, when async work cannot finish.
     func reportPlaybackStoppedBlocking(bookID: String, positionSeconds: Double) {
-        let request = makePlaybackReportRequest(path: "Sessions/Playing/Stopped", bookID: bookID, positionSeconds: positionSeconds, isPaused: true)
+        let request = makeStopReportRequest(bookID: bookID, positionSeconds: positionSeconds)
         let semaphore = DispatchSemaphore(value: 0)
         URLSession.shared.dataTask(with: request) { _, _, _ in
             semaphore.signal()
@@ -239,8 +248,9 @@ public final class JellyfinClient {
         _ = semaphore.wait(timeout: .now() + 1)
     }
 
-    private func sendPlaybackReport(path: String, bookID: String, positionSeconds: Double, isPaused: Bool) async {
-        let request = makePlaybackReportRequest(path: path, bookID: bookID, positionSeconds: positionSeconds, isPaused: isPaused)
+    /// Sends one report, and keeps its position when the send fails so that
+    /// a later report can carry it.
+    private func sendPlaybackReport(_ request: URLRequest, bookID: String, positionSeconds: Double) async {
         do {
             _ = try await send(request)
             if unsentProgress?.bookID == bookID {
@@ -251,16 +261,42 @@ public final class JellyfinClient {
         }
     }
 
-    private func makePlaybackReportRequest(path: String, bookID: String, positionSeconds: Double, isPaused: Bool) -> URLRequest {
-        let report: [String: Any] = [
+    private func makeStartedReportRequest(bookID: String, positionSeconds: Double) -> URLRequest {
+        makeProgressBodyRequest(path: Self.startedPath, bookID: bookID, positionSeconds: positionSeconds, isPaused: false)
+    }
+
+    private func makeProgressReportRequest(bookID: String, positionSeconds: Double, isPaused: Bool) -> URLRequest {
+        makeProgressBodyRequest(path: Self.progressPath, bookID: bookID, positionSeconds: positionSeconds, isPaused: isPaused)
+    }
+
+    /// Builds a report the server reads as PlaybackProgressInfo, which the
+    /// started and progress routes both take.
+    private func makeProgressBodyRequest(path: String, bookID: String, positionSeconds: Double, isPaused: Bool) -> URLRequest {
+        makeReportRequest(path: path, body: [
             "ItemId": bookID,
-            "PositionTicks": Int64(positionSeconds * ticksPerSecond),
+            "PositionTicks": positionTicks(positionSeconds),
             "IsPaused": isPaused,
             "CanSeek": true,
             "PlayMethod": "DirectStream",
-        ]
-        let body = try? JSONSerialization.data(withJSONObject: report)
-        return makeRequest(path: path, method: "POST", body: body)
+        ])
+    }
+
+    /// Builds a report the server reads as PlaybackStopInfo. That model
+    /// carries no paused, seekable, or play method field, so a stop report
+    /// states only the book and the position.
+    private func makeStopReportRequest(bookID: String, positionSeconds: Double) -> URLRequest {
+        makeReportRequest(path: Self.stoppedPath, body: [
+            "ItemId": bookID,
+            "PositionTicks": positionTicks(positionSeconds),
+        ])
+    }
+
+    private func makeReportRequest(path: String, body: [String: Any]) -> URLRequest {
+        makeRequest(path: path, method: "POST", body: try? JSONSerialization.data(withJSONObject: body))
+    }
+
+    private func positionTicks(_ seconds: Double) -> Int64 {
+        Int64(seconds * ticksPerSecond)
     }
 }
 
