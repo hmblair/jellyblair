@@ -260,6 +260,7 @@ final class TranscriptViewport: NSObject {
         #endif
         if let anchor {
             metrics.relocateWindow(around: anchor.line)
+            updateContentHeight()
             setScrollY(metrics.top(of: anchor.line) - anchor.offsetFromViewportTop)
         }
         onWidthChange?()
@@ -285,15 +286,8 @@ final class TranscriptViewport: NSObject {
         }
         var viewport = visibleDocRect().insetBy(dx: 0, dy: -Self.overscan)
         let estimated = metrics.lineIndex(atY: viewport.minY)...metrics.lineIndex(atY: viewport.maxY)
-        switch metrics.ensureMeasured(covering: estimated) {
-        case .extended(let shift):
-            if abs(shift) > 0.5 {
-                shiftScroll(by: shift)
-                viewport = visibleDocRect().insetBy(dx: 0, dy: -Self.overscan)
-            }
-        case .relocated:
-            scroller.resetCentering()
-        }
+        absorb(metrics.ensureMeasured(covering: estimated))
+        viewport = visibleDocRect().insetBy(dx: 0, dy: -Self.overscan)
         let first = metrics.lineIndex(atY: viewport.minY)
         let last = metrics.lineIndex(atY: viewport.maxY)
         // A shift can expose a line or two past the measured band; this
@@ -386,8 +380,11 @@ final class TranscriptViewport: NSObject {
         return true
     }
 
-    /// Applies a coverage result to the screen.
+    /// Applies a coverage result to the screen. The content height syncs
+    /// first: the platform clamps scrolls against the view's size, so a
+    /// scroll issued against a stale size would collapse to the top.
     private func absorb(_ coverage: TranscriptCoverage) {
+        updateContentHeight()
         switch coverage {
         case .extended(let shift):
             if abs(shift) > 0.5 {
