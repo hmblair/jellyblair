@@ -31,6 +31,9 @@ public final class BookModel: Identifiable {
     }
 
     public private(set) var downloadState: DownloadState = .notDownloaded
+    /// Why the last download failed, cleared when a new one starts. A
+    /// cancelled download leaves no message.
+    public private(set) var downloadErrorMessage: String?
     @ObservationIgnored private var downloader: Downloader?
 
     /// The player's hook for a finished download, so playback moves onto
@@ -86,20 +89,25 @@ public final class BookModel: Identifiable {
     public func download() {
         guard downloadState == .notDownloaded else { return }
         downloadState = .downloading(nil)
+        downloadErrorMessage = nil
         let downloader = Downloader(
             destination: downloadedFileURL,
             onProgress: { [weak self] progress in
                 guard let self, case .downloading = self.downloadState else { return }
                 self.downloadState = .downloading(progress)
             },
-            onFinish: { [weak self] succeeded in
+            onFinish: { [weak self] outcome in
                 guard let self else { return }
                 self.downloader = nil
-                self.downloadState = succeeded ? .downloaded : .notDownloaded
-                // The next streamAsset() call picks up the file.
+                // The next streamAsset() call picks up the file or the stream.
                 self.releaseAsset()
-                if succeeded {
+                switch outcome {
+                case .succeeded:
+                    self.downloadState = .downloaded
                     self.onDownloadCompleted?()
+                case .failed(let message):
+                    self.downloadState = .notDownloaded
+                    self.downloadErrorMessage = message
                 }
             }
         )

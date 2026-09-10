@@ -1,11 +1,18 @@
 import Foundation
 
+/// The end of a download. A failure carries a message for the user, or
+/// none when the user cancelled the download.
+enum DownloadOutcome: Equatable {
+    case succeeded
+    case failed(message: String?)
+}
+
 /// Downloads one file with progress, reporting on the main actor.
 /// A thin wrapper over URLSession's download task delegate callbacks.
 final class Downloader: NSObject, URLSessionDownloadDelegate {
     private let destination: URL
     private let onProgress: @MainActor (Double?) -> Void
-    private let onFinish: @MainActor (Bool) -> Void
+    private let onFinish: @MainActor (DownloadOutcome) -> Void
 
     private var session: URLSession?
     private var task: URLSessionDownloadTask?
@@ -13,7 +20,7 @@ final class Downloader: NSObject, URLSessionDownloadDelegate {
     init(
         destination: URL,
         onProgress: @escaping @MainActor (Double?) -> Void,
-        onFinish: @escaping @MainActor (Bool) -> Void
+        onFinish: @escaping @MainActor (DownloadOutcome) -> Void
     ) {
         self.destination = destination
         self.onProgress = onProgress
@@ -65,25 +72,37 @@ final class Downloader: NSObject, URLSessionDownloadDelegate {
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         // The temporary file dies when this callback returns, so the move
         // happens here, on the session's queue.
-        let succeeded: Bool
-        if (downloadTask.response as? HTTPURLResponse).map({ (200...299).contains($0.statusCode) }) ?? false {
-            try? FileManager.default.removeItem(at: destination)
-            succeeded = (try? FileManager.default.moveItem(at: location, to: destination)) != nil
-        } else {
-            succeeded = false
-        }
+        let outcome = adoptFile(at: location, from: downloadTask)
         Task { @MainActor [onFinish] in
-            onFinish(succeeded)
+            onFinish(outcome)
         }
     }
 
-    /// Ends the session on every outcome. The success callback has already
-    /// run from didFinishDownloadingTo, so only a failure reports here.
+    /// Moves the finished file into place, and names what went wrong when
+    /// the server refused or the move failed.
+    private func adoptFile(at location: URL, from task: URLSessionDownloadTask) -> DownloadOutcome {
+        let status = (task.response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(status) else {
+            return .failed(message: "The server returned status \(status).")
+        }
+        try? FileManager.default.removeItem(at: destination)
+        guard (try? FileManager.default.moveItem(at: location, to: destination)) != nil else {
+            return .failed(message: "Cannot save the file.")
+        }
+        return .succeeded
+    }
+
+    /// Ends the session on every outcome. A completed transfer has already
+    /// reported from didFinishDownloadingTo, so only a transport failure
+    /// reports here. A cancelled download carries no message, since the
+    /// user did it.
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         session.invalidateAndCancel()
-        guard error != nil else { return }
+        guard let error else { return }
+        let cancelled = (error as? URLError)?.code == .cancelled
+        let outcome = DownloadOutcome.failed(message: cancelled ? nil : error.localizedDescription)
         Task { @MainActor [onFinish] in
-            onFinish(false)
+            onFinish(outcome)
         }
     }
 }

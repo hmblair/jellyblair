@@ -290,13 +290,17 @@ public struct BookView: View {
             .monospacedDigit()
     }
 
-    /// The download control in the icon column with the file's size beside it.
+    /// The download control in the icon column, with the file's size beside
+    /// it, or the last failure until a retry starts.
     private var downloadRow: some View {
         metadataLine {
             downloadControl
                 .imageScale(.small)
         } content: {
-            if let bytes = book.fileSizeBytes {
+            if let message = model.downloadErrorMessage {
+                Text(message)
+                    .foregroundStyle(.red)
+            } else if let bytes = book.fileSizeBytes {
                 Text(formatFileSize(bytes))
             }
         }
