@@ -4,6 +4,28 @@ import SwiftUI
 enum PaneLayout {
     /// Resting clearance for the last row, past the bottom fade.
     static let bottomRestingInset: CGFloat = 16
+    static let cardCornerRadius: CGFloat = 12
+    /// Clearance between the card's top edge and the floating search bar.
+    static let cardTopInset: CGFloat = 12
+}
+
+/// Bounds a pane in a rounded card of the system's glass, so its rows read
+/// as one grouped surface instead of loose lines on the bare background,
+/// and the card matches the other glass surfaces around it.
+private struct PaneCard: ViewModifier {
+    let isEnabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .padding(.top, PaneLayout.cardTopInset)
+                .scrollContentBackground(.hidden)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: PaneLayout.cardCornerRadius))
+        } else {
+            content
+        }
+    }
 }
 
 /// Floats a pane's search bar over its list, whose rows fade to nothing in
@@ -30,6 +52,11 @@ extension View {
     /// the search field; the capsule buttons stretch to match it exactly.
     func floatingSearchBar(@ViewBuilder items: () -> some View) -> some View {
         modifier(FloatingSearchBar(items: items))
+    }
+
+    /// Bounds a pane in a rounded card where the metrics call for one.
+    func paneCard(_ isEnabled: Bool) -> some View {
+        modifier(PaneCard(isEnabled: isEnabled))
     }
 
     /// Steps a search's matches from the keyboard: return steps forward,

@@ -16,6 +16,9 @@ public struct BookScreenMetrics {
     /// content instead, so its list runs edge to edge.
     public let pageHorizontalPadding: CGFloat
     public let pageTopPadding: CGFloat
+    /// Clearance under the pane. The compact layout's list runs to the
+    /// screen edge instead.
+    public let pageBottomPadding: CGFloat
     /// Side padding of the header and the play button.
     public let contentHorizontalPadding: CGFloat
     public let coverCornerRadius: CGFloat
@@ -55,9 +58,17 @@ public struct TransportMetrics {
 /// The book screen's chapter and transcript panes.
 public struct PaneMetrics {
     /// Side padding of the transcript text: the compact layout's content
-    /// padding, and the inset list's margin when regular.
+    /// padding, and a margin within the pane card when regular.
     public let transcriptHorizontalPadding: CGFloat
     public let searchBarHorizontalPadding: CGFloat
+    /// Width cap of the panes. A regular layout is far wider than a readable
+    /// row, so the panes hold a centered column; a compact one fills the
+    /// screen.
+    public let maxWidth: CGFloat
+    /// True where the panes sit in a rounded card that bounds them visually.
+    /// The card replaces the header divider as the separation below the
+    /// header.
+    public let hasCardBackground: Bool
 }
 
 public extension LayoutMetrics {
@@ -65,6 +76,7 @@ public extension LayoutMetrics {
         bookScreen: BookScreenMetrics(
             pageHorizontalPadding: 0,
             pageTopPadding: 8,
+            pageBottomPadding: 0,
             contentHorizontalPadding: 20,
             coverCornerRadius: 12,
             coverSpacing: 10,
@@ -89,7 +101,9 @@ public extension LayoutMetrics {
         ),
         pane: PaneMetrics(
             transcriptHorizontalPadding: 20,
-            searchBarHorizontalPadding: 20
+            searchBarHorizontalPadding: 20,
+            maxWidth: .infinity,
+            hasCardBackground: false
         )
     )
 
@@ -97,6 +111,7 @@ public extension LayoutMetrics {
         bookScreen: BookScreenMetrics(
             pageHorizontalPadding: 20,
             pageTopPadding: 20,
+            pageBottomPadding: 20,
             contentHorizontalPadding: 0,
             coverCornerRadius: 10,
             coverSpacing: 12,
@@ -123,7 +138,9 @@ public extension LayoutMetrics {
         ),
         pane: PaneMetrics(
             transcriptHorizontalPadding: 12,
-            searchBarHorizontalPadding: 0
+            searchBarHorizontalPadding: 12,
+            maxWidth: 680,
+            hasCardBackground: true
         )
     )
 }

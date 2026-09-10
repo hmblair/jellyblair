@@ -70,11 +70,14 @@ public struct BookView: View {
                 }
             }
             .padding(.horizontal, metrics.bookScreen.contentHorizontalPadding)
-            Divider()
+            if !metrics.pane.hasCardBackground {
+                Divider()
+            }
             listSection
         }
         .padding(.horizontal, metrics.bookScreen.pageHorizontalPadding)
         .padding(.top, metrics.bookScreen.pageTopPadding)
+        .padding(.bottom, metrics.bookScreen.pageBottomPadding)
         .toolbar {
             if hasTranscript {
                 ToolbarItem(placement: .primaryAction) {
@@ -159,6 +162,11 @@ public struct BookView: View {
         #if os(macOS)
         .frame(minHeight: Self.listMinHeight)
         #endif
+        .paneCard(metrics.pane.hasCardBackground)
+        // The inner cap keeps the rows readable; the outer frame centers
+        // the card in the width the cap leaves over.
+        .frame(maxWidth: metrics.pane.maxWidth)
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Header

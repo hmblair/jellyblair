@@ -33,6 +33,13 @@ public struct ChapterRow: View {
         self.searchIsCaseSensitive = searchIsCaseSensitive
     }
 
+    /// Width of the gutter on each side of the content. The marker icon
+    /// centers in the leading one, so it sits midway between the row's edge
+    /// and the content; the empty trailing one mirrors it, so the content
+    /// stays centered whatever the marker shows. The separators span only
+    /// the content between the gutters.
+    private static let gutterWidth: CGFloat = 32
+
     private var isCurrent: Bool {
         if case .current = state { return true }
         return false
@@ -41,9 +48,9 @@ public struct ChapterRow: View {
     @State private var isHovering = false
 
     public var body: some View {
-        HStack {
+        HStack(spacing: 0) {
             icon
-                .frame(width: 16)
+                .frame(width: Self.gutterWidth)
             Text(highlightedTitle)
                 .fontWeight(isCurrent ? .semibold : .regular)
                 .foregroundStyle(state == .played ? .secondary : .primary)
@@ -51,9 +58,10 @@ public struct ChapterRow: View {
             Text(formatTime(chapter.durationSeconds))
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
+            Color.clear
+                .frame(width: Self.gutterWidth)
         }
         .padding(.vertical, 6)
-        .padding(.horizontal, 8)
         // The highlight bounds to the visible content: it skips the icon
         // column when the row has no mark, and cannot overhang the list edges
         // the way a full row background does.
@@ -62,11 +70,23 @@ public struct ChapterRow: View {
                 .fill(Color.primary.opacity(0.06))
                 .opacity(isHovering ? 1 : 0)
                 .animation(.easeOut(duration: 0.1), value: isHovering)
-                .padding(.leading, state == .upcoming ? 24 : 0)
-                .padding(.trailing, -9)
+                // The pill overhangs the content's ends slightly; a marked
+                // row's pill reaches over the icon too.
+                .padding(.leading, state == .upcoming ? Self.gutterWidth - 8 : 0)
+                .padding(.trailing, Self.gutterWidth - 8)
         )
         .onHover { isHovering = $0 }
-        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+        // Zero side insets: the gutters are the row's whole margin, so the
+        // icon's centering within them holds against the pane's edge.
+        .listRowInsets(EdgeInsets())
+        // The separator spans only the content between the gutters, so its
+        // ends stay symmetric and clear of the marker icons.
+        .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+            dimensions[.leading] + Self.gutterWidth
+        }
+        .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+            dimensions[.trailing] - Self.gutterWidth
+        }
     }
 
     /// The title with the searched phrase in the match color.

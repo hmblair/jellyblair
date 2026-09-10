@@ -65,7 +65,7 @@ struct ChapterListPane: View {
                     }
                 }
             }
-            .chapterListStyle()
+            .listStyle(.plain)
             // Keeps the resting rows clear of the floating filter bar.
             .safeAreaInset(edge: .top, spacing: 0) {
                 Color.clear.frame(height: floatingBarClearance)
@@ -204,26 +204,5 @@ struct ChapterListPane: View {
                 proxy.scrollTo(id, anchor: .center)
             }
         }
-    }
-}
-
-/// Edge-to-edge rows when compact; the inset style when regular.
-private struct ChapterListStyle: ViewModifier {
-    @Environment(\.layoutDensity) private var density
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        switch density {
-        case .compact:
-            content.listStyle(.plain)
-        case .regular:
-            content.listStyle(.inset)
-        }
-    }
-}
-
-private extension View {
-    func chapterListStyle() -> some View {
-        modifier(ChapterListStyle())
     }
 }

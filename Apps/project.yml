@@ -2,8 +2,8 @@ name: JellyBlair
 options:
   bundleIdPrefix: com.hmblair
   deploymentTarget:
-    macOS: "15.0"
-    iOS: "18.0"
+    macOS: "26.0"
+    iOS: "26.0"
 packages:
   JellyBlair:
     path: ..
