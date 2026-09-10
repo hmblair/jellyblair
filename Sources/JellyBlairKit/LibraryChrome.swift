@@ -36,29 +36,20 @@ public extension View {
     }
 }
 
-/// Scrolls a library list back to its first book whenever the sort order
-/// changes, so a new order starts at the top instead of partway down where
-/// the old one left the list.
+/// Ties a library list's identity to the sort order, so each order shows a
+/// fresh list, which starts at the top.
 private struct ScrollToTopOnSortChange: ViewModifier {
     let sortOrder: BookSortOrder
-    let list: BookList
 
     func body(content: Content) -> some View {
-        ScrollViewReader { proxy in
-            content.onChange(of: sortOrder) {
-                guard let firstBook = list.books.first else { return }
-                proxy.scrollTo(firstBook.id, anchor: .top)
-            }
-        }
+        content.id(sortOrder)
     }
 }
 
 public extension View {
-    /// Keeps a library list at its top through a change of sort order. The
-    /// list's rows carry the book IDs, so the first book names the row to
-    /// scroll to.
-    func scrolledToTopOnSortChange(_ list: BookList, filters: LibraryFilters) -> some View {
-        modifier(ScrollToTopOnSortChange(sortOrder: filters.sortOrder, list: list))
+    /// Keeps a library list at its top through a change of sort order.
+    func scrolledToTopOnSortChange(filters: LibraryFilters) -> some View {
+        modifier(ScrollToTopOnSortChange(sortOrder: filters.sortOrder))
     }
 }
 

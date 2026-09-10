@@ -56,7 +56,7 @@ public struct LibraryList: View {
             }
         }
         .libraryListStyle()
-        .scrolledToTopOnSortChange(list, filters: filters)
+        .scrolledToTopOnSortChange(filters: filters)
         .refreshable {
             await library.load()
         }
