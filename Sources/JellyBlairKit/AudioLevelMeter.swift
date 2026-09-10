@@ -8,7 +8,7 @@ import QuartzCore
 /// The tap only captures samples, on the audio render thread. The transform
 /// runs in currentBands(), so audio that nothing displays costs nothing.
 public final class AudioLevelMeter {
-    public static let bandCount = 3
+    public static let bandCount = bandLowerFrequencies.count
 
     private static let fftSize = 512
     private static let fftSizeLog2: vDSP_Length = 9
@@ -18,8 +18,23 @@ public final class AudioLevelMeter {
     private static let floorDecibels: Float = -60
     private static let ceilingDecibels: Float = -20
 
-    /// Bin ranges for the bands, roughly logarithmic across speech frequencies.
-    private static let bandBinRanges: [Range<Int>] = [1..<12, 12..<64, 64..<256]
+    /// Lower frequency bounds of the bands in hertz, roughly logarithmic
+    /// across speech frequencies. Each band runs up to the next bound, and
+    /// the last band runs up to the Nyquist frequency.
+    private static let bandLowerFrequencies: [Float] = [86, 500, 2500]
+
+    /// Stands in for the stream's sample rate if a read ever races the tap's
+    /// prepare callback, so the bin math never divides by zero.
+    private static let fallbackSampleRate: Float = 44100
+
+    /// The FFT bin range of each band at the given sample rate, so the bands
+    /// cover the same frequencies for every stream format.
+    private static func bandBinRanges(sampleRate: Float) -> [Range<Int>] {
+        let binWidth = sampleRate / Float(fftSize)
+        let lowerBins = bandLowerFrequencies.map { min(max(Int($0 / binWidth), 1), fftSize / 2) }
+        let upperBins = lowerBins.dropFirst() + [fftSize / 2]
+        return zip(lowerBins, upperBins).map { $0..<max($0, $1) }
+    }
 
     /// The fraction of a band's distance to its target that remains after one
     /// second, one rate for rising and one for falling. Time-based smoothing
@@ -29,7 +44,7 @@ public final class AudioLevelMeter {
     private static let fallRemainderPerSecond: Float = 0.0002
 
     /// Guards the captured samples, which the audio thread writes and the
-    /// reader takes, and the format flag, which the tap's callbacks write.
+    /// reader takes, and the format fields, which the tap's callbacks write.
     private let lock = NSLock()
     private var capturedSamples = [Float](repeating: 0, count: AudioLevelMeter.fftSize)
     private var hasCapturedSamples = false
@@ -37,6 +52,10 @@ public final class AudioLevelMeter {
     /// True while the prepared stream is 32-bit float PCM, the only format
     /// the tap can read. The tap's prepare callback writes it.
     private var formatIsFloat32 = false
+
+    /// The sample rate of the prepared stream. The tap's prepare callback
+    /// writes it.
+    private var sampleRate: Float = 0
 
     /// Buffers the reader alone touches, held so that no read allocates.
     /// The reader runs on the main actor, so these need no lock.
@@ -47,6 +66,11 @@ public final class AudioLevelMeter {
     private var bands = [Float](repeating: 0, count: AudioLevelMeter.bandCount)
     private var targetBands = [Float](repeating: 0, count: AudioLevelMeter.bandCount)
     private var lastReadTime: TimeInterval?
+
+    /// The bin ranges for the sample rate last seen, rebuilt on a change so
+    /// that no steady-state read allocates.
+    private var binRanges: [Range<Int>] = []
+    private var binRangesSampleRate: Float = 0
 
     private let fftSetup: FFTSetup
 
@@ -129,6 +153,7 @@ public final class AudioLevelMeter {
             && format.mBitsPerChannel == 32
         lock.lock()
         formatIsFloat32 = isFloat32
+        sampleRate = Float(format.mSampleRate)
         lock.unlock()
     }
 
@@ -191,9 +216,27 @@ public final class AudioLevelMeter {
         }
     }
 
+    /// The bin ranges for the stream's sample rate, rebuilt when it changes.
+    private func currentBandBinRanges() -> [Range<Int>] {
+        lock.lock()
+        let rate = sampleRate > 0 ? sampleRate : Self.fallbackSampleRate
+        lock.unlock()
+        if rate != binRangesSampleRate {
+            binRanges = Self.bandBinRanges(sampleRate: rate)
+            binRangesSampleRate = rate
+        }
+        return binRanges
+    }
+
     /// Folds the magnitudes into the bars' target levels.
     private func updateTargetBands() {
-        for (index, range) in Self.bandBinRanges.enumerated() {
+        for (index, range) in currentBandBinRanges().enumerated() {
+            // A very low sample rate can push a band past Nyquist and leave
+            // its range empty, so the band rests instead of dividing by zero.
+            guard !range.isEmpty else {
+                targetBands[index] = 0
+                continue
+            }
             let meanPower = magnitudes[range].reduce(0, +) / Float(range.count)
             let amplitude = sqrt(meanPower) / Float(Self.fftSize)
             let decibels = 20 * log10(max(amplitude, 1e-7))
