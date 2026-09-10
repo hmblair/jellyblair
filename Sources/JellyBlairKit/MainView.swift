@@ -116,6 +116,11 @@ public struct MainView: View {
                     }
                 }
                 .toolbar {
+                    #if os(macOS)
+                    // The hidden-title window packs items at the leading
+                    // edge; the spacer pushes them back to the trailing one.
+                    ToolbarSpacer(.flexible)
+                    #endif
                     ToolbarItem(placement: .primaryAction) {
                         SettingsToolbarButton()
                     }

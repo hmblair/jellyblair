@@ -70,15 +70,25 @@ public struct BookView: View {
                 }
             }
             .padding(.horizontal, metrics.bookScreen.contentHorizontalPadding)
-            if !metrics.pane.hasCardBackground {
-                Divider()
-            }
             listSection
         }
         .padding(.horizontal, metrics.bookScreen.pageHorizontalPadding)
         .padding(.top, metrics.bookScreen.pageTopPadding)
         .padding(.bottom, metrics.bookScreen.pageBottomPadding)
+        // The cover, blurred into a wash behind the page, is what the glass
+        // cards pick up, so each book colors its own screen. The extension
+        // effect carries the wash into the adjacent safe areas, under the
+        // title bar and the floating sidebar, whose glass continues it.
+        .background(alignment: .top) {
+            coverBackdrop
+                .backgroundExtensionEffect()
+        }
         .toolbar {
+            #if os(macOS)
+            // The hidden-title window packs items at the leading edge; the
+            // spacer pushes them back to the trailing one.
+            ToolbarSpacer(.flexible)
+            #endif
             if hasTranscript {
                 ToolbarItem(placement: .primaryAction) {
                     transcriptToggle
@@ -170,6 +180,22 @@ public struct BookView: View {
     }
 
     // MARK: - Header
+
+    /// The height of the cover wash, fading to nothing before the page's
+    /// lower half.
+    private static let backdropHeight: CGFloat = 480
+
+    /// The book's cover as an ambient wash behind the page.
+    private var coverBackdrop: some View {
+        BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fill)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.backdropHeight)
+            .clipped()
+            .blur(radius: 60)
+            .opacity(0.35)
+            .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom))
+            .allowsHitTesting(false)
+    }
 
     /// Centered title over a side-by-side section: cover at the left,
     /// left-aligned metadata lines beside it. The cover is a square with

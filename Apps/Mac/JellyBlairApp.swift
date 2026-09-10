@@ -11,6 +11,10 @@ struct JellyBlairApp: App {
         Window("JellyBlair", id: "main") {
             RootView(session: session)
         }
+        // Content runs the window's full height, so the book screen's cover
+        // wash continues under the floating title bar instead of stopping
+        // at it.
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(after: .appSettings) {
                 Button("Sign Out") {
