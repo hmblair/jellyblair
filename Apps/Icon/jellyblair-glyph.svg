@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="252 222 520 662">
+  <defs>
+    <radialGradient id="bell" gradientUnits="userSpaceOnUse" cx="512" cy="320" r="330">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f0e8ff"/>
+    </radialGradient>
+    <linearGradient id="tent" gradientUnits="userSpaceOnUse" x1="0" y1="560" x2="0" y2="890">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ece9ff"/>
+    </linearGradient>
+  </defs>
+  <path d="M262 508
+           C262 348 372 232 512 232
+           C652 232 762 348 762 508
+           C700 478 636 528 574 508
+           C512 488 450 528 388 508
+           C346 494 304 494 262 508 Z"
+        fill="url(#bell)"/>
+  <g fill="url(#tent)">
+    <rect x="318" y="560" width="44" height="170" rx="22"/>
+    <rect x="406" y="560" width="44" height="250" rx="22"/>
+    <rect x="494" y="560" width="44" height="190" rx="22"/>
+    <rect x="670" y="560" width="44" height="140" rx="22"/>
+  </g>
+  <path d="M582 582
+           Q582 560 604 560
+           Q626 560 626 582
+           L626 867
+           Q626 874 621 869
+           L609 857
+           Q604 852 599 857
+           L587 869
+           Q582 874 582 867 Z"
+        fill="url(#tent)"/>
+</svg>

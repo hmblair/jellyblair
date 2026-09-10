@@ -71,19 +71,19 @@ XCODEBUILD := xcodebuild -project $(PROJECT) -scheme $(SCHEME) \
 	-configuration $(CONFIGURATION) -destination '$(DESTINATION)' \
 	$(VERSIONING) $(SIGNING) -quiet
 
-.PHONY: build run install archive export clean project \
+.PHONY: build run install archive export clean project icons \
 	run-mac run-ios install-mac install-ios export-options \
 	notarize-app-store-connect notarize-developer-id \
 	require-team require-mac-device require-ios-device
 
-build: project
+build: project icons
 	$(XCODEBUILD) -derivedDataPath $(BUILD_DIR) build
 
 run: require-$(PLATFORM)-device build run-$(PLATFORM)
 
 install: require-$(PLATFORM)-device build install-$(PLATFORM)
 
-archive: require-team project
+archive: require-team project icons
 	$(XCODEBUILD) -archivePath $(ARCHIVE) archive
 
 export: export-options
@@ -102,6 +102,10 @@ clean:
 # Regenerates the Xcode project from the spec, the one description of both apps.
 project:
 	cd $(APPS_DIR) && xcodegen generate
+
+# Renders the app icon assets from the SVG masters in Apps/Icon.
+icons:
+	$(APPS_DIR)/Icon/render-icons.sh
 
 # The export options carry the team, so make writes them instead of the repo.
 export-options: require-team

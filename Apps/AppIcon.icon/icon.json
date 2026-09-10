@@ -1,0 +1,35 @@
+{
+  "fill" : {
+    "solid" : "extended-srgb:0.44706,0.50980,0.90980,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "glyph.svg",
+          "name" : "glyph"
+        }
+      ]
+    },
+    {
+      "layers" : [
+        {
+          "image-name" : "background.svg",
+          "name" : "background"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : "shared"
+  }
+}

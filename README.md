@@ -25,6 +25,8 @@ make clean
 
 The Xcode project is generated from `Apps/project.yml`, which describes both apps. You can also run `cd Apps && xcodegen generate` and work in Xcode.
 
+The app icon lives as SVG masters in `Apps/Icon`. `make icons` renders them into the asset catalog, and `make build` runs it for you. The renderer needs Pillow (`python3 -m pip install Pillow`) to strip the alpha channel from the iOS icon.
+
 Code signing is optional. Without a team the apps still build and run locally, signed ad hoc. To sign them, create an untracked `Makefile.local` in the repository root:
 
 ```make

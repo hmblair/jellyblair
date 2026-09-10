@@ -13,7 +13,10 @@ targetTemplates:
   App:
     type: application
     # One manifest for both apps, since they use the same declared APIs.
-    sources: [PrivacyInfo.xcprivacy]
+    # One asset catalog too: it holds the app icon for each platform and
+    # the shared glyph image. The Icon Composer file carries the icon for
+    # macOS 26 and iOS 26, and the asset catalog serves older systems.
+    sources: [PrivacyInfo.xcprivacy, Assets.xcassets, AppIcon.icon]
     dependencies:
       - package: JellyBlair
         product: JellyBlairKit
@@ -24,6 +27,7 @@ targetTemplates:
         # both apps as one product.
         PRODUCT_BUNDLE_IDENTIFIER: com.hmblair.jellyblair
         CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Placeholders for builds outside make, such as running from Xcode.
         # The make targets pass the version and the build number.
         MARKETING_VERSION: "0"
