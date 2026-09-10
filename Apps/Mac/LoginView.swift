@@ -14,8 +14,10 @@ struct LoginView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "headphones")
-                .font(.system(size: 40))
+            Image("JellyBlairGlyph")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 56)
                 .foregroundStyle(.secondary)
             Text("Connect to Jellyfin")
                 .font(.title2.bold())

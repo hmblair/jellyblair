@@ -26,7 +26,15 @@ struct LoginScreen: View {
     }
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 16) {
+            Image("JellyBlairGlyph")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 56)
+                .foregroundStyle(.secondary)
+            Text("Connect to Jellyfin")
+                .font(.title2.bold())
+
             Form {
                 Section("Server") {
                     TextField(LoginForm.exampleServerURL, text: $form.serverURLString)
@@ -55,11 +63,14 @@ struct LoginScreen: View {
             // the width the cap leaves over.
             .frame(maxWidth: formWidth)
             .frame(maxWidth: .infinity)
-            .navigationTitle("Connect to Jellyfin")
-            .overlay {
-                if session.isAuthenticating {
-                    ProgressView()
-                }
+        }
+        .padding(.top, 48)
+        // The header sits outside the form, so it paints the form's grouped
+        // background to read as one surface.
+        .background(Color(.systemGroupedBackground))
+        .overlay {
+            if session.isAuthenticating {
+                ProgressView()
             }
         }
     }

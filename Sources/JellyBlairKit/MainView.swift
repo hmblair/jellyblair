@@ -105,12 +105,21 @@ public struct MainView: View {
                 BookView(book: selectedBook)
                     .id(selectedBook.id)
             } else {
-                ContentUnavailableView("Select an audiobook", systemImage: "headphones")
-                    .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            SettingsToolbarButton()
-                        }
+                ContentUnavailableView {
+                    Label {
+                        Text("Select an audiobook")
+                    } icon: {
+                        Image("JellyBlairGlyph")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 56)
                     }
+                }
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        SettingsToolbarButton()
+                    }
+                }
             }
         }
         .detailWidthFloor()
