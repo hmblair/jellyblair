@@ -78,9 +78,14 @@ public struct Book: Codable, Identifiable, Hashable {
         return joined.isEmpty ? nil : joined
     }
 
-    /// Jellyfin stores audiobook narrators as people with the Composer type.
+    /// The person types that name a narrator. Jellyfin 12 and newer write
+    /// Narrator. Older servers write Composer, as does a newer server for a
+    /// book it has not yet rescanned.
+    private static let narratorPersonTypes: Set<String> = ["Narrator", "Composer"]
+
+    /// The narrators among the book's people.
     public var narrators: [String] {
-        (people ?? []).filter { $0.type == "Composer" }.map(\.name)
+        (people ?? []).filter { Self.narratorPersonTypes.contains($0.type) }.map(\.name)
     }
 
     /// The narrators joined, as the single string the search matcher checks.
