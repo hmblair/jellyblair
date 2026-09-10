@@ -2,6 +2,7 @@ import Accelerate
 import AVFoundation
 import Foundation
 import MediaToolbox
+import QuartzCore
 
 /// Measures per-band levels of the playing audio through an MTAudioProcessingTap.
 /// The tap only captures samples, on the audio render thread. The transform
@@ -20,6 +21,13 @@ public final class AudioLevelMeter {
     /// Bin ranges for the bands, roughly logarithmic across speech frequencies.
     private static let bandBinRanges: [Range<Int>] = [1..<12, 12..<64, 64..<256]
 
+    /// The fraction of a band's distance to its target that remains after one
+    /// second, one rate for rising and one for falling. Time-based smoothing
+    /// keeps the motion the same at any read rate. The rise rate covers the
+    /// gap in tens of milliseconds, so attacks still look immediate.
+    private static let riseRemainderPerSecond: Float = 1e-20
+    private static let fallRemainderPerSecond: Float = 0.0002
+
     /// Guards the captured samples, which the audio thread writes and the
     /// reader takes, and the format flag, which the tap's callbacks write.
     private let lock = NSLock()
@@ -37,6 +45,8 @@ public final class AudioLevelMeter {
     private var imaginary = [Float](repeating: 0, count: AudioLevelMeter.fftSize / 2)
     private var magnitudes = [Float](repeating: 0, count: AudioLevelMeter.fftSize / 2)
     private var bands = [Float](repeating: 0, count: AudioLevelMeter.bandCount)
+    private var targetBands = [Float](repeating: 0, count: AudioLevelMeter.bandCount)
+    private var lastReadTime: TimeInterval?
 
     private let fftSetup: FFTSetup
 
@@ -48,14 +58,16 @@ public final class AudioLevelMeter {
         vDSP_destroy_fftsetup(fftSetup)
     }
 
-    /// The current band levels. Transforms the newest captured samples, so
-    /// the work happens once for each read and not at all without one.
+    /// The current band levels. A new captured buffer moves the targets, and
+    /// every read moves the levels toward them, so the motion is smooth at
+    /// the read rate even though buffers arrive far less often.
     @MainActor
     public func currentBands() -> [Float] {
         if takeCapturedSamples() {
             transformSamples()
-            updateBands()
+            updateTargetBands()
         }
+        moveBandsTowardTargets()
         return bands
     }
 
@@ -65,6 +77,8 @@ public final class AudioLevelMeter {
         hasCapturedSamples = false
         lock.unlock()
         bands = [Float](repeating: 0, count: Self.bandCount)
+        targetBands = [Float](repeating: 0, count: Self.bandCount)
+        lastReadTime = nil
     }
 
     // MARK: - Tap plumbing
@@ -177,8 +191,8 @@ public final class AudioLevelMeter {
         }
     }
 
-    /// Folds the magnitudes into the bars' levels.
-    private func updateBands() {
+    /// Folds the magnitudes into the bars' target levels.
+    private func updateTargetBands() {
         for (index, range) in Self.bandBinRanges.enumerated() {
             let meanPower = magnitudes[range].reduce(0, +) / Float(range.count)
             let amplitude = sqrt(meanPower) / Float(Self.fftSize)
@@ -186,9 +200,22 @@ public final class AudioLevelMeter {
             let level = (decibels - Self.floorDecibels) / (Self.ceilingDecibels - Self.floorDecibels)
             // Unexpected sample content can turn the math non-finite, and a
             // non-finite band would crash layout as a NaN view height.
-            let bounded = level.isFinite ? min(1, max(0, level)) : 0
-            // Fast attack with slow decay reads as natural motion.
-            bands[index] = max(bounded, bands[index] * 0.75)
+            targetBands[index] = level.isFinite ? min(1, max(0, level)) : 0
+        }
+    }
+
+    /// Moves each level part of the way to its target, by the time since the
+    /// last read. Fast attack with slow decay reads as natural motion.
+    private func moveBandsTowardTargets() {
+        let now = CACurrentMediaTime()
+        let elapsed = lastReadTime.map { now - $0 } ?? 0
+        lastReadTime = now
+        let rise = pow(Self.riseRemainderPerSecond, Float(elapsed))
+        let fall = pow(Self.fallRemainderPerSecond, Float(elapsed))
+        for index in 0..<Self.bandCount {
+            let target = targetBands[index]
+            let remainder = target > bands[index] ? rise : fall
+            bands[index] = target + (bands[index] - target) * remainder
         }
     }
 }

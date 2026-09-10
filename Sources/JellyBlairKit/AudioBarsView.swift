@@ -71,7 +71,6 @@ final class AudioBarsLayerView: PlatformNativeView {
     private static let barMinHeight: CGFloat = 2
     private static let barWidth: CGFloat = 2
     private static let barSpacing: CGFloat = 1.5
-    private static let tickInterval: TimeInterval = 1.0 / 30.0
 
     static var totalWidth: CGFloat {
         CGFloat(AudioLevelMeter.bandCount) * barWidth + CGFloat(AudioLevelMeter.bandCount - 1) * barSpacing
@@ -81,7 +80,7 @@ final class AudioBarsLayerView: PlatformNativeView {
     private var meter: AudioLevelMeter?
     private var isPlaying = false
     private var isProminent = false
-    private var timer: Timer?
+    private var barsDisplayLink: CADisplayLink?
 
     private var isSceneActive = true
 
@@ -93,10 +92,6 @@ final class AudioBarsLayerView: PlatformNativeView {
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         setUpLayers()
-    }
-
-    deinit {
-        timer?.invalidate()
     }
 
     /// The backing layer, optional on both platforms so the setup code reads
@@ -127,7 +122,7 @@ final class AudioBarsLayerView: PlatformNativeView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        syncTimer()
+        syncDisplayLink()
     }
 
     override func layout() {
@@ -142,7 +137,7 @@ final class AudioBarsLayerView: PlatformNativeView {
     #else
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        syncTimer()
+        syncDisplayLink()
     }
 
     override func layoutSubviews() {
@@ -164,26 +159,38 @@ final class AudioBarsLayerView: PlatformNativeView {
             self.isProminent = isProminent
             applyColors()
         }
-        syncTimer()
+        syncDisplayLink()
         renderBands()
     }
 
-    /// Runs the tick timer exactly while playing bars are on screen. The
-    /// timer's reads are what drive the meter's transform, so a stopped
-    /// timer stops that work too.
-    private func syncTimer() {
+    /// Runs the display link exactly while playing bars are on screen. The
+    /// link's reads are what drive the meter's transform, so a stopped
+    /// link stops that work too. The link retains the view until it is
+    /// invalidated, which leaving the window always does.
+    private func syncDisplayLink() {
         let shouldRun = isPlaying && isSceneActive && window != nil
-        if shouldRun, timer == nil {
-            let timer = Timer(timeInterval: Self.tickInterval, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.renderBands() }
-            }
+        if shouldRun, barsDisplayLink == nil {
+            let link = makeDisplayLink()
             // The common mode keeps the bars moving while a list scrolls.
-            RunLoop.main.add(timer, forMode: .common)
-            self.timer = timer
-        } else if !shouldRun, let timer {
-            timer.invalidate()
-            self.timer = nil
+            link.add(to: .main, forMode: .common)
+            barsDisplayLink = link
+        } else if !shouldRun, let barsDisplayLink {
+            barsDisplayLink.invalidate()
+            self.barsDisplayLink = nil
         }
+    }
+
+    /// A display link that ticks at the refresh rate of the view's screen.
+    private func makeDisplayLink() -> CADisplayLink {
+        #if canImport(AppKit)
+        displayLink(target: self, selector: #selector(displayLinkDidFire))
+        #else
+        CADisplayLink(target: self, selector: #selector(displayLinkDidFire))
+        #endif
+    }
+
+    @objc private func displayLinkDidFire(_ link: CADisplayLink) {
+        renderBands()
     }
 
     /// Sets the bar frames from the current band levels, or from rest while
