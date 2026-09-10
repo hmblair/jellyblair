@@ -78,6 +78,13 @@ public final class PlayerController {
     private var terminationObserver: NSObjectProtocol?
     private var progressReportTimer: Timer?
 
+    #if os(iOS)
+    private var interruptionObserver: NSObjectProtocol?
+    /// True when the current interruption cut off live playback, which is
+    /// what makes resuming at its end appropriate.
+    private var wasPlayingBeforeInterruption = false
+    #endif
+
     /// Incremented on each open. Work that resumes from an await under a stale
     /// generation discards its result instead of touching the newer book's state.
     private var openGeneration = 0
@@ -121,6 +128,9 @@ public final class PlayerController {
         let storedSpeed = UserDefaults.standard.double(forKey: Self.playbackSpeedDefaultsKey)
         playbackSpeed = storedSpeed > 0 ? storedSpeed : 1.0
         observeAppTermination()
+        #if os(iOS)
+        observeAudioSessionInterruptions()
+        #endif
         nowPlaying.attach(to: self)
     }
 
@@ -133,6 +143,11 @@ public final class PlayerController {
             if let terminationObserver {
                 NotificationCenter.default.removeObserver(terminationObserver)
             }
+            #if os(iOS)
+            if let interruptionObserver {
+                NotificationCenter.default.removeObserver(interruptionObserver)
+            }
+            #endif
         }
     }
 
@@ -396,6 +411,11 @@ public final class PlayerController {
         guard playing != isPlaying else { return }
         isPlaying = playing
         if playing {
+            #if os(iOS)
+            // Playing again makes any pending interruption resume moot, and
+            // a manual pause after this must stay paused.
+            wasPlayingBeforeInterruption = false
+            #endif
             if let book, !hasActiveSession {
                 hasActiveSession = true
                 startProgressReports(for: book)
@@ -748,5 +768,68 @@ public final class PlayerController {
     private static let terminationNotification = NSApplication.willTerminateNotification
     #else
     private static let terminationNotification = UIApplication.willTerminateNotification
+    #endif
+
+    // MARK: - Audio session interruptions (iOS)
+
+    #if os(iOS)
+    private enum AudioInterruption {
+        case began
+        case ended(shouldResume: Bool)
+        case unknown
+    }
+
+    /// Resumes playback when a call, an alarm, or Siri ends and the system
+    /// says resuming is appropriate. The system's own pause at the start of
+    /// an interruption flows through the playing-state observation, so this
+    /// observer only ever resumes; it never pauses.
+    private func observeAudioSessionInterruptions() {
+        // The values are read on the posting thread; only the parsed result
+        // crosses to the main actor. See observeMediaNotification.
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: nil
+        ) { [weak self] notification in
+            let interruption = Self.parseInterruption(notification)
+            Task { @MainActor in
+                self?.handleInterruption(interruption)
+            }
+        }
+    }
+
+    private nonisolated static func parseInterruption(_ notification: Notification) -> AudioInterruption {
+        guard let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: rawType)
+        else { return .unknown }
+        switch type {
+        case .began:
+            return .began
+        case .ended:
+            let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
+            return .ended(shouldResume: options.contains(.shouldResume))
+        @unknown default:
+            return .unknown
+        }
+    }
+
+    /// Resumes only playback that the interruption itself cut off. Playback
+    /// the listener started or stopped mid-interruption stands: starting
+    /// clears the flag (see updatePlayingState), so a later manual pause
+    /// stays paused, and playback already running is not touched.
+    private func handleInterruption(_ interruption: AudioInterruption) {
+        switch interruption {
+        case .began:
+            wasPlayingBeforeInterruption = isPlaying
+        case .ended(let shouldResume):
+            if shouldResume && wasPlayingBeforeInterruption && !isPlaying {
+                play()
+            }
+            wasPlayingBeforeInterruption = false
+        case .unknown:
+            break
+        }
+    }
     #endif
 }
