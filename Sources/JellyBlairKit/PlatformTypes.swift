@@ -11,8 +11,8 @@ typealias PlatformNativeView = NSView
 typealias PlatformFont = NSFont
 /// The native color type of the current platform.
 typealias PlatformColor = NSColor
-/// The native text view type of the current platform.
-typealias PlatformTextView = NSTextView
+/// The native scroll view type of the current platform.
+typealias PlatformScrollView = NSScrollView
 
 /// UIKit's semantic color names on NSColor, so shared code reads the same
 /// on both platforms.
@@ -34,8 +34,8 @@ typealias PlatformNativeView = UIView
 typealias PlatformFont = UIFont
 /// The native color type of the current platform.
 typealias PlatformColor = UIColor
-/// The native text view type of the current platform.
-typealias PlatformTextView = UITextView
+/// The native scroll view type of the current platform.
+typealias PlatformScrollView = UIScrollView
 
 /// The accent color under the same name as its NSColor counterpart.
 extension UIColor {

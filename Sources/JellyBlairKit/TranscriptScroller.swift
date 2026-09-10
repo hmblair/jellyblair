@@ -5,126 +5,189 @@ import AppKit
 import UIKit
 #endif
 
-/// Owns the transcript's scrolling: centering a target range, keeping the
-/// reader's place when a re-layout moves the content, and killing leftover
-/// momentum after a programmatic scroll. The document is laid out fully
-/// before anything centers, so every measured position is exact.
+/// Owns the transcript's centering scrolls: putting a document y at the
+/// viewport's center, once per visual line. Glides are driven frame by
+/// frame from the view's live offset, so a new target continues from where
+/// the view really is instead of snapping to the old target, and a content
+/// shift mid-glide moves the glide's endpoints with the content.
 @MainActor
 final class TranscriptScroller {
     /// How long a tracking scroll glides.
     private static let scrollDuration: TimeInterval = 0.4
 
+    /// The estimated height of the document, for clamping targets.
+    var documentHeight: () -> CGFloat = { 0 }
+
     /// The last vertical center the view scrolled to, so following scrolls
     /// once per visual line, not once per word.
     private var centeredY: CGFloat?
 
-    private let geometry: TranscriptTextGeometry
+    /// The glide in flight, in the same document coordinates external
+    /// shifts adjust.
+    private struct Glide {
+        var startOffset: CGFloat
+        var targetOffset: CGFloat
+        var startTime: TimeInterval
+        var completion: (@MainActor () -> Void)?
+    }
+
+    private var glide: Glide?
+    private var displayLink: CADisplayLink?
+
     #if canImport(AppKit)
     private let scrollView: MomentumCancellingScrollView
 
-    init(scrollView: MomentumCancellingScrollView, geometry: TranscriptTextGeometry) {
+    init(scrollView: MomentumCancellingScrollView) {
         self.scrollView = scrollView
-        self.geometry = geometry
     }
     #else
-    private let textView: UITextView
+    private let scrollView: UIScrollView
 
-    init(textView: UITextView, geometry: TranscriptTextGeometry) {
-        self.textView = textView
-        self.geometry = geometry
+    init(scrollView: UIScrollView) {
+        self.scrollView = scrollView
     }
     #endif
 
-    /// Forgets the centered position when the document is laid out again,
-    /// since that gives every position in it a new value.
+    /// Forgets the centered position when the geometry it was measured in
+    /// is void.
     func resetCentering() {
         centeredY = nil
     }
 
-    /// Scrolls the range's visual line to the viewport's center, unless it
-    /// is centered already.
-    func center(onStorageRange range: NSRange, forced: Bool, animated: Bool) {
-        guard let targetY = geometry.frame(forStorageRange: range)?.midY else { return }
-        if !forced, let centeredY, abs(targetY - centeredY) <= 1 { return }
-        centeredY = targetY
-        scroll(toCenterY: targetY, animated: animated)
-    }
-
-    /// Runs the work and returns its result, then shifts the scroll so the
-    /// text at the top of the viewport keeps its place on screen when the
-    /// work moved the content. Only the Mac needs the shift: UITextView
-    /// adjusts its own offset when the geometry above the viewport changes,
-    /// and a manual shift there would double the move.
-    func keepingViewport<Result>(_ work: () -> Result) -> Result {
-        #if canImport(AppKit)
-        let anchor = geometry.viewportAnchorRange()
-        let before = anchor.flatMap { geometry.frame(forStorageRange: $0)?.minY }
-        let result = work()
-        guard let anchor, let before, let after = geometry.frame(forStorageRange: anchor)?.minY else { return result }
-        shiftScroll(by: after - before)
-        return result
-        #else
-        return work()
-        #endif
-    }
-
-    #if canImport(AppKit)
-    /// Moves the scroll offset by the delta without animation, so content
-    /// that shifted in document coordinates stays put on screen.
-    private func shiftScroll(by delta: CGFloat) {
-        guard abs(delta) > 0.5 else { return }
-        let clip = scrollView.contentView
-        clip.setBoundsOrigin(NSPoint(x: clip.bounds.origin.x, y: clip.bounds.origin.y + delta))
-        scrollView.reflectScrolledClipView(clip)
+    /// Moves the remembered center and any glide in flight with a content
+    /// shift, so both stay aligned with the text.
+    func shift(by delta: CGFloat) {
         if let centeredY {
             self.centeredY = centeredY + delta
         }
+        glide?.startOffset += delta
+        glide?.targetOffset += delta
     }
-    #endif
 
-    /// Scrolls so the given document y sits at the center of the region
-    /// between the insets. Leftover momentum from a user scroll dies here,
-    /// so it cannot pull the view off the target afterwards.
-    private func scroll(toCenterY y: CGFloat, animated: Bool) {
+    /// Stops a glide where it stands, when the user takes over. Its
+    /// completion never runs, since its landing was abandoned.
+    func cancelGlide() {
+        glide = nil
+        stopDisplayLink()
+    }
+
+    /// Scrolls the document y to the viewport's center, unless it is
+    /// centered already. The completion runs after an animated scroll
+    /// lands, so the caller can verify the landing.
+    func center(onY y: CGFloat, forced: Bool, animated: Bool, completion: (@MainActor () -> Void)? = nil) {
+        if !forced, let centeredY, abs(y - centeredY) <= 1 {
+            completion?()
+            return
+        }
+        centeredY = y
+        let target = scrollTarget(centering: y)
+        killMomentum()
+        guard animated else {
+            cancelGlide()
+            setOffset(target)
+            completion?()
+            return
+        }
+        // A superseded glide's completion is dropped: its landing was
+        // abandoned, and only the final landing verifies itself.
+        glide = Glide(
+            startOffset: currentOffset(),
+            targetOffset: target,
+            startTime: CACurrentMediaTime(),
+            completion: completion
+        )
+        startDisplayLink()
+    }
+
+    // MARK: - Stepping
+
+    private func startDisplayLink() {
+        guard displayLink == nil else { return }
+        #if canImport(AppKit)
+        let link = scrollView.displayLink(target: self, selector: #selector(displayTick(_:)))
+        #else
+        let link = CADisplayLink(target: self, selector: #selector(displayTick(_:)))
+        #endif
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    private func stopDisplayLink() {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+
+    @objc private nonisolated func displayTick(_ link: CADisplayLink) {
+        MainActor.assumeIsolated {
+            stepGlide(now: link.timestamp)
+        }
+    }
+
+    private func stepGlide(now: TimeInterval) {
+        guard let glide else {
+            stopDisplayLink()
+            return
+        }
+        let progress = min(1, max(0, (now - glide.startTime) / Self.scrollDuration))
+        let eased = easeInOut(progress)
+        setOffset(glide.startOffset + (glide.targetOffset - glide.startOffset) * eased)
+        guard progress >= 1 else { return }
+        self.glide = nil
+        stopDisplayLink()
+        glide.completion?()
+    }
+
+    private func easeInOut(_ t: Double) -> CGFloat {
+        t < 0.5 ? CGFloat(4 * t * t * t) : CGFloat(1 - pow(-2 * t + 2, 3) / 2)
+    }
+
+    // MARK: - The scroll view
+
+    /// The scroll position that puts the document y at the center of the
+    /// region between the insets, clamped to the scrollable range.
+    private func scrollTarget(centering y: CGFloat) -> CGFloat {
+        let (viewportHeight, topInset, bottomInset) = viewportShape()
+        let visible = viewportHeight - topInset - bottomInset
+        let limit = max(-topInset, documentHeight() - viewportHeight + bottomInset)
+        return min(max(y - topInset - visible / 2, -topInset), limit)
+    }
+
+    /// Leftover momentum from a user scroll dies with each centering, so
+    /// it cannot pull the view off the target afterwards.
+    private func killMomentum() {
         #if canImport(AppKit)
         scrollView.dropsMomentum = true
-        let clip = scrollView.contentView
-        let inset = scrollView.contentInsets
-        let target = scrollTarget(centering: y, viewportHeight: clip.bounds.height, topInset: inset.top, bottomInset: inset.bottom)
-        let origin = NSPoint(x: clip.bounds.origin.x, y: target)
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = Self.scrollDuration
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                clip.animator().setBoundsOrigin(origin)
-            }
-        } else {
-            clip.setBoundsOrigin(origin)
-            scrollView.reflectScrolledClipView(clip)
-        }
         #else
-        if textView.isDecelerating {
-            textView.setContentOffset(textView.contentOffset, animated: false)
-        }
-        let inset = textView.contentInset
-        let target = scrollTarget(centering: y, viewportHeight: textView.bounds.height, topInset: inset.top, bottomInset: inset.bottom)
-        let offset = CGPoint(x: 0, y: target)
-        if animated {
-            UIView.animate(withDuration: Self.scrollDuration) {
-                self.textView.contentOffset = offset
-            }
-        } else {
-            textView.contentOffset = offset
+        if scrollView.isDecelerating {
+            scrollView.setContentOffset(scrollView.contentOffset, animated: false)
         }
         #endif
     }
 
-    /// The scroll position that puts the document y at the center of the
-    /// region between the insets, clamped to the scrollable range.
-    private func scrollTarget(centering y: CGFloat, viewportHeight: CGFloat, topInset: CGFloat, bottomInset: CGFloat) -> CGFloat {
-        let visible = viewportHeight - topInset - bottomInset
-        let limit = max(-topInset, geometry.documentHeight() - viewportHeight + bottomInset)
-        return min(max(y - topInset - visible / 2, -topInset), limit)
+    private func viewportShape() -> (height: CGFloat, topInset: CGFloat, bottomInset: CGFloat) {
+        #if canImport(AppKit)
+        (scrollView.contentView.bounds.height, scrollView.contentInsets.top, scrollView.contentInsets.bottom)
+        #else
+        (scrollView.bounds.height, scrollView.contentInset.top, scrollView.contentInset.bottom)
+        #endif
+    }
+
+    private func currentOffset() -> CGFloat {
+        #if canImport(AppKit)
+        scrollView.contentView.bounds.origin.y
+        #else
+        scrollView.contentOffset.y
+        #endif
+    }
+
+    private func setOffset(_ y: CGFloat) {
+        #if canImport(AppKit)
+        let clip = scrollView.contentView
+        clip.setBoundsOrigin(CGPoint(x: clip.bounds.origin.x, y: y))
+        scrollView.reflectScrolledClipView(clip)
+        #else
+        scrollView.contentOffset = CGPoint(x: 0, y: y)
+        #endif
     }
 }
 

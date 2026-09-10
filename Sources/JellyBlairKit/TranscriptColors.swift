@@ -93,101 +93,56 @@ enum TranscriptColorResolver {
     }
 }
 
-/// Owns the transcript's colors. The text system stores colors as
-/// rendering attributes, and this engine keeps them equal to the
-/// resolver's current output everywhere: every color change repaints its
-/// whole range at once, and the on-screen part gets the redraw nudge,
-/// since drawing picks up attribute changes only through it. Off-screen
-/// text draws its updated attributes when a scroll reaches it. The
-/// validator covers fragments the text system lays out on its own.
+/// Owns the transcript's colors, one line at a time. A line's colored text
+/// is its base text with the resolver's current runs applied; the painter
+/// caches each colored line until the color state moves past it, and the
+/// view redraws only the lines whose colors changed.
 @MainActor
-final class TranscriptColorEngine {
-    /// The inputs the resolver paints from. The owner updates it before
-    /// any repaint that should reflect a change.
-    var state = TranscriptColorState()
+final class TranscriptLinePainter {
+    /// The inputs the resolver paints from. The owner updates it through
+    /// setState before any repaint that should reflect a change.
+    private(set) var state = TranscriptColorState()
 
-    private let textView: PlatformTextView
-    private let geometry: TranscriptTextGeometry
+    private var baseLines: [TranscriptRenderLine] = []
+    private var lineRanges: [NSRange] = []
+    private var cache: [Int: NSAttributedString] = [:]
 
-    init(textView: PlatformTextView, geometry: TranscriptTextGeometry) {
-        self.textView = textView
-        self.geometry = geometry
+    /// Installs the lines and their storage ranges and drops every cached
+    /// coloring.
+    func setContent(lines: [TranscriptRenderLine], ranges: [NSRange]) {
+        baseLines = lines
+        lineRanges = ranges
+        cache.removeAll()
     }
 
-    /// Installs the color resolver as the layout manager's rendering-
-    /// attributes validator, so fragments the text system lays out on its
-    /// own get their colors as they lay out.
-    func installValidator() {
-        textView.textLayoutManager?.renderingAttributesValidator = { [weak self] layoutManager, fragment in
-            MainActor.assumeIsolated {
-                self?.validateColors(of: fragment, in: layoutManager)
-            }
+    /// Adopts a new color state and drops the cached lines it invalidates.
+    /// Passing nil drops them all.
+    func setState(_ newState: TranscriptColorState, invalidating lines: ClosedRange<Int>?) {
+        state = newState
+        guard let lines else {
+            cache.removeAll()
+            return
+        }
+        for line in lines {
+            cache.removeValue(forKey: line)
         }
     }
 
-    /// Repaints the range with the resolver's current colors and redraws
-    /// the on-screen part now.
-    func repaintColors(in range: NSRange) {
-        repaintResolved(range)
-        nudgeVisible(intersecting: range)
-    }
-
-    /// Repaints the whole document.
-    func repaintAllColors() {
-        repaintColors(in: geometry.documentRange)
-    }
-
-    /// Paints one fragment's final colors through the resolver.
-    private func validateColors(of fragment: NSTextLayoutFragment, in layoutManager: NSTextLayoutManager) {
-        guard let range = geometry.storageRange(of: fragment.rangeInElement) else { return }
-        repaintResolved(range)
-    }
-
-    /// Redraws the part of the range that is on screen. Painted attributes
-    /// reach already-drawn fragments only through the nudge.
-    private func nudgeVisible(intersecting range: NSRange) {
-        guard let layoutManager = textView.textLayoutManager,
-              let viewport = layoutManager.textViewportLayoutController.viewportRange,
-              let viewportRange = geometry.storageRange(of: viewport)
-        else { return }
-        let visible = NSIntersectionRange(range, viewportRange)
-        guard visible.length > 0,
-              let textRange = geometry.textRange(forStorage: visible)
-        else { return }
-        nudgeRedraw(of: textRange, in: layoutManager)
-    }
-
-    /// Redraws the range through a zero-length attribute edit, the one
-    /// path the view reliably redraws from, then re-lays the range and
-    /// pushes its geometry in the same turn. Colors change no metrics, so
-    /// the geometry comes back identical and the content stays in place.
-    private func nudgeRedraw(of textRange: NSTextRange, in layoutManager: NSTextLayoutManager) {
-        guard let storage = geometry.storage,
-              let range = geometry.storageRange(of: textRange),
-              range.length > 0
-        else { return }
-        storage.beginEditing()
-        storage.edited(.editedAttributes, range: range, changeInLength: 0)
-        storage.endEditing()
-        layoutManager.ensureLayout(for: textRange)
-        geometry.updateContentGeometry()
-    }
-
-    /// Paints the range's final colors, as the resolver computes them.
-    private func repaintResolved(_ range: NSRange) {
+    /// The line's text with its current colors, cached until invalidated.
+    func coloredLine(_ index: Int) -> NSAttributedString {
+        if let cached = cache[index] {
+            return cached
+        }
+        let base = baseLines[index].text
+        let range = lineRanges[index]
+        let colored = NSMutableAttributedString(attributedString: base)
         for segment in TranscriptColorResolver.segments(for: range, state: state) {
-            paint(segment.color, range: segment.range)
+            let overlap = NSIntersectionRange(segment.range, range)
+            guard overlap.length > 0 else { continue }
+            let local = NSRange(location: overlap.location - range.location, length: overlap.length)
+            colored.addAttribute(.foregroundColor, value: segment.color, range: local)
         }
-    }
-
-    /// Applies one color edit, as a rendering attribute on the layout
-    /// manager. Rendering attributes change drawing only, so a paint never
-    /// invalidates layout and never moves the content.
-    private func paint(_ color: PlatformColor, range: NSRange) {
-        guard range.length > 0,
-              let layoutManager = textView.textLayoutManager,
-              let textRange = geometry.textRange(forStorage: range)
-        else { return }
-        layoutManager.addRenderingAttribute(.foregroundColor, value: color, for: textRange)
+        cache[index] = colored
+        return colored
     }
 }

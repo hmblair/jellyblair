@@ -1,32 +1,19 @@
-// The transcript never measures estimated text. Whenever the view has a
-// real width, the whole document is installed and laid out in one eager
-// pass — well under a second even for a large book — and nothing centers
-// before that pass has run. This one rule keeps the rest simple:
-//
-// - Positions read from the layout are exact, so centering is: measure the
-//   target's frame, scroll to it. They are exact only because the pass
-//   installs the text fresh. A text system asked to lay out a document it
-//   already holds revises the layout it has, which leaves fragment
-//   positions estimated and corrects them over the seconds that follow;
-//   deep in a long book that is wrong by thousands of points.
-//
-// - Colors. Rendering attributes always hold TranscriptColorResolver's
-//   current output: every color change repaints its whole range at once
-//   through TranscriptColorEngine, which nudges the on-screen part to
-//   redraw. Off-screen text draws its updated attributes when a scroll
-//   reaches it.
-//
-// - A width change lays the document out again, through the same one pass a
-//   content change uses, and gives every position a new value. The reader's
-//   place is kept by keepingViewport on the Mac and by the text view itself
-//   on iOS, and tracking recenters afterwards. The view reports its own
-//   sizing, so the first layout never depends on a SwiftUI update arriving.
+// The transcript never trusts an estimated position it is about to show.
+// Lines are measured lazily in one contiguous window around the reader,
+// through the one shared TextKit stack that also draws and hit-tests them,
+// so a measured height is exactly a drawn height. Positions inside the
+// window are exact relative to each other, which is what exact centering
+// needs; lines far outside it stand at the average measured height, which
+// only sways the scroll bar. Every window change reports how far it moved
+// the content, and the viewport shifts the scroll with it, so the screen
+// never jumps.
 //
 // The concerns split into components with one owner each:
-// TranscriptContent (the pure text model), TranscriptColorEngine (colors),
-// TranscriptSearchModel (matches), TranscriptScroller (centering and scroll
-// compensation), and TranscriptTextGeometry (the document's layout and the
-// queries against it).
+// TranscriptContent (the pure text model), TranscriptLineRenderer (the one
+// text engine), TranscriptLineMetrics (heights and positions),
+// TranscriptLinePainter (colors), TranscriptSearchModel (matches),
+// TranscriptViewport (the scroll container and the visible line views),
+// and TranscriptScroller (centering scrolls).
 // The coordinator below only orchestrates: it tracks the playback position
 // and wires view events to the components.
 
@@ -65,11 +52,11 @@ public final class TranscriptController {
     }
 }
 
-/// The transcript as one native text view. The whole book is laid out in
-/// one eager pass, so the text system answers where any character range
-/// sits exactly, and following the narration needs no view-level
-/// machinery. Word colors are rendering attributes, painted by a resolver;
-/// recoloring changes no metrics and never moves the content.
+/// The transcript as a virtualized line view: only the lines on screen
+/// exist as views, and only the lines near the reader are measured, so
+/// opening a book and resizing the window cost the visible band, not the
+/// whole document. Word colors are painted per line by a resolver;
+/// recoloring redraws the affected lines and never moves the content.
 public struct TranscriptTextView {
     let lines: [LyricLine]
     /// The book's chapters, shown as heading lines in the transcript.
@@ -140,10 +127,9 @@ extension TranscriptTextView: NSViewRepresentable {
     }
 
     public func makeNSView(context: Context) -> NSScrollView {
-        let view = context.coordinator.makeScrollView()
         controller.coordinator = context.coordinator
         context.coordinator.controller = controller
-        return view
+        return context.coordinator.scrollView
     }
 
     public func updateNSView(_ view: NSScrollView, context: Context) {
@@ -162,28 +148,27 @@ extension TranscriptTextView: UIViewRepresentable {
         TranscriptTextCoordinator()
     }
 
-    public func makeUIView(context: Context) -> UITextView {
-        let view = context.coordinator.makeTextView()
+    public func makeUIView(context: Context) -> UIScrollView {
         controller.coordinator = context.coordinator
         context.coordinator.controller = controller
-        return view
+        return context.coordinator.scrollView
     }
 
-    public func updateUIView(_ view: UITextView, context: Context) {
+    public func updateUIView(_ view: UIScrollView, context: Context) {
         controller.coordinator = context.coordinator
         context.coordinator.update(from: self)
     }
 
-    public static func dismantleUIView(_ view: UITextView, coordinator: TranscriptTextCoordinator) {
+    public static func dismantleUIView(_ view: UIScrollView, coordinator: TranscriptTextCoordinator) {
         coordinator.cancelTick()
         coordinator.cancelSearch()
     }
 }
 #endif
 
-/// Orchestrates the transcript components around the platform text view:
-/// tracks the playback position, pushes state into the color engine, and
-/// routes view events to the search model and the scroller.
+/// Orchestrates the transcript components: tracks the playback position,
+/// pushes state into the painter, and routes view events to the search
+/// model and the scroller.
 @MainActor
 public final class TranscriptTextCoordinator: NSObject {
     fileprivate weak var controller: TranscriptController?
@@ -197,125 +182,32 @@ public final class TranscriptTextCoordinator: NSObject {
     private var requestedSeconds: Double = 0
 
     private let searchModel = TranscriptSearchModel()
-    private var geometry: TranscriptTextGeometry!
-    private var colorEngine: TranscriptColorEngine!
-    private var scroller: TranscriptScroller!
+    private let viewport = TranscriptViewport()
 
-    /// The width the document was last laid out at: zero until the first
-    /// eager pass, and nothing centers before that pass has run. It is also
-    /// what says the view's text is this content's: the pass installs the
-    /// text, so until it has run the storage still holds the text before it.
-    private var laidOutWidth: CGFloat = 0
     /// Wakes the coordinator at the next line or cue boundary.
     private var tickTimer: Timer?
 
-    #if canImport(AppKit)
-    private var scrollView: MomentumCancellingScrollView!
-    private var textView: NSTextView!
-    private var scrollObserver: NSObjectProtocol?
-    private var frameObserver: NSObjectProtocol?
-    private var liveResizeObserver: NSObjectProtocol?
-    #else
-    private var textView: UITextView!
-    #endif
+    /// The insets last applied, so the per-tick update skips the setters.
+    private var appliedInsets: (top: CGFloat, bottom: CGFloat, horizontal: CGFloat)?
+
+    var scrollView: PlatformScrollView {
+        viewport.scrollView
+    }
 
     override init() {
         super.init()
         wireSearchModel()
-    }
-
-    // MARK: - View construction
-
-    #if canImport(AppKit)
-    func makeScrollView() -> NSScrollView {
-        let textView = NSTextView(usingTextLayoutManager: true)
-        textView.isEditable = false
-        textView.isSelectable = false
-        textView.drawsBackground = false
-        textView.textContainer?.widthTracksTextView = true
-        textView.autoresizingMask = [.width]
-        self.textView = textView
-
-        let scrollView = MomentumCancellingScrollView()
-        scrollView.documentView = textView
-        scrollView.hasVerticalScroller = true
-        scrollView.drawsBackground = false
-        scrollView.automaticallyAdjustsContentInsets = false
-        self.scrollView = scrollView
-
-        makeComponents()
-        let click = NSClickGestureRecognizer(target: self, action: #selector(handleClick(_:)))
-        textView.addGestureRecognizer(click)
-
-        scrollObserver = NotificationCenter.default.addObserver(
-            forName: NSScrollView.willStartLiveScrollNotification,
-            object: scrollView,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.view?.onUserScroll()
-            }
+        viewport.onUserScroll = { [weak self] in
+            self?.view?.onUserScroll()
         }
-        // The view reports its own sizing, so the first layout does not
-        // depend on a SwiftUI update arriving after the view gets a width.
-        textView.postsFrameChangedNotifications = true
-        frameObserver = NotificationCenter.default.addObserver(
-            forName: NSView.frameDidChangeNotification,
-            object: textView,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.handleViewLayout()
-            }
+        viewport.onTap = { [weak self] index in
+            self?.handleTap(atUTF16Index: index)
         }
-        // A live resize changes the width every frame; the full pass waits
-        // for the resize to end.
-        liveResizeObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didEndLiveResizeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            MainActor.assumeIsolated {
-                guard let self, (notification.object as? NSWindow) === self.textView.window else { return }
-                self.handleViewLayout()
-            }
+        // The first real width and every width change re-lay the visible
+        // lines; tracking recenters on the new geometry.
+        viewport.onWidthChange = { [weak self] in
+            self?.followPosition(recentered: true)
         }
-        return scrollView
-    }
-    #else
-    func makeTextView() -> UITextView {
-        let textView = SizeReportingTextView(usingTextLayoutManager: true)
-        textView.isEditable = false
-        textView.isSelectable = false
-        textView.backgroundColor = .clear
-        // The centering math reads contentInset back, so the system must not adjust it.
-        textView.contentInsetAdjustmentBehavior = .never
-        textView.delegate = self
-        self.textView = textView
-
-        makeComponents()
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
-        textView.addGestureRecognizer(tap)
-        // The view reports its own sizing, so the first layout does not
-        // depend on a SwiftUI update arriving after the view gets a width.
-        textView.onLayout = { [weak self] in
-            self?.handleViewLayout()
-        }
-        return textView
-    }
-    #endif
-
-    /// Builds the components around the created views.
-    private func makeComponents() {
-        #if canImport(AppKit)
-        geometry = TranscriptTextGeometry(textView: textView, scrollView: scrollView)
-        scroller = TranscriptScroller(scrollView: scrollView, geometry: geometry)
-        #else
-        geometry = TranscriptTextGeometry(textView: textView)
-        scroller = TranscriptScroller(textView: textView, geometry: geometry)
-        #endif
-        colorEngine = TranscriptColorEngine(textView: textView, geometry: geometry)
-        colorEngine.installValidator()
     }
 
     /// Points the search model's callbacks at this coordinator.
@@ -337,13 +229,6 @@ public final class TranscriptTextCoordinator: NSObject {
         MainActor.assumeIsolated {
             tickTimer?.invalidate()
             searchModel.cancel()
-            #if canImport(AppKit)
-            for observer in [scrollObserver, frameObserver, liveResizeObserver] {
-                if let observer {
-                    NotificationCenter.default.removeObserver(observer)
-                }
-            }
-            #endif
         }
     }
 
@@ -368,11 +253,10 @@ public final class TranscriptTextCoordinator: NSObject {
         if contentChanged {
             rebuildContent()
         }
-        let laidOut = layOutDocumentIfNeeded()
         if contentChanged || view.searchQuery != searchModel.appliedQuery || view.searchIsCaseSensitive != searchModel.appliedCaseSensitive {
             searchModel.apply(query: view.searchQuery, caseSensitive: view.searchIsCaseSensitive, text: content.plainText)
         }
-        followPosition(recentered: contentChanged || laidOut)
+        followPosition(recentered: contentChanged)
         scheduleNextTick()
     }
 
@@ -409,22 +293,12 @@ public final class TranscriptTextCoordinator: NSObject {
         scheduleNextTick()
     }
 
-    /// The insets last applied, so the per-tick update skips the setters:
-    /// re-assigning them can invalidate layout even with equal values.
-    private var appliedInsets: (top: CGFloat, bottom: CGFloat, horizontal: CGFloat)?
-
     private func applyInsets() {
         guard let view else { return }
         let insets = (top: view.topInset, bottom: view.bottomInset, horizontal: view.horizontalPadding)
         guard appliedInsets == nil || appliedInsets! != insets else { return }
         appliedInsets = insets
-        #if canImport(AppKit)
-        scrollView.contentInsets = NSEdgeInsets(top: insets.top, left: 0, bottom: insets.bottom, right: 0)
-        textView.textContainerInset = NSSize(width: insets.horizontal, height: 0)
-        #else
-        textView.contentInset = UIEdgeInsets(top: insets.top, left: 0, bottom: insets.bottom, right: 0)
-        textView.textContainerInset = UIEdgeInsets(top: 0, left: insets.horizontal, bottom: 0, right: insets.horizontal)
-        #endif
+        viewport.applyInsets(top: insets.top, bottom: insets.bottom, horizontal: insets.horizontal)
     }
 
     // MARK: - Position
@@ -443,89 +317,64 @@ public final class TranscriptTextCoordinator: NSObject {
         currentLine = line
         spokenCueIndex = cue
         requestedSeconds = requested
-        refreshColorState()
         if moved {
-            recolor(fromLine: previousLine, toLine: line)
+            refreshColorState(invalidating: linesSpan(previousLine, line))
+            viewport.refreshVisibleColors()
         }
         if view.isTracking {
             centerOnSpokenWord(forced: recentered, animated: !recentered)
         }
     }
 
-    /// Recolors the span of lines between the stored position and the given
-    /// one.
-    private func recolor(fromLine previousLine: Int?, toLine line: Int?) {
-        let oldLine = previousLine ?? 0
-        let newLine = line ?? 0
-        colorEngine.repaintColors(in: content.linesRange(from: min(oldLine, newLine), to: max(oldLine, newLine)))
+    /// The span of lines between the two positions, for invalidating the
+    /// colors the move changed.
+    private func linesSpan(_ first: Int?, _ second: Int?) -> ClosedRange<Int> {
+        let low = min(first ?? 0, second ?? 0)
+        let high = max(first ?? 0, second ?? 0)
+        return low...high
     }
 
-    /// Pushes the current position and matches into the color engine, so
-    /// the next repaint reflects them. Must run before any repaint that
-    /// should show a change.
-    private func refreshColorState() {
-        colorEngine.state = content.colorState(currentLine: currentLine, spokenCue: spokenCueIndex, requestedSeconds: requestedSeconds, matches: searchModel.matches)
+    /// Pushes the current position and matches into the painter, dropping
+    /// the cached lines the change invalidates. Must run before any repaint
+    /// that should show a change.
+    private func refreshColorState(invalidating lines: ClosedRange<Int>?) {
+        let state = content.colorState(currentLine: currentLine, spokenCue: spokenCueIndex, requestedSeconds: requestedSeconds, matches: searchModel.matches)
+        viewport.painter.setState(state, invalidating: lines)
     }
 
     // MARK: - Content
 
     /// Rebuilds the text model from the view's lines and chapters and
-    /// resets everything keyed to the old text. The eager layout pass
-    /// follows through layOutDocumentIfNeeded, and installs the new text.
+    /// resets everything keyed to the old text. The caller recenters, which
+    /// measures and places the new lines.
     private func rebuildContent() {
         guard let view else { return }
         content = TranscriptContent(sourceLines: view.lines, chapters: view.chapters)
         searchModel.reset()
-        // The layout pass installs the text. Clearing the width sends it
-        // through that pass, which runs as soon as the view has a width.
-        laidOutWidth = 0
         let seconds = projectedPosition()
         currentLine = content.lineIndex(at: seconds)
         spokenCueIndex = currentLine.flatMap { content.spokenCueIndex(inLine: $0, at: seconds) }
         requestedSeconds = view.anchor.requestedSeconds
-        refreshColorState()
+        viewport.setContent(lines: renderLines(), ranges: content.lineRanges)
+        refreshColorState(invalidating: nil)
     }
 
-    // MARK: - Eager layout
-
-    /// Lays the document out and repaints its colors, keeping the reader's
-    /// place. This is the one place the document is laid out, whether the
-    /// content or the width brought it here. Returns false when the view has
-    /// nothing to lay out into.
-    private func layOutDocument() -> Bool {
-        // Every position the previous layout produced is void, the center
-        // the scroller settled on among them.
-        scroller.resetCentering()
-        let laidOut = scroller.keepingViewport {
-            geometry.layOutDocument(content.attributedString)
-        }
-        guard laidOut else { return false }
-        colorEngine.repaintAllColors()
-        return true
-    }
-
-    /// Lays the document out when the content or the width has changed, and
-    /// only when the view has a real width: until then nothing centers, and
-    /// the view reports its first sizing through handleViewLayout. A live
-    /// window resize changes the width every frame, so the pass waits for
-    /// the end notification. Returns true when it ran, so the caller
-    /// recenters.
-    private func layOutDocumentIfNeeded() -> Bool {
-        #if canImport(AppKit)
-        if textView.inLiveResize { return false }
-        #endif
-        let width = textView.bounds.width
-        guard width > 0, width != laidOutWidth else { return false }
-        guard layOutDocument() else { return false }
-        laidOutWidth = width
-        return true
-    }
-
-    /// Runs on every layout of the view itself: the first real width and
-    /// every width change lay the document out and recenter.
-    private func handleViewLayout() {
-        if layOutDocumentIfNeeded() {
-            followPosition(recentered: true)
+    /// The content's lines ready to render: each line's text without its
+    /// trailing newline or paragraph style, under the spacing the styles
+    /// define. The metrics own the spacing, so the engine never applies
+    /// paragraph spacing on its own.
+    private func renderLines() -> [TranscriptRenderLine] {
+        let bodySpacing = TranscriptStyle.paragraph.paragraphSpacing
+        let titleSpacing = TranscriptStyle.titleParagraph.paragraphSpacingBefore
+        return content.lineRanges.enumerated().map { position, range in
+            let text = NSMutableAttributedString(attributedString: content.attributedString.attributedSubstring(from: range))
+            text.removeAttribute(.paragraphStyle, range: NSRange(location: 0, length: text.length))
+            let isTitle = content.titleChapters[position] != nil
+            return TranscriptRenderLine(
+                text: text,
+                spacingBefore: isTitle ? titleSpacing : 0,
+                spacingAfter: bodySpacing
+            )
         }
     }
 
@@ -534,10 +383,8 @@ public final class TranscriptTextCoordinator: NSObject {
     /// Installs a settled search: the colors refresh for the new matches,
     /// and a fresh query centers its landing match.
     private func installSearchOutcome(_ outcome: TranscriptSearchOutcome) {
-        refreshColorState()
-        if outcome.needsRepaint {
-            colorEngine.repaintAllColors()
-        }
+        refreshColorState(invalidating: nil)
+        viewport.refreshVisibleColors()
         if let match = outcome.landingMatch {
             center(onStorageRange: match, forced: true, animated: true)
             view?.onUserScroll()
@@ -578,29 +425,43 @@ public final class TranscriptTextCoordinator: NSObject {
         center(onStorageRange: range, forced: forced, animated: animated)
     }
 
-    /// Centers through the scroller, once the document is laid out: before
-    /// the eager pass no measured position is real. Animation is off while
-    /// another view covers the transcript, since nobody can watch the
-    /// glide.
+    /// Centers the range's visual line: a nearby target glides after its
+    /// corridor is measured, a far one jumps. An animated landing verifies
+    /// itself, since measuring during the glide can move the target.
+    /// Animation is off while another view covers the transcript, since
+    /// nobody can watch the glide.
     private func center(onStorageRange range: NSRange, forced: Bool, animated: Bool) {
-        guard laidOutWidth > 0 else { return }
-        scroller.center(onStorageRange: range, forced: forced, animated: animated && view?.isVisible != false)
+        guard let (line, local) = lineTarget(forStorage: range) else { return }
+        let glides = viewport.prepareCorridor(to: line)
+        guard let y = viewport.yMid(line: line, localRange: local) else { return }
+        let animates = animated && glides && view?.isVisible != false
+        viewport.scroller.center(onY: y, forced: forced, animated: animates) { [weak self] in
+            self?.settleCenter(line: line, localRange: local, expectedY: y)
+        }
+    }
+
+    /// Re-centers without animation when the landing drifted off the
+    /// target, which happens when measuring moved the content mid-glide.
+    private func settleCenter(line: Int, localRange: NSRange, expectedY: CGFloat) {
+        guard let y = viewport.yMid(line: line, localRange: localRange),
+              abs(y - expectedY) > 1
+        else { return }
+        viewport.scroller.center(onY: y, forced: true, animated: false)
+    }
+
+    /// The line holding the storage range, with the range in the line's
+    /// local offsets.
+    private func lineTarget(forStorage range: NSRange) -> (line: Int, localRange: NSRange)? {
+        let ranges = content.lineRanges
+        let position = ranges.partitioningIndex { $0.location + $0.length >= range.location }
+        guard position < ranges.count else { return nil }
+        let lineRange = ranges[position]
+        let location = min(max(0, range.location - lineRange.location), lineRange.length)
+        let length = min(range.length, lineRange.length - location)
+        return (position, NSRange(location: location, length: length))
     }
 
     // MARK: - Clicks
-
-    #if canImport(AppKit)
-    @objc private func handleClick(_ recognizer: NSClickGestureRecognizer) {
-        let point = recognizer.location(in: textView)
-        handleTap(atUTF16Index: textView.characterIndexForInsertion(at: point))
-    }
-    #else
-    @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
-        let point = recognizer.location(in: textView)
-        guard let position = textView.closestPosition(to: point) else { return }
-        handleTap(atUTF16Index: textView.offset(from: textView.beginningOfDocument, to: position))
-    }
-    #endif
 
     private func handleTap(atUTF16Index index: Int) {
         guard let view, let target = content.tapTarget(atUTF16Index: index) else { return }
@@ -612,23 +473,3 @@ public final class TranscriptTextCoordinator: NSObject {
         }
     }
 }
-
-#if !canImport(AppKit)
-extension TranscriptTextCoordinator: UITextViewDelegate {
-    public func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-        view?.onUserScroll()
-    }
-}
-
-/// A text view that reports each of its own layouts, so the coordinator
-/// sees the first real width and every width change without depending on
-/// a SwiftUI update.
-final class SizeReportingTextView: UITextView {
-    var onLayout: (() -> Void)?
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        onLayout?()
-    }
-}
-#endif

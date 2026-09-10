@@ -195,26 +195,6 @@ struct TranscriptContent {
         line.flatMap { lineRanges.indices.contains($0) ? lineRanges[$0].location : nil } ?? 0
     }
 
-    /// The storage range spanning the given line positions, clamped to the
-    /// known lines.
-    func linesRange(from low: Int, to high: Int) -> NSRange {
-        guard let first = lineRanges.indices.contains(low) ? lineRanges[low] : lineRanges.first,
-              let last = lineRanges.indices.contains(high) ? lineRanges[high] : lineRanges.last
-        else { return NSRange(location: 0, length: 0) }
-        return NSRange(location: first.location, length: last.location + last.length - first.location)
-    }
-
-    /// The storage range of the given line's spoken cue.
-    func spokenCueRange(line: Int?, cue: Int?) -> NSRange? {
-        guard let line, let cue, lineRanges.indices.contains(line) else { return nil }
-        let spoken = lines[line].cues[cue]
-        let text = lines[line].text
-        let readEnd = utf16Offset(ofCharacter: spoken.startPosition, in: text)
-        let spokenEnd = utf16Offset(ofCharacter: spoken.endPosition, in: text)
-        guard spokenEnd > readEnd else { return nil }
-        return NSRange(location: lineRanges[line].location + readEnd, length: spokenEnd - readEnd)
-    }
-
     /// The storage range centering targets: the spoken cue, or the current
     /// line's start before its first cue.
     func spokenTargetRange(line: Int?, cue: Int?) -> NSRange? {
