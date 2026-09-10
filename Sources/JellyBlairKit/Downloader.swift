@@ -21,11 +21,29 @@ final class Downloader: NSObject, URLSessionDownloadDelegate {
     }
 
     func start(_ request: URLRequest) {
-        let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+        let session = URLSession(configuration: Self.makeConfiguration(), delegate: self, delegateQueue: nil)
         self.session = session
         let task = session.downloadTask(with: request)
         self.task = task
         task.resume()
+    }
+
+    /// A background configuration on iOS, so the system carries the transfer
+    /// while the app is suspended or the phone is locked. The identifier is
+    /// unique for each download, since the system allows one live session
+    /// for each identifier. The Mac app never suspends, so it keeps an
+    /// in-process session.
+    private static func makeConfiguration() -> URLSessionConfiguration {
+        #if os(iOS)
+        let identifier = (Bundle.main.bundleIdentifier ?? "JellyBlair") + ".download." + UUID().uuidString
+        let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
+        // The app reports finished downloads only while it runs, so a
+        // finished transfer must not relaunch it.
+        configuration.sessionSendsLaunchEvents = false
+        return configuration
+        #else
+        return .default
+        #endif
     }
 
     func cancel() {
@@ -59,11 +77,13 @@ final class Downloader: NSObject, URLSessionDownloadDelegate {
         }
     }
 
+    /// Ends the session on every outcome. The success callback has already
+    /// run from didFinishDownloadingTo, so only a failure reports here.
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        session.invalidateAndCancel()
         guard error != nil else { return }
         Task { @MainActor [onFinish] in
             onFinish(false)
         }
-        session.invalidateAndCancel()
     }
 }
