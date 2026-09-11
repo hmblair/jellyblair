@@ -411,17 +411,17 @@ public final class PlayerController {
         #endif
     }
 
-    /// Attaches the tap exactly while the bars can be on screen and the
-    /// item's audio track is known, and detaches it otherwise. A detached
-    /// tap costs the audio render thread nothing, which matters over hours
-    /// of background playback.
+    /// Attaches the tap once per item and captures exactly while the bars
+    /// can be on screen. The mix stays attached either way: replacing it
+    /// mid-play rebuilds the item's audio graph and audibly interrupts
+    /// playback, so only the capture flag changes with visibility.
     private func syncAudioMeterTap() {
         guard let item = player?.currentItem else { return }
-        if canShowMeter, item.audioMix == nil, let meterTrack, let audioMix = audioMeter.makeAudioMix(for: meterTrack) {
+        if item.audioMix == nil, let meterTrack, let audioMix = audioMeter.makeAudioMix(for: meterTrack) {
             item.audioMix = audioMix
-        } else if !canShowMeter, item.audioMix != nil {
-            // See closeCurrentBook: the tap detaches while the item is alive.
-            item.audioMix = nil
+        }
+        audioMeter.setCapturing(canShowMeter)
+        if !canShowMeter {
             audioMeter.reset()
         }
     }

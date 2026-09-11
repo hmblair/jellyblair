@@ -49,6 +49,10 @@ public final class AudioLevelMeter {
     private var capturedSamples = [Float](repeating: 0, count: AudioLevelMeter.fftSize)
     private var hasCapturedSamples = false
 
+    /// False while nothing can display the bars; each capture then returns
+    /// at once.
+    private var isCapturing = true
+
     /// True while the prepared stream is 32-bit float PCM, the only format
     /// the tap can read. The tap's prepare callback writes it.
     private var formatIsFloat32 = false
@@ -103,6 +107,14 @@ public final class AudioLevelMeter {
         bands = [Float](repeating: 0, count: Self.bandCount)
         targetBands = [Float](repeating: 0, count: Self.bandCount)
         lastReadTime = nil
+    }
+
+    /// Turns capturing on or off.
+    @MainActor
+    func setCapturing(_ capturing: Bool) {
+        lock.lock()
+        isCapturing = capturing
+        lock.unlock()
     }
 
     // MARK: - Tap plumbing
@@ -167,7 +179,7 @@ public final class AudioLevelMeter {
     /// render thread, so it checks the buffer and copies it, nothing more.
     private func capture(bufferList: UnsafeMutablePointer<AudioBufferList>, frameCount: Int) {
         lock.lock()
-        let readable = formatIsFloat32
+        let readable = formatIsFloat32 && isCapturing
         lock.unlock()
         guard readable else { return }
         let buffers = UnsafeMutableAudioBufferListPointer(bufferList)
