@@ -20,9 +20,7 @@ public struct BookView: View {
     @Environment(BookCatalog.self) private var catalog
     @Environment(ConnectionMonitor.self) private var connection
 
-    @Environment(\.openAuthor) private var openAuthor
-    @Environment(\.openNarrator) private var openNarrator
-    @Environment(\.openGenre) private var openGenre
+    @Environment(\.openBookGroup) private var openBookGroup
 
     @Environment(\.layoutMetrics) private var metrics
 
@@ -230,24 +228,13 @@ public struct BookView: View {
 
     private var metadataColumn: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if !book.authors.isEmpty {
-                metadataLine(icon: authorIconName) {
-                    NameListLine(names: book.authors, open: openAuthor)
-                }
-            }
-            if !book.narrators.isEmpty {
-                metadataLine(icon: narratorIconName) {
-                    NameListLine(names: book.narrators, open: openNarrator)
-                }
-            }
+            groupLine(.author)
+            groupLine(.narrator)
+            groupLine(.publisher)
             if let year = book.productionYear {
                 metadataLine(icon: yearIconName) { Text(verbatim: String(year)) }
             }
-            if let genres = book.genres, !genres.isEmpty {
-                metadataLine(icon: genreIconName) {
-                    NameListLine(names: genres, open: openGenre)
-                }
-            }
+            groupLine(.genre)
             metadataLine(icon: durationIconName) { lengthLine }
             if let kbps = book.bitrateKbps {
                 metadataLine(icon: "waveform") { Text("\(kbps) kbps") }
@@ -255,6 +242,19 @@ public struct BookView: View {
             downloadRow
         }
         .font(metrics.bookScreen.lineFont)
+    }
+
+    /// A metadata row for one grouping kind, with each name navigating to
+    /// that name's books. The row disappears when the book has no names of
+    /// the kind.
+    @ViewBuilder
+    private func groupLine(_ kind: BookGroup.Kind) -> some View {
+        let names = kind.names(of: book)
+        if !names.isEmpty {
+            metadataLine(icon: kind.iconName) {
+                NameListLine(kind: kind, names: names, open: openBookGroup)
+            }
+        }
     }
 
     /// A metadata row: a small dimmed icon beside its text.
@@ -480,6 +480,7 @@ private struct OverflowScrollLine<Content: View>: View {
 /// click-and-hover target navigating to that name's books when the shell
 /// provides a destination.
 private struct NameListLine: View {
+    let kind: BookGroup.Kind
     let names: [String]
     let open: OpenBookGroupAction?
 
@@ -508,7 +509,7 @@ private struct NameListLine: View {
     private func nameView(_ name: String) -> some View {
         if let open {
             Button {
-                open(name)
+                open(kind, name)
             } label: {
                 Text(name)
                     .opacity(hoveredName == name ? 0.6 : 1)
@@ -531,21 +532,19 @@ private struct NameListLine: View {
 /// Navigates to a group's books; injected per shell, since a regular
 /// layout scopes its list in place and a compact one pushes a screen.
 public struct OpenBookGroupAction {
-    private let handler: (String) -> Void
+    private let handler: (BookGroup.Kind, String) -> Void
 
-    public init(_ handler: @escaping (String) -> Void) {
+    public init(_ handler: @escaping (BookGroup.Kind, String) -> Void) {
         self.handler = handler
     }
 
-    public func callAsFunction(_ authorName: String) {
-        handler(authorName)
+    public func callAsFunction(_ kind: BookGroup.Kind, _ name: String) {
+        handler(kind, name)
     }
 }
 
 public extension EnvironmentValues {
-    @Entry var openAuthor: OpenBookGroupAction?
-    @Entry var openNarrator: OpenBookGroupAction?
-    @Entry var openGenre: OpenBookGroupAction?
+    @Entry var openBookGroup: OpenBookGroupAction?
 }
 
 /// The actions on one book, shared by the book screen's title-bar menu and

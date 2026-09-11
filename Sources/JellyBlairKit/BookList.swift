@@ -1,10 +1,12 @@
 import Foundation
 
-/// A named shelf of books: one author's, one narrator's, or one genre's.
+/// A named shelf of books: one author's, one narrator's, one publisher's,
+/// or one genre's.
 public struct BookGroup: Identifiable, Hashable {
     public enum Kind: Hashable {
         case author
         case narrator
+        case publisher
         case genre
 
         /// The symbol for this role.
@@ -14,8 +16,24 @@ public struct BookGroup: Identifiable, Hashable {
                 return authorIconName
             case .narrator:
                 return narratorIconName
+            case .publisher:
+                return publisherIconName
             case .genre:
                 return genreIconName
+            }
+        }
+
+        /// The book's names for this grouping kind.
+        public func names(of book: Book) -> [String] {
+            switch self {
+            case .author:
+                return book.authors
+            case .narrator:
+                return book.narrators
+            case .publisher:
+                return book.publishers
+            case .genre:
+                return book.genres ?? []
             }
         }
     }

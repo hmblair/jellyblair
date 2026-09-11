@@ -166,22 +166,9 @@ public final class LibraryViewModel {
     /// The named group of one kind, built on demand from the book list, or
     /// nil when no book carries the name. Books keep the server's title order.
     public func group(ofKind kind: BookGroup.Kind, named name: String) -> BookGroup? {
-        let matching = books.filter { Self.names(of: $0, for: kind).contains(name) }
+        let matching = books.filter { kind.names(of: $0).contains(name) }
         guard !matching.isEmpty else { return nil }
         return BookGroup(name: name, kind: kind, books: matching)
-    }
-
-    /// The book's names for one grouping kind: its authors, narrators, or
-    /// genres.
-    private static func names(of book: Book, for kind: BookGroup.Kind) -> [String] {
-        switch kind {
-        case .author:
-            return book.authors
-        case .narrator:
-            return book.narrators
-        case .genre:
-            return book.genres ?? []
-        }
     }
 
     /// The list to show: one group's books under the group's heading when a

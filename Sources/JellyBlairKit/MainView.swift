@@ -40,9 +40,7 @@ public struct MainView: View {
                 guard reachable, scope.library.errorMessage != nil else { return }
                 Task { await scope.library.load() }
             }
-            .environment(\.openAuthor, OpenBookGroupAction { openGroup(ofKind: .author, named: $0) })
-            .environment(\.openNarrator, OpenBookGroupAction { openGroup(ofKind: .narrator, named: $0) })
-            .environment(\.openGenre, OpenBookGroupAction { openGroup(ofKind: .genre, named: $0) })
+            .environment(\.openBookGroup, OpenBookGroupAction { openGroup(ofKind: $0, named: $1) })
             .environment(scope.library)
             .environment(scope.player)
             .environment(scope.connection)
