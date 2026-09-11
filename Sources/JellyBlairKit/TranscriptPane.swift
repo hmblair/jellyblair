@@ -9,12 +9,17 @@ struct TranscriptPane: View {
     let chapters: [Chapter]
     let isLoaded: Bool
     let canStartPlayback: Bool
-    /// The pane stays alive while hidden so the transcript keeps tracking
-    /// the narration, and switching to it opens on the current word.
+    /// The pane stays alive while hidden, but its transcript sleeps and
+    /// catches up in one step when shown, so switching to it still opens
+    /// on the current word.
     let isVisible: Bool
 
     @Environment(PlayerController.self) private var player
     @Environment(\.layoutMetrics) private var metrics
+
+    /// The transcript sleeps with the scene, which on the phone includes a
+    /// locked screen during background playback.
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var query = ""
     @State private var isCaseSensitive = false
@@ -65,6 +70,7 @@ struct TranscriptPane: View {
             anchor: anchor,
             isTracking: isTracking,
             isVisible: isVisible,
+            isSceneActive: scenePhase == .active,
             searchQuery: query,
             searchIsCaseSensitive: isCaseSensitive,
             topInset: floatingBarClearance,

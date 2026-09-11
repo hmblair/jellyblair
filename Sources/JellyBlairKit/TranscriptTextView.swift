@@ -66,9 +66,13 @@ public struct TranscriptTextView {
     let anchor: PlaybackAnchor
     /// True while the view keeps the spoken word centered.
     let isTracking: Bool
-    /// False while another view covers the transcript; centering then lands
-    /// without animation, since nobody can watch the glide.
+    /// False while another view covers the transcript. The boundary ticks
+    /// stop, and a centering that does land does so without animation,
+    /// since nobody can watch the glide.
     let isVisible: Bool
+    /// False while the scene is inactive, such as behind a locked screen
+    /// during background playback. The boundary ticks stop with it.
+    let isSceneActive: Bool
     /// The phrase whose occurrences color as search matches.
     let searchQuery: String
     /// True when the search matches case exactly.
@@ -93,6 +97,7 @@ public struct TranscriptTextView {
         anchor: PlaybackAnchor,
         isTracking: Bool,
         isVisible: Bool,
+        isSceneActive: Bool,
         searchQuery: String,
         searchIsCaseSensitive: Bool,
         topInset: CGFloat,
@@ -108,6 +113,7 @@ public struct TranscriptTextView {
         self.anchor = anchor
         self.isTracking = isTracking
         self.isVisible = isVisible
+        self.isSceneActive = isSceneActive
         self.searchQuery = searchQuery
         self.searchIsCaseSensitive = searchIsCaseSensitive
         self.topInset = topInset
@@ -187,6 +193,10 @@ public final class TranscriptTextCoordinator: NSObject {
     /// Wakes the coordinator at the next line or cue boundary.
     private var tickTimer: Timer?
 
+    /// The tick gate's value at the last update, so the update that
+    /// reopens it runs one forced catch-up.
+    private var couldTick = false
+
     /// The insets last applied, so the per-tick update skips the setters.
     private var appliedInsets: (top: CGFloat, bottom: CGFloat, horizontal: CGFloat)?
 
@@ -256,8 +266,21 @@ public final class TranscriptTextCoordinator: NSObject {
         if contentChanged || view.searchQuery != searchModel.appliedQuery || view.searchIsCaseSensitive != searchModel.appliedCaseSensitive {
             searchModel.apply(query: view.searchQuery, caseSensitive: view.searchIsCaseSensitive, text: content.plainText)
         }
-        followPosition(recentered: contentChanged)
+        // Waking catches up in one step: the display state the skipped
+        // ticks would have maintained projects from the anchor.
+        let woke = canTick && !couldTick
+        couldTick = canTick
+        followPosition(recentered: contentChanged || woke)
         scheduleNextTick()
+    }
+
+    /// True while a boundary tick has an audience: the scene is active
+    /// and the pane is visible. No other state needs ticks, because the
+    /// position projects from the anchor and one catch-up on waking
+    /// rebuilds the display.
+    private var canTick: Bool {
+        guard let view else { return false }
+        return view.isSceneActive && view.isVisible
     }
 
     /// The listening position the anchor projects to now.
@@ -268,11 +291,13 @@ public final class TranscriptTextCoordinator: NSObject {
     /// Delay after each boundary, so the projected position covers the word.
     private static let tickSlack: TimeInterval = 0.005
 
-    /// Schedules the wakeup for the next boundary the anchor will cross. A
-    /// still anchor, or one past the last boundary, leaves no timer.
+    /// Schedules the wakeup for the next boundary the anchor will cross.
+    /// A closed tick gate, a still anchor, or one past the last boundary
+    /// leaves no timer.
     private func scheduleNextTick() {
         tickTimer?.invalidate()
         tickTimer = nil
+        guard canTick else { return }
         guard let anchor = view?.anchor, anchor.rate > 0,
               let next = content.nextBoundarySeconds(after: anchor.position(at: Date()), currentLine: currentLine),
               let date = anchor.date(forPosition: next)

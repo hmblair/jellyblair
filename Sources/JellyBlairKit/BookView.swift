@@ -141,8 +141,8 @@ public struct BookView: View {
     #endif
 
     /// Both panes stay alive; the toolbar toggle changes only which one
-    /// shows. The hidden transcript keeps tracking the narration, so
-    /// switching to it opens on the current word without any repositioning.
+    /// shows. The hidden transcript sleeps and catches up in one step when
+    /// shown, so switching to it still opens on the current word.
     /// Each pane carries its own search bar and tracking button.
     private var listSection: some View {
         ZStack {
