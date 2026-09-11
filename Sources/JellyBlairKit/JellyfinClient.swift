@@ -25,6 +25,17 @@ public final class JellyfinClient {
     /// Called when the server rejects the stored token mid-session.
     var onUnauthorized: (() -> Void)?
 
+    /// Called after each request with whether the server answered it. A
+    /// transport failure is no answer; any HTTP response is an answer,
+    /// whatever its status. The connection monitor reads this as its
+    /// reachability evidence.
+    var onRequestOutcome: (@Sendable (Bool) -> Void)?
+
+    /// Asks whether playback reports may touch the network. While it says
+    /// no, a report only records its position for the reconnect flush.
+    /// Absent, reports always send.
+    var reportGate: (@Sendable () async -> Bool)?
+
     /// The last playback position whose report failed to send.
     /// Kept until a later report for the same book succeeds, then flushed on reconnect.
     private var unsentProgress: (bookID: String, positionSeconds: Double)?
@@ -75,7 +86,15 @@ public final class JellyfinClient {
     }
 
     private func send(_ request: URLRequest) async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            onRequestOutcome?(false)
+            throw error
+        }
+        onRequestOutcome?(true)
         guard let http = response as? HTTPURLResponse else {
             throw JellyfinError.badStatus(-1)
         }
@@ -253,8 +272,13 @@ public final class JellyfinClient {
     }
 
     /// Sends one report, and keeps its position when the send fails so that
-    /// a later report can carry it.
+    /// a later report can carry it. While the gate says the server is
+    /// unreachable, the position is kept without a network attempt.
     private func sendPlaybackReport(_ request: URLRequest, bookID: String, positionSeconds: Double) async {
+        guard await reportGate?() != false else {
+            unsentProgress = (bookID: bookID, positionSeconds: positionSeconds)
+            return
+        }
         do {
             _ = try await send(request)
             if unsentProgress?.bookID == bookID {
@@ -295,8 +319,14 @@ public final class JellyfinClient {
         ])
     }
 
+    /// Seconds a report waits before giving up. Reports are fire-and-forget,
+    /// so a dead server must not hold their tasks for the default minute.
+    private static let reportTimeout: TimeInterval = 10
+
     private func makeReportRequest(path: String, body: [String: Any]) -> URLRequest {
-        makeRequest(path: path, method: "POST", body: try? JSONSerialization.data(withJSONObject: body))
+        var request = makeRequest(path: path, method: "POST", body: try? JSONSerialization.data(withJSONObject: body))
+        request.timeoutInterval = Self.reportTimeout
+        return request
     }
 
     private func positionTicks(_ seconds: Double) -> Int64 {
