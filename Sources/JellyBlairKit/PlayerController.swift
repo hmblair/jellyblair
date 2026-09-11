@@ -116,6 +116,10 @@ public final class PlayerController {
     /// Seconds between progress reports to the server.
     private static let progressReportInterval: TimeInterval = 10
 
+    /// Slack on the report timer. A report has no deadline, so its fire
+    /// can ride wakeups that happen anyway instead of forcing its own.
+    private static let progressReportTolerance: TimeInterval = 1
+
     /// Seconds to wait for a new player item before declaring the open failed.
     private static let readyTimeout: TimeInterval = 8
 
@@ -464,11 +468,16 @@ public final class PlayerController {
             #endif
             if let book, !hasActiveSession {
                 hasActiveSession = true
-                startProgressReports(for: book)
+                reportSessionStarted(for: book)
             }
+            startProgressReports()
         } else {
             reanchorFromPlayer()
             audioMeter.reset()
+            // The timer stops with playback: one final report below carries
+            // the settled position, and a still position gives the server
+            // nothing new after that.
+            stopProgressReports()
             reportProgressNow()
         }
         syncNowPlaying()
@@ -503,6 +512,10 @@ public final class PlayerController {
         // end must re-assert it to keep the playing state truthful.
         if isPlaying {
             player?.rate = Float(playbackSpeed)
+        } else {
+            // No timer runs while paused, so a paused seek reports its new
+            // position itself.
+            reportProgressNow()
         }
         reanchorFromPlayer()
         syncNowPlaying()
@@ -756,15 +769,24 @@ public final class PlayerController {
 
     // MARK: - Progress reports
 
-    private func startProgressReports(for book: Book) {
+    /// Opens the reporting session on the server, once per session.
+    private func reportSessionStarted(for book: Book) {
         Task {
             await client.reportPlaybackStarted(bookID: book.id, positionSeconds: currentTime)
         }
-        progressReportTimer = Timer.scheduledTimer(withTimeInterval: Self.progressReportInterval, repeats: true) { [weak self] _ in
+    }
+
+    /// Runs the periodic report. Playback starts it and pause stops it,
+    /// so a paused book costs no wakeups and no requests.
+    private func startProgressReports() {
+        guard progressReportTimer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.progressReportInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.reportProgressNow()
             }
         }
+        timer.tolerance = Self.progressReportTolerance
+        progressReportTimer = timer
     }
 
     private func stopProgressReports() {
