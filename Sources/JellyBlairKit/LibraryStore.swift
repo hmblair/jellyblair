@@ -8,12 +8,10 @@ struct LibraryStore {
     }
 
     func load() -> [Book] {
-        guard let data = try? Data(contentsOf: fileURL) else { return [] }
-        return (try? JSONDecoder().decode([Book].self, from: data)) ?? []
+        readCacheFile([Book].self, from: fileURL, label: "library") ?? []
     }
 
     func save(_ books: [Book]) {
-        guard let data = try? JSONEncoder().encode(books) else { return }
-        try? data.write(to: fileURL)
+        writeCacheFile(books, to: fileURL, label: "library")
     }
 }

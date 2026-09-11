@@ -88,6 +88,7 @@ public final class BookModel: Identifiable {
     /// Downloads the book's file for offline playback.
     public func download() {
         guard downloadState == .notDownloaded else { return }
+        Log.downloads.notice("Downloading \(self.book.name, privacy: .public) (\(self.book.id, privacy: .public))")
         downloadState = .downloading(nil)
         downloadErrorMessage = nil
         let downloader = Downloader(
@@ -103,9 +104,13 @@ public final class BookModel: Identifiable {
                 self.releaseAsset()
                 switch outcome {
                 case .succeeded:
+                    Log.downloads.notice("Downloaded \(self.book.name, privacy: .public)")
                     self.downloadState = .downloaded
                     self.onDownloadCompleted?()
                 case .failed(let message):
+                    if let message {
+                        Log.downloads.error("Download of \(self.book.name, privacy: .public) failed: \(message, privacy: .public)")
+                    }
                     self.downloadState = .notDownloaded
                     self.downloadErrorMessage = message
                 }

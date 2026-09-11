@@ -157,6 +157,11 @@ public final class ConnectionMonitor {
         let reachable = hasNetworkPath && serverAnswers
         if reachable != isServerReachable {
             isServerReachable = reachable
+            if reachable {
+                Log.session.notice("The server is reachable again")
+            } else {
+                Log.session.warning("The server is unreachable (network path: \(self.hasNetworkPath), server answers: \(self.serverAnswers))")
+            }
         }
         syncProbing()
     }

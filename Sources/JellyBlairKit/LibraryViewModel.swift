@@ -43,6 +43,7 @@ public final class LibraryViewModel {
         } catch {
             // The cached snapshot stands; the overlay only shows the error
             // when there are no books at all.
+            Log.network.warning("The library refresh failed: \(error.localizedDescription, privacy: .public)")
             errorMessage = error.localizedDescription
         }
         isLoading = false

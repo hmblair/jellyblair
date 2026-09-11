@@ -31,7 +31,11 @@ enum DataDirectory {
 
     /// Creates the directory if it is absent, then returns it.
     private static func created(_ url: URL) -> URL {
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        } catch {
+            Log.storage.error("Cannot create \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+        }
         return url
     }
 

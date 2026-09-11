@@ -42,8 +42,17 @@ public final class CoverImageLoader {
             let (data, response) = try? await URLSession.shared.data(from: url),
             (response as? HTTPURLResponse)?.statusCode == 200,
             let image = PlatformImage(data: data)
-        else { return nil }
-        try? data.write(to: fileURL(for: bookID))
+        else {
+            // Info, not warning: every visible cover retries while offline,
+            // and the persisted log must not fill with the same line.
+            Log.network.info("Cannot download the cover for \(bookID, privacy: .public)")
+            return nil
+        }
+        do {
+            try data.write(to: fileURL(for: bookID))
+        } catch {
+            Log.storage.error("Cannot write the cover cache for \(bookID, privacy: .public): \(String(describing: error), privacy: .public)")
+        }
         memory[bookID] = image
         return image
     }

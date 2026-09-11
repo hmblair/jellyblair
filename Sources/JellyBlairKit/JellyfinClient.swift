@@ -85,6 +85,12 @@ public final class JellyfinClient {
         return request
     }
 
+    /// The request's route for log lines: the method and the path, without
+    /// the query, whose values add nothing to a failure.
+    private static func route(of request: URLRequest) -> String {
+        "\(request.httpMethod ?? "GET") \(request.url?.path ?? "?")"
+    }
+
     private func send(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
@@ -92,6 +98,7 @@ public final class JellyfinClient {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
             onRequestOutcome?(false)
+            Log.network.error("\(Self.route(of: request), privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             throw error
         }
         onRequestOutcome?(true)
@@ -99,19 +106,29 @@ public final class JellyfinClient {
             throw JellyfinError.badStatus(-1)
         }
         if http.statusCode == 401 {
+            Log.network.error("\(Self.route(of: request), privacy: .public) returned 401")
             if accessToken != nil {
                 onUnauthorized?()
             }
             throw JellyfinError.unauthorized
         }
         guard (200...299).contains(http.statusCode) else {
+            Log.network.error("\(Self.route(of: request), privacy: .public) returned \(http.statusCode)")
             throw JellyfinError.badStatus(http.statusCode)
         }
         return data
     }
 
+    /// Decodes a server response, logging what failed to decode; the
+    /// decoding error names the offending key, which the caller's
+    /// localized description would hide.
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        try JSONDecoder().decode(type, from: data)
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            Log.network.error("Cannot decode \(String(describing: type), privacy: .public): \(String(describing: error), privacy: .public)")
+            throw error
+        }
     }
 
     // MARK: - Health
@@ -285,6 +302,7 @@ public final class JellyfinClient {
                 unsentProgress = nil
             }
         } catch {
+            Log.playback.warning("A playback report failed; keeping position \(positionSeconds, format: .fixed(precision: 1))s for a later send")
             unsentProgress = (bookID: bookID, positionSeconds: positionSeconds)
         }
     }

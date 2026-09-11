@@ -6,6 +6,7 @@ import UIKit
 import AVFoundation
 import Foundation
 import Observation
+import os
 
 /// A playback position fixed to a wall-clock moment, with the rate carrying
 /// it forward. Displays project the current position from it, so playback
@@ -75,6 +76,9 @@ public final class PlayerController {
     private var timeControlObservation: NSKeyValueObservation?
     private var timebaseRateObserver: NSObjectProtocol?
     private var playbackEndObserver: NSObjectProtocol?
+    private var playbackFailedToEndObserver: NSObjectProtocol?
+    private var stallObserver: NSObjectProtocol?
+    private var errorLogObserver: NSObjectProtocol?
     private var terminationObserver: NSObjectProtocol?
     private var progressReportTimer: Timer?
 
@@ -209,6 +213,7 @@ public final class PlayerController {
             Task { await self?.adoptDownloadedFile() }
         }
         book = newBook
+        Log.playback.notice("Opening \(newBook.name, privacy: .public) (\(newBook.id, privacy: .public)) at \(startAtSeconds ?? model.resumePositionSeconds, format: .fixed(precision: 1))s")
         playbackErrorMessage = nil
         isReady = false
         duration = newBook.runTimeSeconds
@@ -223,6 +228,7 @@ public final class PlayerController {
         player = newPlayer
         observeFailure(of: item)
         observePlaybackEnd(of: item)
+        observePlaybackTrouble(of: item)
         observePlayingState(of: newPlayer)
 
         let ready = await waitUntilReady(item)
@@ -289,6 +295,7 @@ public final class PlayerController {
 
     private func closeCurrentBook() async {
         guard let book else { return }
+        Log.playback.notice("Closing \(book.name, privacy: .public) at \(self.currentTime, format: .fixed(precision: 1))s")
         player?.pause()
         // Detaches the meter's tap before the item goes away. Releasing an
         // item while the render thread can still be inside the tap is a
@@ -334,6 +341,7 @@ public final class PlayerController {
         let item = await preparedItem(from: asset, near: currentTime)
         guard swapStillApplies(generation, player) else { return }
 
+        Log.playback.notice("Adopting the downloaded file at \(self.currentTime, format: .fixed(precision: 1))s")
         // Muted until the seek below lands, so the swap is silence, not a repeat.
         let volume = player.volume
         defer { player.volume = volume }
@@ -376,6 +384,7 @@ public final class PlayerController {
         player.replaceCurrentItem(with: item)
         observeFailure(of: item)
         observePlaybackEnd(of: item)
+        observePlaybackTrouble(of: item)
     }
 
     /// False once another book opened or the player was rebuilt mid-swap.
@@ -716,6 +725,58 @@ public final class PlayerController {
         }
     }
 
+    /// Observes the item's mid-play trouble signals: the failure that ends
+    /// playback, the transient stall, and the stream's error log. Without
+    /// these a dying item looks like a spontaneous pause.
+    private func observePlaybackTrouble(of item: AVPlayerItem) {
+        observePlaybackFailureToEnd(of: item)
+        observeStall(of: item)
+        observeErrorLog(of: item)
+    }
+
+    /// The item cannot continue: the error surfaces with the Retry button.
+    /// The message is read on the posting thread; a Notification cannot
+    /// cross to the main actor.
+    private func observePlaybackFailureToEnd(of item: AVPlayerItem) {
+        playbackFailedToEndObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.failedToPlayToEndTimeNotification,
+            object: item,
+            queue: nil
+        ) { [weak self] notification in
+            let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
+            let message = error?.localizedDescription ?? "Playback failed."
+            Task { @MainActor in
+                self?.handleMidPlaybackFailure(message)
+            }
+        }
+    }
+
+    /// A stall is transient rebuffering the player recovers from itself, so
+    /// it is only logged.
+    private func observeStall(of item: AVPlayerItem) {
+        stallObserver = observeMediaNotification(AVPlayerItem.playbackStalledNotification, from: item) { player in
+            Log.playback.warning("Playback stalled at \(player.currentTime, format: .fixed(precision: 1))s")
+        }
+    }
+
+    /// Streaming errors the player absorbs, such as failed range requests,
+    /// land in the item's error log; each new entry is logged.
+    private func observeErrorLog(of item: AVPlayerItem) {
+        errorLogObserver = observeMediaNotification(AVPlayerItem.newErrorLogEntryNotification, from: item) { player in
+            guard let event = player.player?.currentItem?.errorLog()?.events.last else { return }
+            Log.playback.warning("Stream error at \(player.currentTime, format: .fixed(precision: 1))s: status \(event.errorStatusCode), domain \(event.errorDomain, privacy: .public), comment \(event.errorComment ?? "none", privacy: .public)")
+        }
+    }
+
+    /// A failure after playback started. The position is recorded first, so
+    /// the Retry button resumes where the failure hit.
+    private func handleMidPlaybackFailure(_ message: String) {
+        if let book {
+            recordPosition(currentTime, for: book.id)
+        }
+        handlePlaybackFailure(message)
+    }
+
     private func removeObservers() {
         removeChapterBoundaryObserver()
         timeControlObservation?.invalidate()
@@ -736,10 +797,17 @@ public final class PlayerController {
             NotificationCenter.default.removeObserver(playbackEndObserver)
         }
         playbackEndObserver = nil
+        for observer in [playbackFailedToEndObserver, stallObserver, errorLogObserver].compactMap({ $0 }) {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        playbackFailedToEndObserver = nil
+        stallObserver = nil
+        errorLogObserver = nil
     }
 
     private func handlePlaybackFailure(_ message: String) {
         guard playbackErrorMessage == nil else { return }
+        Log.playback.error("Playback failed at \(self.currentTime, format: .fixed(precision: 1))s: \(message, privacy: .public)")
         playbackErrorMessage = message
         updatePlayingState(false)
         isReady = false
@@ -754,6 +822,7 @@ public final class PlayerController {
 
     private func handlePlaybackEnded() {
         guard let book else { return }
+        Log.playback.notice("Played \(book.name, privacy: .public) to its end")
         updatePlayingState(false)
         setAnchor(position: duration, rate: 0)
         recordPosition(duration, for: book.id)

@@ -30,14 +30,17 @@ public final class AppSession {
 
     public func start() async {
         guard let stored = store.loadStoredSession() else {
+            Log.session.notice("No stored session; showing the login form")
             state = .needsLogin
             return
         }
         let client = JellyfinClient(serverURL: stored.serverURL, accessToken: stored.token)
         switch await client.verifyStoredToken() {
         case .valid, .unreachable:
+            Log.session.notice("Restored the session for \(stored.serverURL.host() ?? "?", privacy: .public)")
             activate(client)
         case .invalid:
+            Log.session.warning("The server rejected the stored token; sign-in required")
             store.clearCredentials()
             loginErrorMessage = "Your session expired. Sign in again."
             state = .needsLogin
@@ -66,6 +69,8 @@ public final class AppSession {
             loginErrorMessage = nil
             activate(client)
         } catch {
+            // The message shown is simplified; the log keeps the raw error.
+            Log.session.error("Login failed: \(String(describing: error), privacy: .public)")
             loginErrorMessage = Self.loginErrorText(for: error)
         }
     }
@@ -91,6 +96,7 @@ public final class AppSession {
     /// out a session that was just re-established.
     private func handleUnauthorized(from client: JellyfinClient) {
         guard case .signedIn(let current) = state, current === client else { return }
+        Log.session.warning("The server rejected the session token; signing out")
         store.clearCredentials()
         loginErrorMessage = "Your session expired. Sign in again."
         state = .needsLogin

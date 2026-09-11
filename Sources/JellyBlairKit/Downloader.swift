@@ -86,7 +86,11 @@ final class Downloader: NSObject, URLSessionDownloadDelegate {
             return .failed(message: "The server returned status \(status).")
         }
         try? FileManager.default.removeItem(at: destination)
-        guard (try? FileManager.default.moveItem(at: location, to: destination)) != nil else {
+        do {
+            try FileManager.default.moveItem(at: location, to: destination)
+        } catch {
+            // The user-facing message stays short; the log keeps the cause.
+            Log.downloads.error("Cannot move the finished download into place: \(String(describing: error), privacy: .public)")
             return .failed(message: "Cannot save the file.")
         }
         return .succeeded

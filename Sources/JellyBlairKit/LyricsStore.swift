@@ -9,13 +9,11 @@ struct LyricsStore {
     }
 
     func load(bookID: String) -> [LyricLine] {
-        guard let data = try? Data(contentsOf: fileURL(for: bookID)) else { return [] }
-        return (try? JSONDecoder().decode([LyricLine].self, from: data)) ?? []
+        readCacheFile([LyricLine].self, from: fileURL(for: bookID), label: "transcript") ?? []
     }
 
     func save(_ lines: [LyricLine], for bookID: String) {
-        guard let data = try? JSONEncoder().encode(lines) else { return }
-        try? data.write(to: fileURL(for: bookID))
+        writeCacheFile(lines, to: fileURL(for: bookID), label: "transcript")
     }
 
     func delete(bookID: String) {
