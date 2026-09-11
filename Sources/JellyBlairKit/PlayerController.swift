@@ -83,6 +83,10 @@ public final class PlayerController {
     /// True when the current interruption cut off live playback, which is
     /// what makes resuming at its end appropriate.
     private var wasPlayingBeforeInterruption = false
+    /// True while the app is in the background, where the meter's tap is
+    /// detached; see syncAudioMeterTap.
+    private var isAppInBackground = false
+    private var lifecycleObservers: [NSObjectProtocol] = []
     #endif
 
     /// Incremented on each open. Work that resumes from an await under a stale
@@ -123,6 +127,10 @@ public final class PlayerController {
     /// Live band levels of the playing audio, for the now-playing bars.
     public let audioMeter = AudioLevelMeter()
 
+    /// The audio track of the item the meter taps, kept so the tap can
+    /// re-attach when the app returns to the foreground.
+    private var meterTrack: AVAssetTrack?
+
     public init(client: JellyfinClient) {
         self.client = client
         let storedSpeed = UserDefaults.standard.double(forKey: Self.playbackSpeedDefaultsKey)
@@ -130,6 +138,7 @@ public final class PlayerController {
         observeAppTermination()
         #if os(iOS)
         observeAudioSessionInterruptions()
+        observeAppLifecycle()
         #endif
         nowPlaying.attach(to: self)
     }
@@ -146,6 +155,9 @@ public final class PlayerController {
             #if os(iOS)
             if let interruptionObserver {
                 NotificationCenter.default.removeObserver(interruptionObserver)
+            }
+            for observer in lifecycleObservers {
+                NotificationCenter.default.removeObserver(observer)
             }
             #endif
         }
@@ -221,9 +233,7 @@ public final class PlayerController {
 
         let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first
         guard generation == openGeneration else { return }
-        if let audioTrack, let audioMix = audioMeter.makeAudioMix(for: audioTrack) {
-            item.audioMix = audioMix
-        }
+        setMeterSource(track: audioTrack)
 
         if startPosition > 0 {
             await seek(to: startPosition)
@@ -280,6 +290,7 @@ public final class PlayerController {
         // item while the render thread can still be inside the tap is a
         // use-after-free that corrupts the heap.
         player?.currentItem?.audioMix = nil
+        meterTrack = nil
         // The transition runs directly here: the observation's hop to the
         // main actor would land after the player is gone.
         updatePlayingState(false)
@@ -336,9 +347,7 @@ public final class PlayerController {
         observeTimebaseRate(of: item)
         await seek(to: position)
         guard swapStillApplies(generation, player) else { return }
-        if let audioTrack, let audioMix = audioMeter.makeAudioMix(for: audioTrack) {
-            item.audioMix = audioMix
-        }
+        setMeterSource(track: audioTrack)
     }
 
     /// Prewarms the asset and pre-seeks a new item to the target, so the
@@ -355,7 +364,10 @@ public final class PlayerController {
     /// tap with it. The player keeps its rate, so the playing state carries.
     private func replaceItem(of player: AVPlayer, with item: AVPlayerItem) {
         // See closeCurrentBook: the tap must detach before the item goes away.
+        // The track empties with it, so a foreground return mid-swap cannot
+        // attach the old asset's track to the new item.
         player.currentItem?.audioMix = nil
+        meterTrack = nil
         removeItemObservers()
         player.replaceCurrentItem(with: item)
         observeFailure(of: item)
@@ -365,6 +377,40 @@ public final class PlayerController {
     /// False once another book opened or the player was rebuilt mid-swap.
     private func swapStillApplies(_ generation: Int, _ player: AVPlayer) -> Bool {
         generation == openGeneration && self.player === player
+    }
+
+    // MARK: - Audio meter tap
+
+    /// Remembers the current item's audio track and syncs the meter's tap.
+    private func setMeterSource(track: AVAssetTrack?) {
+        meterTrack = track
+        syncAudioMeterTap()
+    }
+
+    /// True while the meter's bars can be on screen. On the phone the whole
+    /// scene leaves the screen in the background; the Mac's windows can stay
+    /// visible whenever the app runs.
+    private var canShowMeter: Bool {
+        #if os(iOS)
+        return !isAppInBackground
+        #else
+        return true
+        #endif
+    }
+
+    /// Attaches the tap exactly while the bars can be on screen and the
+    /// item's audio track is known, and detaches it otherwise. A detached
+    /// tap costs the audio render thread nothing, which matters over hours
+    /// of background playback.
+    private func syncAudioMeterTap() {
+        guard let item = player?.currentItem else { return }
+        if canShowMeter, item.audioMix == nil, let meterTrack, let audioMix = audioMeter.makeAudioMix(for: meterTrack) {
+            item.audioMix = audioMix
+        } else if !canShowMeter, item.audioMix != nil {
+            // See closeCurrentBook: the tap detaches while the item is alive.
+            item.audioMix = nil
+            audioMeter.reset()
+        }
     }
 
     // MARK: - Chapters
@@ -687,6 +733,7 @@ public final class PlayerController {
         removeObservers()
         // See closeCurrentBook: the tap must detach before the item goes away.
         player?.currentItem?.audioMix = nil
+        meterTrack = nil
         player = nil
         stopProgressReports()
         syncNowPlaying()
@@ -812,6 +859,31 @@ public final class PlayerController {
         @unknown default:
             return .unknown
         }
+    }
+
+    /// Detaches the meter's tap in the background and re-attaches it on
+    /// return to the foreground, so background playback renders no levels
+    /// nobody can see.
+    private func observeAppLifecycle() {
+        let center = NotificationCenter.default
+        lifecycleObservers = [
+            center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.setAppInBackground(true)
+                }
+            },
+            center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.setAppInBackground(false)
+                }
+            },
+        ]
+    }
+
+    private func setAppInBackground(_ inBackground: Bool) {
+        guard inBackground != isAppInBackground else { return }
+        isAppInBackground = inBackground
+        syncAudioMeterTap()
     }
 
     /// Resumes only playback that the interruption itself cut off. Playback
