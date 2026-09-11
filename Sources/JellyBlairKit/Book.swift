@@ -11,6 +11,7 @@ public struct Book: Codable, Identifiable, Hashable {
     public let people: [Person]?
     public let mediaSources: [MediaSource]?
     public let genres: [String]?
+    public let studios: [Studio]?
     public let hasLyrics: Bool?
     /// The year of the audiobook edition, from the file's year tag.
     public let productionYear: Int?
@@ -25,6 +26,7 @@ public struct Book: Codable, Identifiable, Hashable {
         case people = "People"
         case mediaSources = "MediaSources"
         case genres = "Genres"
+        case studios = "Studios"
         case hasLyrics = "HasLyrics"
         case productionYear = "ProductionYear"
     }
@@ -64,10 +66,10 @@ public struct Book: Codable, Identifiable, Hashable {
         return joined.isEmpty ? nil : joined
     }
 
-    /// True when the title, author, narrator, or genre contains the query,
-    /// by the same matching the book screen's searches use.
+    /// True when the title, author, narrator, genre, or publisher contains
+    /// the query, by the same matching the book screen's searches use.
     public func matches(_ query: String) -> Bool {
-        [name, author, narrator, genre]
+        [name, author, narrator, genre, publisher]
             .compactMap { $0 }
             .contains { !findOccurrences(of: query, in: $0 as NSString, caseSensitive: false, limit: 1).isEmpty }
     }
@@ -75,6 +77,18 @@ public struct Book: Codable, Identifiable, Hashable {
     /// The genres joined, as the single string the search matcher checks.
     public var genre: String? {
         let joined = (genres ?? []).joined(separator: ", ")
+        return joined.isEmpty ? nil : joined
+    }
+
+    /// The publishers among the book's studios. Jellyfin stores an
+    /// audiobook's publisher in the item's studios.
+    public var publishers: [String] {
+        (studios ?? []).map(\.name)
+    }
+
+    /// The publishers joined, as the single string the search matcher checks.
+    public var publisher: String? {
+        let joined = publishers.joined(separator: ", ")
         return joined.isEmpty ? nil : joined
     }
 
@@ -139,6 +153,14 @@ public struct Person: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case name = "Name"
         case type = "Type"
+    }
+}
+
+public struct Studio: Codable, Hashable {
+    public let name: String
+
+    enum CodingKeys: String, CodingKey {
+        case name = "Name"
     }
 }
 
