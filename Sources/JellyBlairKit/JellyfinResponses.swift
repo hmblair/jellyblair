@@ -20,7 +20,7 @@ struct PublicSystemInfo: Decodable {
 }
 
 struct ItemsResponse: Decodable {
-    let items: [Book]
+    let items: [BookRecord]
 
     enum CodingKeys: String, CodingKey {
         case items = "Items"

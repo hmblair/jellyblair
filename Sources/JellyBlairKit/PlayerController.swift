@@ -98,14 +98,6 @@ public final class PlayerController {
     private var openGeneration = 0
     private var openTask: Task<Void, Never>?
 
-    /// The model of the loaded book; playback reads from and records into it.
-    private var currentModel: BookModel?
-
-    /// The session scope's hook for a settled position, which it writes
-    /// into the library's cached snapshot. The periodic report does not use
-    /// it, because each write replaces the whole snapshot file.
-    @ObservationIgnored public var onPositionRecorded: ((String, Double) -> Void)?
-
     /// True after a start report was sent, so stop reports only follow real sessions.
     private var hasActiveSession = false
 
@@ -186,43 +178,42 @@ public final class PlayerController {
 
     // MARK: - Opening and closing books
 
-    public func open(_ model: BookModel, playWhenReady: Bool = false, startAtSeconds: Double? = nil) {
+    public func open(_ book: Book, playWhenReady: Bool = false, startAtSeconds: Double? = nil) {
         openTask?.cancel()
         openGeneration += 1
         let generation = openGeneration
         openTask = Task {
-            await performOpen(model, generation: generation, playWhenReady: playWhenReady, startAtSeconds: startAtSeconds)
+            await performOpen(book, generation: generation, playWhenReady: playWhenReady, startAtSeconds: startAtSeconds)
         }
     }
 
     /// Re-opens the current book after a failed open, once the server is back.
     public func retryCurrentBook() {
-        guard let currentModel else { return }
-        open(currentModel)
+        guard let book else { return }
+        open(book)
     }
 
-    private func performOpen(_ model: BookModel, generation: Int, playWhenReady: Bool, startAtSeconds: Double?) async {
+    private func performOpen(_ newBook: Book, generation: Int, playWhenReady: Bool, startAtSeconds: Double?) async {
         await closeCurrentBook()
         guard generation == openGeneration else { return }
 
-        // The model already knows the resume position, so the target shows
-        // immediately and the Resume button does exactly what it said.
-        let newBook = model.book
-        currentModel = model
-        model.onDownloadCompleted = { [weak self] in
+        book = newBook
+        // From here the player writes the live position into the book, and
+        // a server record cannot move it; see adoptRecord.
+        newBook.isPositionHeldByPlayer = true
+        newBook.onDownloadCompleted = { [weak self] in
             Task { await self?.adoptDownloadedFile() }
         }
-        book = newBook
-        Log.playback.notice("Opening \(newBook.name, privacy: .public) (\(newBook.id, privacy: .public)) at \(startAtSeconds ?? model.resumePositionSeconds, format: .fixed(precision: 1))s")
+        Log.playback.notice("Opening \(newBook.name, privacy: .public) (\(newBook.id, privacy: .public)) at \(startAtSeconds ?? newBook.resumePositionSeconds, format: .fixed(precision: 1))s")
         playbackErrorMessage = nil
         isReady = false
         duration = newBook.runTimeSeconds
-        setChapters(model.chapters)
-        let startPosition = startAtSeconds ?? model.resumePositionSeconds
+        setChapters(newBook.chapters)
+        let startPosition = startAtSeconds ?? newBook.resumePositionSeconds
         requestedSeconds = startPosition
         setAnchor(position: startPosition, rate: 0)
 
-        let asset = model.streamAsset()
+        let asset = newBook.streamAsset()
         let item = AVPlayerItem(asset: asset)
         let newPlayer = AVPlayer(playerItem: item)
         player = newPlayer
@@ -252,20 +243,20 @@ public final class PlayerController {
         if playWhenReady {
             play()
         }
-        await loadArtwork(for: model, generation: generation)
-        await model.fetchChaptersIfNeeded()
+        await loadArtwork(for: newBook, generation: generation)
+        await newBook.fetchChaptersIfNeeded()
         guard generation == openGeneration else { return }
-        setChapters(model.chapters)
+        setChapters(newBook.chapters)
     }
 
     /// Re-reads the now-playing artwork from the cover cache.
     public func refreshArtwork() async {
-        guard let currentModel else { return }
-        await loadArtwork(for: currentModel, generation: openGeneration)
+        guard let book else { return }
+        await loadArtwork(for: book, generation: openGeneration)
     }
 
-    private func loadArtwork(for model: BookModel, generation: Int) async {
-        let image = await CoverImageLoader.shared.image(for: model.book.id, from: model.coverURL)
+    private func loadArtwork(for book: Book, generation: Int) async {
+        let image = await CoverImageLoader.shared.image(for: book.id, from: book.coverURL)
         guard generation == openGeneration else { return }
         currentArtwork = image
         syncNowPlaying()
@@ -308,11 +299,11 @@ public final class PlayerController {
         removeObservers()
         stopProgressReports()
         let position = currentTime
-        recordPosition(position, for: book.id)
+        book.recordSettledPosition(position)
+        book.isPositionHeldByPlayer = false
+        book.onDownloadCompleted = nil
         let hadSession = hasActiveSession
         self.book = nil
-        currentModel?.onDownloadCompleted = nil
-        currentModel = nil
         player = nil
         isReady = false
         hasActiveSession = false
@@ -332,11 +323,11 @@ public final class PlayerController {
     /// file, so the position, the playing state, and the reporting session
     /// all carry over.
     private func adoptDownloadedFile() async {
-        guard let player, let currentModel, isReady else { return }
-        guard currentModel.downloadState == .downloaded else { return }
+        guard let player, let book, isReady else { return }
+        guard book.downloadState == .downloaded else { return }
         let generation = openGeneration
 
-        let asset = currentModel.streamAsset()
+        let asset = book.streamAsset()
         let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first
         let item = await preparedItem(from: asset, near: currentTime)
         guard swapStillApplies(generation, player) else { return }
@@ -431,10 +422,10 @@ public final class PlayerController {
     /// Reads the loaded book's chapters again. The old list stays in place
     /// until the re-read succeeds.
     public func refreshChapters() async {
-        guard let model = currentModel else { return }
-        await model.refreshChapters()
-        guard currentModel === model else { return }
-        setChapters(model.chapters)
+        guard let book else { return }
+        await book.refreshChapters()
+        guard self.book === book else { return }
+        setChapters(book.chapters)
     }
 
     // MARK: - Transport
@@ -771,9 +762,7 @@ public final class PlayerController {
     /// A failure after playback started. The position is recorded first, so
     /// the Retry button resumes where the failure hit.
     private func handleMidPlaybackFailure(_ message: String) {
-        if let book {
-            recordPosition(currentTime, for: book.id)
-        }
+        book?.recordSettledPosition(currentTime)
         handlePlaybackFailure(message)
     }
 
@@ -825,7 +814,7 @@ public final class PlayerController {
         Log.playback.notice("Played \(book.name, privacy: .public) to its end")
         updatePlayingState(false)
         setAnchor(position: duration, rate: 0)
-        recordPosition(duration, for: book.id)
+        book.recordSettledPosition(duration)
         audioMeter.reset()
         stopProgressReports()
         // The stop report below ends the session; replaying starts a new one.
@@ -863,21 +852,14 @@ public final class PlayerController {
         progressReportTimer = nil
     }
 
-    /// Publishes a settled position to the book model and the library's
-    /// cached snapshot. Both hold it after the player closes the book.
-    private func recordPosition(_ seconds: Double, for bookID: String) {
-        currentModel?.recordPosition(seconds)
-        onPositionRecorded?(bookID, seconds)
-    }
-
-    /// Publishes the position from one read: the model and the server take
+    /// Publishes the position from one read: the book and the server take
     /// the same value. The two never disagree by more than one interval
     /// while the book plays.
     private func reportProgressNow() {
         guard let book, hasActiveSession else { return }
         let position = currentTime
         let paused = !isPlaying
-        currentModel?.recordPosition(position)
+        book.recordPosition(position)
         Task {
             await client.reportPlaybackProgress(bookID: book.id, positionSeconds: position, isPaused: paused)
         }
@@ -896,7 +878,7 @@ public final class PlayerController {
                 let position = self.currentTime
                 // The local write comes first: the report below can block
                 // for a second.
-                self.recordPosition(position, for: book.id)
+                book.recordSettledPosition(position)
                 self.client.reportPlaybackStoppedBlocking(bookID: book.id, positionSeconds: position)
             }
         }

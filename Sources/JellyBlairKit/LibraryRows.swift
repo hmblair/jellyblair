@@ -5,7 +5,6 @@ public struct BookRow: View {
     let book: Book
     let isLoaded: Bool
 
-    @Environment(BookCatalog.self) private var catalog
     @Environment(PlayerController.self) private var player
 
     public init(book: Book, isLoaded: Bool) {
@@ -17,7 +16,7 @@ public struct BookRow: View {
 
     public var body: some View {
         HStack(spacing: 10) {
-            BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fill)
+            BookCoverImage(bookID: book.id, url: book.coverURL, contentMode: .fill)
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
 

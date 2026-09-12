@@ -11,9 +11,8 @@ public struct LibraryList: View {
     /// act on this list, so they leave the toolbar when the list does.
     let isShowing: Bool
 
-    @Environment(LibraryViewModel.self) private var library
+    @Environment(Library.self) private var library
     @Environment(PlayerController.self) private var player
-    @Environment(BookCatalog.self) private var catalog
     @Environment(\.layoutDensity) private var density
 
     @State private var filters = LibraryFilters()
@@ -25,7 +24,7 @@ public struct LibraryList: View {
     }
 
     private var list: BookList {
-        library.visibleList(in: scope, filters: filters, catalog: catalog, loadedBookID: player.book?.id)
+        library.visibleList(in: scope, filters: filters, loadedBookID: player.book?.id)
     }
 
     public var body: some View {

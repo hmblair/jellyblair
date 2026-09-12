@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// What the book's screen remembers between visits. Stored per book on its
-/// model, which lives for the session; the screen itself is torn down and
-/// rebuilt with the book's identity.
+/// What the book's screen remembers between visits. Stored on the book,
+/// which lives for the session; the screen itself is torn down and rebuilt
+/// with the book's identity.
 public struct BookScreenState {
     public var isShowingTranscript = false
 
@@ -17,7 +17,6 @@ public struct BookView: View {
     let book: Book
 
     @Environment(PlayerController.self) private var player
-    @Environment(BookCatalog.self) private var catalog
     @Environment(ConnectionMonitor.self) private var connection
 
     @Environment(\.openBookGroup) private var openBookGroup
@@ -43,17 +42,13 @@ public struct BookView: View {
         player.book?.id == book.id
     }
 
-    private var model: BookModel {
-        catalog.model(for: book)
-    }
-
     private var chapters: [Chapter] {
-        isLoaded ? player.chapters : model.chapters
+        isLoaded ? player.chapters : book.chapters
     }
 
     /// Offline, only a downloaded book can start playing.
     private var canStartPlayback: Bool {
-        connection.isServerReachable || model.downloadState == .downloaded
+        connection.isServerReachable || book.isDownloaded
     }
 
     public var body: some View {
@@ -106,11 +101,11 @@ public struct BookView: View {
     /// The icon shows the view the button switches to.
     private var transcriptToggle: some View {
         Button {
-            model.screenState.isShowingTranscript.toggle()
+            book.screenState.isShowingTranscript.toggle()
         } label: {
-            Image(systemName: model.screenState.isShowingTranscript ? "list.bullet" : "text.quote")
+            Image(systemName: book.screenState.isShowingTranscript ? "list.bullet" : "text.quote")
         }
-        .help(model.screenState.isShowingTranscript ? "Show the chapters" : "Show the transcript")
+        .help(book.screenState.isShowingTranscript ? "Show the chapters" : "Show the transcript")
     }
 
     /// Actions on this book, in its title bar so it is clear which book
@@ -128,7 +123,7 @@ public struct BookView: View {
     /// disappears in a refresh falls back to the chapters, even though the
     /// toggle state remembers the choice.
     private var showsTranscriptPane: Bool {
-        model.screenState.isShowingTranscript && hasTranscript
+        book.screenState.isShowingTranscript && hasTranscript
     }
 
     #if os(macOS)
@@ -146,7 +141,6 @@ public struct BookView: View {
         ZStack {
             ChapterListPane(
                 book: book,
-                model: model,
                 chapters: chapters,
                 marked: markedChapterIndex,
                 isLoaded: isLoaded,
@@ -157,7 +151,6 @@ public struct BookView: View {
             if hasTranscript {
                 TranscriptPane(
                     book: book,
-                    model: model,
                     chapters: chapters,
                     isLoaded: isLoaded,
                     canStartPlayback: canStartPlayback,
@@ -185,7 +178,7 @@ public struct BookView: View {
 
     /// The book's cover as an ambient wash behind the page.
     private var coverBackdrop: some View {
-        BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fill)
+        BookCoverImage(bookID: book.id, url: book.coverURL, contentMode: .fill)
             .frame(maxWidth: .infinity)
             .frame(height: Self.backdropHeight)
             .clipped()
@@ -281,7 +274,7 @@ public struct BookView: View {
     }
 
     private var cover: some View {
-        BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fit)
+        BookCoverImage(bookID: book.id, url: book.coverURL, contentMode: .fit)
     }
 
     /// The book's total length.
@@ -297,7 +290,7 @@ public struct BookView: View {
             downloadControl
                 .imageScale(.small)
         } content: {
-            if let message = model.downloadErrorMessage {
+            if let message = book.downloadErrorMessage {
                 Text(message)
                     .foregroundStyle(.red)
             } else if let bytes = book.fileSizeBytes {
@@ -318,17 +311,17 @@ public struct BookView: View {
             return
         }
         isConfirmingRemoval = false
-        model.removeDownload()
+        book.removeDownload()
     }
 
     /// Download the book, cancel a download in progress, or show that the
     /// offline copy exists.
     @ViewBuilder
     private var downloadControl: some View {
-        switch model.downloadState {
+        switch book.downloadState {
         case .notDownloaded:
             Button {
-                model.download()
+                book.download()
             } label: {
                 Image(systemName: "arrow.down.circle.fill")
                     .foregroundStyle(.primary)
@@ -343,7 +336,7 @@ public struct BookView: View {
             // The icon is the gauge: a faint vessel under a full-color copy
             // masked to the completed fraction. Tapping cancels.
             Button {
-                model.cancelDownload()
+                book.cancelDownload()
             } label: {
                 ZStack {
                     Image(systemName: "arrow.down.circle.fill")
@@ -382,11 +375,11 @@ public struct BookView: View {
 
     private var playButton: some View {
         Button {
-            player.open(model, playWhenReady: true)
+            player.open(book, playWhenReady: true)
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "play.fill")
-                Text(model.isInProgress ? "Resume" : "Play")
+                Text(book.isInProgress ? "Resume" : "Play")
                 if let title = resumeChapterTitle {
                     Text(title)
                         .fontWeight(.light)
@@ -402,7 +395,7 @@ public struct BookView: View {
 
     /// The chapter the Resume button will land in, once chapters are known.
     private var resumeChapterTitle: String? {
-        guard model.isInProgress,
+        guard book.isInProgress,
               let index = markedChapterIndex,
               chapters.indices.contains(index)
         else { return nil }
@@ -415,14 +408,14 @@ public struct BookView: View {
         if isLoaded {
             return player.currentChapterIndex
         }
-        guard model.isInProgress else { return nil }
-        return chapters.last(where: { $0.startSeconds <= model.resumePositionSeconds + Chapter.startSlackSeconds })?.index
+        guard book.isInProgress else { return nil }
+        return chapters.last(where: { $0.startSeconds <= book.resumePositionSeconds + Chapter.startSlackSeconds })?.index
     }
 
     /// True when this book can show a transcript: the server reports a lyric
     /// sidecar, or a fetched transcript is already cached.
     private var hasTranscript: Bool {
-        book.hasLyrics == true || !model.lyrics.isEmpty
+        book.hasLyrics == true || !book.lyrics.isEmpty
     }
 }
 
@@ -553,16 +546,10 @@ public struct BookActionsMenuItems: View {
     let book: Book
 
     @Environment(PlayerController.self) private var player
-    @Environment(BookCatalog.self) private var catalog
     @Environment(ConnectionMonitor.self) private var connection
-    @Environment(LibraryViewModel.self) private var library
 
     public init(book: Book) {
         self.book = book
-    }
-
-    private var model: BookModel {
-        catalog.model(for: book)
     }
 
     private var isLoaded: Bool {
@@ -577,25 +564,23 @@ public struct BookActionsMenuItems: View {
         Button("Reset Playback") {
             resetPlayback()
         }
-        .disabled(!connection.isServerReachable || !catalog.isInProgress(book))
+        .disabled(!connection.isServerReachable || !book.isInProgress)
     }
 
     /// Re-reads everything the server and the file know about this book: the
-    /// cover, the chapter list, the transcript, the resume position, and the
-    /// library fields. Only this book changes.
+    /// cover, the chapter list, the transcript, and the record with its
+    /// resume position. Only this book changes.
     private func refreshMetadata() {
         Task {
-            await CoverImageLoader.shared.refresh(for: book.id, from: model.coverURL)
+            await CoverImageLoader.shared.refresh(for: book.id, from: book.coverURL)
             if isLoaded {
                 await player.refreshChapters()
                 await player.refreshArtwork()
             } else {
-                await model.refreshChapters()
+                await book.refreshChapters()
             }
-            await model.refreshLyrics()
-            if let fresh = await model.refreshFromServer() {
-                library.replaceBook(fresh)
-            }
+            await book.refreshLyrics()
+            await book.refreshFromServer()
         }
     }
 
@@ -606,7 +591,7 @@ public struct BookActionsMenuItems: View {
             if isLoaded {
                 await player.close()
             }
-            await model.resetPlayback()
+            await book.resetPlayback()
         }
     }
 }

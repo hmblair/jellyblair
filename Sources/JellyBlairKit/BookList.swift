@@ -2,7 +2,7 @@ import Foundation
 
 /// A named shelf of books: one author's, one narrator's, one publisher's,
 /// or one genre's.
-public struct BookGroup: Identifiable, Hashable {
+public struct BookGroup: Identifiable {
     public enum Kind: Hashable {
         case author
         case narrator
@@ -24,6 +24,7 @@ public struct BookGroup: Identifiable, Hashable {
         }
 
         /// The book's names for this grouping kind.
+        @MainActor
         public func names(of book: Book) -> [String] {
             switch self {
             case .author:
@@ -33,7 +34,7 @@ public struct BookGroup: Identifiable, Hashable {
             case .publisher:
                 return book.publishers
             case .genre:
-                return book.genres ?? []
+                return book.genres
             }
         }
     }

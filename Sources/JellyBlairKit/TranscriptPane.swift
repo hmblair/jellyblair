@@ -5,7 +5,6 @@ import SwiftUI
 /// behind the controller does the matching, painting, and centering.
 struct TranscriptPane: View {
     let book: Book
-    let model: BookModel
     let chapters: [Chapter]
     let isLoaded: Bool
     let canStartPlayback: Bool
@@ -49,9 +48,9 @@ struct TranscriptPane: View {
     /// boundary, so the view only updates on playback events. Reading the
     /// anchor here keeps it observed.
     private var transcript: some View {
-        transcriptText(anchor: listeningAnchor, lines: model.lyrics, chapters: chapters)
+        transcriptText(anchor: listeningAnchor, lines: book.lyrics, chapters: chapters)
             .task(id: book.id) {
-                await model.fetchLyricsIfNeeded()
+                await book.fetchLyricsIfNeeded()
             }
     }
 
@@ -60,7 +59,7 @@ struct TranscriptPane: View {
     private var listeningAnchor: PlaybackAnchor {
         isLoaded
             ? player.anchor
-            : PlaybackAnchor(positionSeconds: model.resumePositionSeconds, date: .distantPast, rate: 0, requestedSeconds: model.resumePositionSeconds)
+            : PlaybackAnchor(positionSeconds: book.resumePositionSeconds, date: .distantPast, rate: 0, requestedSeconds: book.resumePositionSeconds)
     }
 
     private func transcriptText(anchor: PlaybackAnchor, lines: [LyricLine], chapters: [Chapter]) -> some View {
@@ -88,8 +87,8 @@ struct TranscriptPane: View {
             }
         )
         .overlay {
-            if model.lyrics.isEmpty {
-                if model.isFetchingLyrics {
+            if book.lyrics.isEmpty {
+                if book.isFetchingLyrics {
                     ProgressView()
                 } else {
                     Text("No transcript for this book")
@@ -104,7 +103,7 @@ struct TranscriptPane: View {
         if isLoaded {
             Task { await player.jump(toSeconds: seconds) }
         } else if canStartPlayback {
-            player.open(model, playWhenReady: true, startAtSeconds: seconds)
+            player.open(book, playWhenReady: true, startAtSeconds: seconds)
         }
     }
 

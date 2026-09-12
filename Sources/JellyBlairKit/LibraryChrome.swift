@@ -120,7 +120,7 @@ public struct LibraryFilterToolbarButtons: View {
 public struct LibraryEmptyOverlay: View {
     let list: BookList
 
-    @Environment(LibraryViewModel.self) private var library
+    @Environment(Library.self) private var library
 
     public init(_ list: BookList) {
         self.list = list

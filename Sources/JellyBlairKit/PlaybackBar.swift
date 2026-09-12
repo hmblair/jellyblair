@@ -6,7 +6,6 @@ public struct PlaybackBar: View {
     let onOpen: (Book) -> Void
 
     @Environment(PlayerController.self) private var player
-    @Environment(BookCatalog.self) private var catalog
     @Environment(\.layoutMetrics) private var metrics
 
     /// Width cap of the single-row bar's info block; longer names truncate.
@@ -83,7 +82,7 @@ public struct PlaybackBar: View {
     /// or the name alone before the chapters are known.
     private func info(for book: Book) -> some View {
         HStack(spacing: 12) {
-            BookCoverImage(bookID: book.id, url: catalog.coverURL(for: book), contentMode: .fill)
+            BookCoverImage(bookID: book.id, url: book.coverURL, contentMode: .fill)
                 .frame(width: metrics.playbackBar.coverSize, height: metrics.playbackBar.coverSize)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 2) {

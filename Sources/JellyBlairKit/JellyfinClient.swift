@@ -186,7 +186,7 @@ public final class JellyfinClient {
 
     // MARK: - Library
 
-    func fetchAudiobooks() async throws -> [Book] {
+    func fetchAudiobooks() async throws -> [BookRecord] {
         let query = [
             URLQueryItem(name: "IncludeItemTypes", value: "AudioBook"),
             URLQueryItem(name: "Recursive", value: "true"),
@@ -198,11 +198,12 @@ public final class JellyfinClient {
         return try decode(ItemsResponse.self, from: data).items
     }
 
-    /// Fetches a single book with fresh user data, such as the resume position.
-    public func fetchBook(id: String) async -> Book? {
+    /// Fetches a single book's record with fresh user data, such as the
+    /// resume position.
+    public func fetchBook(id: String) async -> BookRecord? {
         let request = makeRequest(path: "Items/\(id)")
         guard let data = try? await send(request) else { return nil }
-        return try? decode(Book.self, from: data)
+        return try? decode(BookRecord.self, from: data)
     }
 
     /// Fetches a book's lyric sidecar, parsed by the server into transcript
@@ -221,25 +222,25 @@ public final class JellyfinClient {
 
     // MARK: - URLs
 
-    public func imageURL(for book: Book) -> URL {
-        url(path: "Items/\(book.id)/Images/Primary", query: [URLQueryItem(name: "maxWidth", value: "600")])
+    public func imageURL(forBookID id: String) -> URL {
+        url(path: "Items/\(id)/Images/Primary", query: [URLQueryItem(name: "maxWidth", value: "600")])
     }
 
     /// Builds the asset for a book's audio stream. The token travels in an
     /// Authorization header instead of the URL, so it stays out of server logs.
-    func streamAsset(for book: Book) -> AVURLAsset {
-        AVURLAsset(url: streamURL(for: book), options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": authorizationHeader]])
+    func streamAsset(forBookID id: String) -> AVURLAsset {
+        AVURLAsset(url: streamURL(forBookID: id), options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": authorizationHeader]])
     }
 
     /// An authenticated request for the book's file, for downloading it.
-    func streamRequest(for book: Book) -> URLRequest {
-        var request = URLRequest(url: streamURL(for: book))
+    func streamRequest(forBookID id: String) -> URLRequest {
+        var request = URLRequest(url: streamURL(forBookID: id))
         request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
         return request
     }
 
-    private func streamURL(for book: Book) -> URL {
-        url(path: "Audio/\(book.id)/stream", query: [URLQueryItem(name: "static", value: "true")])
+    private func streamURL(forBookID id: String) -> URL {
+        url(path: "Audio/\(id)/stream", query: [URLQueryItem(name: "static", value: "true")])
     }
 
     // MARK: - Playback reports

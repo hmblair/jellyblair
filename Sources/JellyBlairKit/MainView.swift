@@ -44,7 +44,6 @@ public struct MainView: View {
             .environment(scope.library)
             .environment(scope.player)
             .environment(scope.connection)
-            .environment(scope.catalog)
     }
 
     @ViewBuilder

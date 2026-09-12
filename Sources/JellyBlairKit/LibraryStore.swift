@@ -7,11 +7,11 @@ struct LibraryStore {
         DataDirectory.root.appendingPathComponent("library.json")
     }
 
-    func load() -> [Book] {
-        readCacheFile([Book].self, from: fileURL, label: "library") ?? []
+    func load() -> [BookRecord] {
+        readCacheFile([BookRecord].self, from: fileURL, label: "library") ?? []
     }
 
-    func save(_ books: [Book]) {
-        writeCacheFile(books, to: fileURL, label: "library")
+    func save(_ records: [BookRecord]) {
+        writeCacheFile(records, to: fileURL, label: "library")
     }
 }

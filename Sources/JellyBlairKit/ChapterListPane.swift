@@ -4,7 +4,6 @@ import SwiftUI
 /// The search state and the tracking flag are pane-local.
 struct ChapterListPane: View {
     let book: Book
-    let model: BookModel
     let chapters: [Chapter]
     /// The chapter marked as current, from the playing or resume position.
     let marked: Int?
@@ -61,7 +60,7 @@ struct ChapterListPane: View {
                     if isLoaded {
                         Task { await player.jump(to: chapter) }
                     } else if canStartPlayback {
-                        player.open(model, playWhenReady: true, startAtSeconds: chapter.startSeconds)
+                        player.open(book, playWhenReady: true, startAtSeconds: chapter.startSeconds)
                     }
                 }
             }
@@ -75,7 +74,7 @@ struct ChapterListPane: View {
             }
             .overlay {
                 if chapters.isEmpty {
-                    if model.isFetchingChapters {
+                    if book.isFetchingChapters {
                         ProgressView()
                     } else {
                         Text("No chapters in this file")
@@ -100,21 +99,21 @@ struct ChapterListPane: View {
                 // Offline, only a downloaded file can serve chapters, and
                 // there is no server to ask or asset to warm.
                 guard connection.isServerReachable else {
-                    if model.downloadState == .downloaded {
-                        await model.fetchChaptersIfNeeded()
+                    if book.isDownloaded {
+                        await book.fetchChaptersIfNeeded()
                     }
                     return
                 }
-                async let userDataFetch: Book? = model.refreshFromServer()
-                await model.fetchChaptersIfNeeded()
-                await model.prewarmAsset()
-                _ = await userDataFetch
+                async let recordFetch: Void = book.refreshFromServer()
+                await book.fetchChaptersIfNeeded()
+                await book.prewarmAsset()
+                await recordFetch
             }
             .onChange(of: scenePhase) { _, phase in
                 // Coming back to a book that is not playing can be much later:
                 // the position may have moved on another device.
                 guard phase == .active, !isLoaded else { return }
-                Task { await model.refreshFromServer() }
+                Task { await book.refreshFromServer() }
             }
     }
 
