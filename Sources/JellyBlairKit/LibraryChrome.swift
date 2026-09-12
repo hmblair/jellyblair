@@ -53,11 +53,9 @@ public extension View {
     }
 }
 
-/// The library's sort menu and filter menu for a toolbar. Both menus mark
-/// the active choices by coloring their icons accent instead of showing
-/// check marks. The filter menu's own button also colors while any filter
-/// is on; the sort menu's keeps one color in every order. The in-progress
-/// filter also puts the list in last-played order.
+/// The library's sort menu and filter menu for a toolbar, marking the
+/// active choices with the system check marks. The in-progress filter
+/// also puts the list in last-played order.
 public struct LibraryFilterToolbarButtons: View {
     @Binding var filters: LibraryFilters
 
@@ -71,56 +69,42 @@ public struct LibraryFilterToolbarButtons: View {
     }
 
     private var sortMenu: some View {
-        toolbarMenu("arrow.up.arrow.down.circle.fill", isActive: false, help: "Sort the books") {
-            ForEach(BookSortOrder.allCases) { order in
-                menuChoice(order.label, icon: order.iconName, isOn: filters.sortOrder == order) {
-                    filters.sortOrder = order
+        toolbarMenu("arrow.up.arrow.down.circle.fill", help: "Sort the books") {
+            Picker("Sort By", selection: $filters.sortOrder) {
+                ForEach(BookSortOrder.allCases) { order in
+                    Label(order.label, systemImage: order.iconName)
+                        .tag(order)
                 }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
         }
     }
 
     private var filterMenu: some View {
-        toolbarMenu("line.3.horizontal.decrease.circle.fill", isActive: filters.hasActiveFilter, help: "Filter the books") {
-            menuChoice("In Progress", icon: "bookmark.fill", isOn: filters.inProgressOnly) {
-                filters.setInProgressOnly(!filters.inProgressOnly)
+        toolbarMenu("line.3.horizontal.decrease.circle.fill", help: "Filter the books") {
+            Toggle(isOn: Binding(get: { filters.inProgressOnly }, set: { filters.setInProgressOnly($0) })) {
+                Label("In Progress", systemImage: "bookmark.fill")
             }
-            menuChoice("Downloaded", icon: "square.and.arrow.down", isOn: filters.downloadedOnly) {
-                filters.downloadedOnly.toggle()
+            Toggle(isOn: $filters.downloadedOnly) {
+                Label("Downloaded", systemImage: "arrow.down.circle.fill")
             }
-            menuChoice("Favorites", icon: favoriteIconName, isOn: filters.favoritesOnly) {
-                filters.favoritesOnly.toggle()
+            Toggle(isOn: $filters.favoritesOnly) {
+                Label("Favorites", systemImage: favoriteIconName)
             }
         }
     }
 
-    /// A toolbar menu behind one icon button, which colors accent while
-    /// the menu's choices narrow the list.
-    private func toolbarMenu(_ iconName: String, isActive: Bool, help: String, @ViewBuilder choices: () -> some View) -> some View {
+    /// A toolbar menu behind one icon button.
+    private func toolbarMenu(_ iconName: String, help: String, @ViewBuilder choices: () -> some View) -> some View {
         Menu {
             choices()
         } label: {
             Image(systemName: iconName)
         }
         .menuIndicator(.hidden)
-        .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
+        .foregroundStyle(Color.secondary)
         .help(help)
-    }
-
-    /// One choice in a menu: its icon colors accent while the choice is
-    /// active, in place of the system check mark; see paletteSymbol.
-    private func menuChoice(_ title: String, icon: String, isOn: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label {
-                Text(title)
-            } icon: {
-                if isOn, let tinted = paletteSymbol(icon, color: .accent) {
-                    Image(platformImage: tinted)
-                } else {
-                    Image(systemName: icon)
-                }
-            }
-        }
     }
 }
 

@@ -55,16 +55,3 @@ extension Image {
         #endif
     }
 }
-
-/// A symbol as a palette-colored image. The palette configuration makes
-/// the image non-template, so even a native menu, which paints template
-/// icons in its own color, renders the tint. The color covers every layer,
-/// so callers use single-layer symbols.
-func paletteSymbol(_ name: String, color: PlatformColor) -> PlatformImage? {
-    #if canImport(AppKit)
-    return NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-        .withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [color]))
-    #else
-    return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(paletteColors: [color]))
-    #endif
-}
