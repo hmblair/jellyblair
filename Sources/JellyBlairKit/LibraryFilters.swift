@@ -47,9 +47,16 @@ public struct LibraryFilters: Equatable {
     public var searchQuery = ""
     public var downloadedOnly = false
     public private(set) var inProgressOnly = false
+    public var favoritesOnly = false
     public var sortOrder = BookSortOrder.name
 
     public init() {}
+
+    /// True while any filter narrows the list, which is what colors the
+    /// filter menu's button.
+    public var hasActiveFilter: Bool {
+        downloadedOnly || inProgressOnly || favoritesOnly
+    }
 
     /// Turns the in-progress filter on or off, and puts the list in the
     /// order that suits it: the books in progress read most recently played

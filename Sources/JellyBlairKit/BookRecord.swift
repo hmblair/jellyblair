@@ -125,12 +125,28 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         return parseServerDate(timestamp)
     }
 
+    public var isFavorite: Bool {
+        userData?.isFavorite == true
+    }
+
     /// Returns a copy of the book at a different resume position.
     public func withResumePosition(_ seconds: Double) -> BookRecord {
         var copy = self
         copy.userData = BookUserData(
             playbackPositionTicks: Int64(seconds * ticksPerSecond),
-            lastPlayedTimestamp: userData?.lastPlayedTimestamp
+            lastPlayedTimestamp: userData?.lastPlayedTimestamp,
+            isFavorite: userData?.isFavorite
+        )
+        return copy
+    }
+
+    /// Returns a copy of the book at a different favorite state.
+    public func withFavorite(_ isFavorite: Bool) -> BookRecord {
+        var copy = self
+        copy.userData = BookUserData(
+            playbackPositionTicks: userData?.playbackPositionTicks ?? 0,
+            lastPlayedTimestamp: userData?.lastPlayedTimestamp,
+            isFavorite: isFavorite
         )
         return copy
     }
@@ -141,10 +157,12 @@ public struct BookUserData: Codable, Hashable {
     /// When the user last played the book, as the server writes it, or nil
     /// when the server has no record of a play.
     public let lastPlayedTimestamp: String?
+    public let isFavorite: Bool?
 
     enum CodingKeys: String, CodingKey {
         case playbackPositionTicks = "PlaybackPositionTicks"
         case lastPlayedTimestamp = "LastPlayedDate"
+        case isFavorite = "IsFavorite"
     }
 }
 

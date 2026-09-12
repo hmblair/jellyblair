@@ -85,6 +85,7 @@ public final class Book: Identifiable {
     public var fileSizeBytes: Int64? { record.fileSizeBytes }
     public var bitrateKbps: Int? { record.bitrateKbps }
     public var hasLyrics: Bool { record.hasLyrics == true }
+    public var isFavorite: Bool { record.isFavorite }
     public var resumePositionSeconds: Double { record.resumePositionSeconds }
 
     /// True when the title, author, narrator, genre, or publisher contains
@@ -138,6 +139,15 @@ public final class Book: Identifiable {
     /// play button offer Resume and the reset available.
     public var isInProgress: Bool {
         resumePositionSeconds > 0
+    }
+
+    /// Flips the favorite mark, on the server first so the two never
+    /// disagree. A failed call changes nothing.
+    public func toggleFavorite() async {
+        let target = !isFavorite
+        guard (try? await client.setFavorite(target, bookID: id)) != nil else { return }
+        record = record.withFavorite(target)
+        onRecordChanged?()
     }
 
     /// Clears the played state and the resume position, on the server first

@@ -53,10 +53,11 @@ public extension View {
     }
 }
 
-/// The library's sort menu and filter toggles for a toolbar: the sort
-/// order, the books in progress, and the downloaded books. A toggle shows
-/// the accent color while it is on; the sort menu keeps one color in every
-/// order. The in-progress toggle also puts the list in last-played order.
+/// The library's sort menu and filter menu for a toolbar. Both menus mark
+/// the active choices by coloring their icons accent instead of showing
+/// check marks. The filter menu's own button also colors while any filter
+/// is on; the sort menu's keeps one color in every order. The in-progress
+/// filter also puts the list in last-played order.
 public struct LibraryFilterToolbarButtons: View {
     @Binding var filters: LibraryFilters
 
@@ -66,51 +67,60 @@ public struct LibraryFilterToolbarButtons: View {
 
     public var body: some View {
         sortMenu
-        inProgressToggle
-        downloadedToggle
+        filterMenu
     }
 
     private var sortMenu: some View {
-        Menu {
-            Picker("Sort By", selection: $filters.sortOrder) {
-                ForEach(BookSortOrder.allCases) { order in
-                    Label(order.label, systemImage: order.iconName)
-                        .tag(order)
+        toolbarMenu("arrow.up.arrow.down.circle.fill", isActive: false, help: "Sort the books") {
+            ForEach(BookSortOrder.allCases) { order in
+                menuChoice(order.label, icon: order.iconName, isOn: filters.sortOrder == order) {
+                    filters.sortOrder = order
                 }
             }
-            .pickerStyle(.inline)
-        } label: {
-            Image(systemName: "arrow.up.arrow.down.circle.fill")
         }
-        .menuIndicator(.hidden)
-        .foregroundStyle(Color.secondary)
-        .help("Sort the books")
     }
 
-    private var inProgressToggle: some View {
-        toggleButton(
-            "bookmark.fill",
-            isOn: Binding(get: { filters.inProgressOnly }, set: { filters.setInProgressOnly($0) }),
-            help: filters.inProgressOnly ? "Show all books" : "Show only books in progress, most recently played first"
-        )
+    private var filterMenu: some View {
+        toolbarMenu("line.3.horizontal.decrease.circle.fill", isActive: filters.hasActiveFilter, help: "Filter the books") {
+            menuChoice("In Progress", icon: "bookmark.fill", isOn: filters.inProgressOnly) {
+                filters.setInProgressOnly(!filters.inProgressOnly)
+            }
+            menuChoice("Downloaded", icon: "square.and.arrow.down", isOn: filters.downloadedOnly) {
+                filters.downloadedOnly.toggle()
+            }
+            menuChoice("Favorites", icon: favoriteIconName, isOn: filters.favoritesOnly) {
+                filters.favoritesOnly.toggle()
+            }
+        }
     }
 
-    private var downloadedToggle: some View {
-        toggleButton(
-            "arrow.down.circle.fill",
-            isOn: $filters.downloadedOnly,
-            help: filters.downloadedOnly ? "Show all books" : "Show only downloaded books"
-        )
-    }
-
-    private func toggleButton(_ iconName: String, isOn: Binding<Bool>, help: String) -> some View {
-        Button {
-            isOn.wrappedValue.toggle()
+    /// A toolbar menu behind one icon button, which colors accent while
+    /// the menu's choices narrow the list.
+    private func toolbarMenu(_ iconName: String, isActive: Bool, help: String, @ViewBuilder choices: () -> some View) -> some View {
+        Menu {
+            choices()
         } label: {
             Image(systemName: iconName)
         }
-        .foregroundStyle(isOn.wrappedValue ? Color.accentColor : Color.secondary)
+        .menuIndicator(.hidden)
+        .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
         .help(help)
+    }
+
+    /// One choice in a menu: its icon colors accent while the choice is
+    /// active, in place of the system check mark; see paletteSymbol.
+    private func menuChoice(_ title: String, icon: String, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label {
+                Text(title)
+            } icon: {
+                if isOn, let tinted = paletteSymbol(icon, color: .accent) {
+                    Image(platformImage: tinted)
+                } else {
+                    Image(systemName: icon)
+                }
+            }
+        }
     }
 }
 

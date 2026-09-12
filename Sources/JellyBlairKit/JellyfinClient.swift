@@ -251,6 +251,12 @@ public final class JellyfinClient {
     private static let progressPath = startedPath + "/Progress"
     private static let stoppedPath = startedPath + "/Stopped"
 
+    /// Marks or unmarks the book as a favorite of the signed-in user.
+    /// Throws when the server does not confirm.
+    func setFavorite(_ isFavorite: Bool, bookID: String) async throws {
+        _ = try await send(makeRequest(path: "UserFavoriteItems/\(bookID)", method: isFavorite ? "POST" : "DELETE"))
+    }
+
     /// Clears the book's played state and resume position for the user.
     /// Throws when the server does not confirm.
     func resetPlayback(bookID: String) async throws {

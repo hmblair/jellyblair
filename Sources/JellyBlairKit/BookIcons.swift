@@ -23,3 +23,6 @@ public let durationIconName = "clock.fill"
 /// The symbol for a book's year, shared by the book screen's metadata lines
 /// and the sort menu.
 public let yearIconName = "calendar"
+
+/// The symbol for a favorite book, in the library's filter menu.
+public let favoriteIconName = "heart.fill"

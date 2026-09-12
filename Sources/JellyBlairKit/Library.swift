@@ -206,6 +206,7 @@ public final class Library {
     private func passesFilters(_ book: Book, filters: LibraryFilters, loadedBookID: String?) -> Bool {
         (!filters.downloadedOnly || book.isDownloaded)
             && (!filters.inProgressOnly || book.isInProgress || book.id == loadedBookID)
+            && (!filters.favoritesOnly || book.isFavorite)
     }
 
     // MARK: - Sorting
