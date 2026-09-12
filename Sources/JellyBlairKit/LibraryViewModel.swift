@@ -62,6 +62,17 @@ public final class LibraryViewModel {
         replace(updated, at: index)
     }
 
+    /// Replaces one book's snapshot with fresh server data. Every sorted
+    /// list rebuilds, since any field can change and any field can drive an
+    /// order. An unchanged snapshot writes nothing.
+    public func replaceBook(_ fresh: Book) {
+        guard let index = books.firstIndex(where: { $0.id == fresh.id }),
+              fresh != books[index] else { return }
+        var updated = books
+        updated[index] = fresh
+        setBooks(updated, sortedAs: Self.sortedInEveryOrder(updated))
+    }
+
     /// Adopts a fresh list from the server. An unchanged list writes
     /// nothing, so a no-op refresh invalidates no observers and leaves the
     /// file alone.

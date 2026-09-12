@@ -582,7 +582,7 @@ public struct BookActionsMenuItems: View {
 
     /// Re-reads everything the server and the file know about this book: the
     /// cover, the chapter list, the transcript, the resume position, and the
-    /// library fields.
+    /// library fields. Only this book changes.
     private func refreshMetadata() {
         Task {
             await CoverImageLoader.shared.refresh(for: book.id, from: model.coverURL)
@@ -593,8 +593,9 @@ public struct BookActionsMenuItems: View {
                 await model.refreshChapters()
             }
             await model.refreshLyrics()
-            await model.refreshUserData()
-            await library.load()
+            if let fresh = await model.refreshFromServer() {
+                library.replaceBook(fresh)
+            }
         }
     }
 

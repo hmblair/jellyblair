@@ -105,16 +105,16 @@ struct ChapterListPane: View {
                     }
                     return
                 }
-                async let userDataFetch: Void = model.refreshUserData()
+                async let userDataFetch: Book? = model.refreshFromServer()
                 await model.fetchChaptersIfNeeded()
                 await model.prewarmAsset()
-                await userDataFetch
+                _ = await userDataFetch
             }
             .onChange(of: scenePhase) { _, phase in
                 // Coming back to a book that is not playing can be much later:
                 // the position may have moved on another device.
                 guard phase == .active, !isLoaded else { return }
-                Task { await model.refreshUserData() }
+                Task { await model.refreshFromServer() }
             }
     }
 

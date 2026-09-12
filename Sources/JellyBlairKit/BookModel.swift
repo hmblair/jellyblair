@@ -159,10 +159,14 @@ public final class BookModel: Identifiable {
 
     // MARK: - Resume position
 
-    /// Fetches the server's current position. On failure the known value stands.
-    public func refreshUserData() async {
-        guard let fresh = await client.fetchBook(id: book.id) else { return }
+    /// Fetches the book's current server record and adopts its position.
+    /// Returns the fresh snapshot for callers that want the other fields.
+    /// On failure the known state stands.
+    @discardableResult
+    public func refreshFromServer() async -> Book? {
+        guard let fresh = await client.fetchBook(id: book.id) else { return nil }
         resumePositionSeconds = fresh.resumePositionSeconds
+        return fresh
     }
 
     /// True when the position is past the start, which is what makes the
