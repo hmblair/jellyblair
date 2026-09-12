@@ -222,24 +222,24 @@ public final class JellyfinClient {
 
     // MARK: - URLs
 
-    public func imageURL(forBookID id: String) -> URL {
+    public func imageURL(bookID id: String) -> URL {
         url(path: "Items/\(id)/Images/Primary", query: [URLQueryItem(name: "maxWidth", value: "600")])
     }
 
     /// Builds the asset for a book's audio stream. The token travels in an
     /// Authorization header instead of the URL, so it stays out of server logs.
-    func streamAsset(forBookID id: String) -> AVURLAsset {
-        AVURLAsset(url: streamURL(forBookID: id), options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": authorizationHeader]])
+    func streamAsset(bookID id: String) -> AVURLAsset {
+        AVURLAsset(url: streamURL(bookID: id), options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": authorizationHeader]])
     }
 
     /// An authenticated request for the book's file, for downloading it.
-    func streamRequest(forBookID id: String) -> URLRequest {
-        var request = URLRequest(url: streamURL(forBookID: id))
+    func streamRequest(bookID id: String) -> URLRequest {
+        var request = URLRequest(url: streamURL(bookID: id))
         request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
         return request
     }
 
-    private func streamURL(forBookID id: String) -> URL {
+    private func streamURL(bookID id: String) -> URL {
         url(path: "Audio/\(id)/stream", query: [URLQueryItem(name: "static", value: "true")])
     }
 

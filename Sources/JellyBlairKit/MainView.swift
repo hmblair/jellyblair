@@ -217,8 +217,8 @@ public struct MainView: View {
 }
 
 /// A screen the library can navigate to when it cannot show one beside
-/// itself. Routes carry identifiers, not values, so a pushed screen resolves
-/// the library's current data instead of a copy frozen at push time.
+/// itself. Routes carry identifiers, so a pushed screen resolves the
+/// library's current data.
 enum LibraryRoute: Hashable {
     case book(String)
     case group(BookGroup.Kind, String)

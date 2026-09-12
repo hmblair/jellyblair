@@ -90,7 +90,7 @@ public struct LibraryFilterToolbarButtons: View {
                 Label("Downloaded", systemImage: "arrow.down.circle.fill")
             }
             Toggle(isOn: $filters.favoritesOnly) {
-                Label("Favorites", systemImage: favoriteIconName)
+                Label("Favorites", systemImage: "heart.fill")
             }
         }
     }

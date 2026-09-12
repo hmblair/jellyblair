@@ -569,7 +569,7 @@ public struct BookActionsMenuItems: View {
 
     /// Re-reads everything the server and the file know about this book: the
     /// cover, the chapter list, the transcript, and the record with its
-    /// resume position. Only this book changes.
+    /// resume position.
     private func refreshMetadata() {
         Task {
             await CoverImageLoader.shared.refresh(for: book.id, from: book.coverURL)

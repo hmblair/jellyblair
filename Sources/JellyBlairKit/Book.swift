@@ -95,7 +95,7 @@ public final class Book: Identifiable {
     }
 
     public var coverURL: URL {
-        client.imageURL(forBookID: id)
+        client.imageURL(bookID: id)
     }
 
     // MARK: - Record updates
@@ -119,9 +119,8 @@ public final class Book: Identifiable {
     }
 
     /// Playback records where it has reached, so displays follow without a
-    /// fetch. The record changes in memory only: the periodic report calls
-    /// this every few seconds, which must not rewrite the snapshot file.
-    /// An unchanged position writes nothing.
+    /// fetch. The record changes in memory only, so frequent writes rewrite
+    /// no snapshot file. An unchanged position writes nothing.
     func recordPosition(_ seconds: Double) {
         guard seconds != resumePositionSeconds else { return }
         record = record.withResumePosition(seconds)
@@ -170,7 +169,7 @@ public final class Book: Identifiable {
         if downloadState == .downloaded {
             asset = AVURLAsset(url: downloadedFileURL)
         } else {
-            asset = client.streamAsset(forBookID: id)
+            asset = client.streamAsset(bookID: id)
         }
         cachedAsset = asset
         onAssetParsed?(self)
@@ -231,7 +230,7 @@ public final class Book: Identifiable {
             }
         )
         self.downloader = downloader
-        downloader.start(client.streamRequest(forBookID: id))
+        downloader.start(client.streamRequest(bookID: id))
         Task { await fillOfflineCaches() }
     }
 
