@@ -119,7 +119,8 @@ struct TranscriptContent {
 
     /// Builds the display lines: the source lines with one heading line per
     /// chapter. The transcript line at the chapter's start becomes the
-    /// heading when its words are exactly the chapter's title; otherwise an
+    /// heading, carrying the full title, when its words are the chapter's
+    /// title or a part of it; otherwise an
     /// untimed heading line with the title is inserted there. One walk
     /// covers both ordered lists. An empty transcript stays empty, and a
     /// transcript without timestamps gets no headings, since they have no
@@ -135,8 +136,8 @@ struct TranscriptContent {
                 lineIndex += 1
             }
             titles[merged.count] = chapter
-            if lineIndex < lines.count, matchesTitle(lines[lineIndex], of: chapter) {
-                merged.append(lines[lineIndex])
+            if lineIndex < lines.count, let heading = titledLine(lines[lineIndex], of: chapter) {
+                merged.append(heading)
                 lineIndex += 1
             } else {
                 merged.append(headingLine(for: chapter))
@@ -146,12 +147,30 @@ struct TranscriptContent {
         return (merged, titles)
     }
 
-    /// True when the line's words are exactly the chapter's title, compared
-    /// without case.
-    private static func matchesTitle(_ line: LyricLine, of chapter: Chapter) -> Bool {
-        let lineText = line.text.trimmingCharacters(in: .whitespaces)
+    /// The line promoted to a heading with the full title and the line's
+    /// timing, when its text appears in the chapter's title; nil otherwise.
+    private static func titledLine(_ line: LyricLine, of chapter: Chapter) -> LyricLine? {
         let title = chapter.title.trimmingCharacters(in: .whitespaces)
-        return lineText.caseInsensitiveCompare(title) == .orderedSame
+        guard let shift = titleOffset(of: line, in: title) else { return nil }
+        return LyricLine(index: line.index, text: title, startSeconds: line.startSeconds, cues: shiftedCues(line.cues, by: shift))
+    }
+
+    /// How far the line's spoken words sit into the title, or nil when the
+    /// line's trimmed text is not in the title, compared without case.
+    private static func titleOffset(of line: LyricLine, in title: String) -> Int? {
+        let lineText = line.text.trimmingCharacters(in: .whitespaces)
+        guard !lineText.isEmpty, let match = title.range(of: lineText, options: .caseInsensitive) else { return nil }
+        return title.distance(from: title.startIndex, to: match.lowerBound)
+            - line.text.prefix(while: \.isWhitespace).count
+    }
+
+    /// The cues moved by the offset, clamped at the start of the text.
+    private static func shiftedCues(_ cues: [LyricCue], by shift: Int) -> [LyricCue] {
+        cues.map {
+            LyricCue(startSeconds: $0.startSeconds, endSeconds: $0.endSeconds,
+                     startPosition: max(0, $0.startPosition + shift),
+                     endPosition: max(0, $0.endPosition + shift))
+        }
     }
 
     /// An untimed heading line holding the chapter's title, for chapters
