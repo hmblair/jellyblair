@@ -28,7 +28,7 @@ public struct SettingsToolbarButton: View {
         Button {
             openSettings?()
         } label: {
-            Image(systemName: "gearshape")
+            Image(systemName: "gearshape.fill")
         }
         .help("Show the settings")
     }

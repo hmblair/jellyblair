@@ -103,7 +103,6 @@ public struct LibraryFilterToolbarButtons: View {
             Image(systemName: iconName)
         }
         .menuIndicator(.hidden)
-        .foregroundStyle(Color.secondary)
         .help(help)
     }
 }
