@@ -156,9 +156,9 @@ public struct MainView: View {
     private var pushingSelection: Binding<String?> {
         Binding(
             get: { nil },
-            set: { [library = scope.library] id in
-                guard let book = library.book(withID: id) else { return }
-                path.append(.book(book))
+            set: { id in
+                guard let id else { return }
+                path.append(.book(id))
             }
         )
     }
@@ -166,15 +166,20 @@ public struct MainView: View {
     @ViewBuilder
     private func destination(for route: LibraryRoute) -> some View {
         switch route {
-        case .book(let book):
-            // Identity per book: the playback bar replaces the route in
-            // place, and without this the screen keeps the previous book's
-            // list state.
-            BookView(book: book)
-                .id(book.id)
-                .inlineNavigationTitle()
-        case .group(let group):
-            LibraryList(selection: pushingSelection, scope: .constant(group))
+        case .book(let id):
+            // The screen is blank once a refresh has dropped the book.
+            if let book = scope.library.book(withID: id) {
+                // Identity per book: the playback bar replaces the route in
+                // place, and without this the screen keeps the previous
+                // book's list state.
+                BookView(book: book)
+                    .id(book.id)
+                    .inlineNavigationTitle()
+            }
+        case .group(let kind, let name):
+            // A dropped group leaves a nil scope, which shows the whole
+            // library.
+            LibraryList(selection: pushingSelection, scope: .constant(scope.library.group(ofKind: kind, named: name)))
         }
     }
 
@@ -195,27 +200,29 @@ public struct MainView: View {
         case .regular:
             selectedBookID = book.id
         case .compact:
-            path = [.book(book)]
+            path = [.book(book.id)]
         }
     }
 
     /// Opens a named group of books. A regular layout swaps its list's scope
     /// in place, and a compact layout pushes the group onto its stack.
     private func openGroup(ofKind kind: BookGroup.Kind, named name: String) {
-        guard let group = scope.library.group(ofKind: kind, named: name) else { return }
         switch density {
         case .regular:
+            guard let group = scope.library.group(ofKind: kind, named: name) else { return }
             listScope = group
         case .compact:
-            path.append(.group(group))
+            path.append(.group(kind, name))
         }
     }
 }
 
-/// A screen the library can navigate to when it cannot show one beside itself.
+/// A screen the library can navigate to when it cannot show one beside
+/// itself. Routes carry identifiers, not values, so a pushed screen resolves
+/// the library's current data instead of a copy frozen at push time.
 enum LibraryRoute: Hashable {
-    case book(Book)
-    case group(BookGroup)
+    case book(String)
+    case group(BookGroup.Kind, String)
 }
 
 extension View {
