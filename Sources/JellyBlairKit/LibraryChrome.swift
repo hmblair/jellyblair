@@ -82,7 +82,7 @@ public struct LibraryFilterToolbarButtons: View {
     }
 
     private var filterMenu: some View {
-        toolbarMenu("line.3.horizontal.decrease.circle.fill", help: "Filter the books") {
+        toolbarMenu("line.3.horizontal.decrease.circle.fill", help: "Filter the books", isHighlighted: filters.hasActiveFilter) {
             Toggle(isOn: Binding(get: { filters.inProgressOnly }, set: { filters.setInProgressOnly($0) })) {
                 Label("In Progress", systemImage: "bookmark.fill")
             }
@@ -95,15 +95,38 @@ public struct LibraryFilterToolbarButtons: View {
         }
     }
 
-    /// A toolbar menu behind one icon button.
-    private func toolbarMenu(_ iconName: String, help: String, @ViewBuilder choices: () -> some View) -> some View {
+    /// A toolbar menu behind one icon button, tinted with the accent color
+    /// when highlighted.
+    private func toolbarMenu(_ iconName: String, help: String, isHighlighted: Bool = false, @ViewBuilder choices: () -> some View) -> some View {
         Menu {
             choices()
         } label: {
-            Image(systemName: iconName)
+            if isHighlighted {
+                highlightedIcon(iconName)
+            } else {
+                Image(systemName: iconName)
+            }
         }
         .menuIndicator(.hidden)
         .help(help)
+    }
+
+    /// A toolbar icon in the accent color. The Mac's toolbar paints
+    /// template symbol images and ignores foreground styles, so it gets a
+    /// baked native image; see tintedSymbol. The iOS toolbar keeps a
+    /// foreground style, so there the style tints the symbol image.
+    @ViewBuilder
+    private func highlightedIcon(_ iconName: String) -> some View {
+        #if canImport(AppKit)
+        if let tinted = tintedSymbol(iconName, color: .accent) {
+            Image(platformImage: tinted)
+        } else {
+            Image(systemName: iconName)
+        }
+        #else
+        Image(systemName: iconName)
+            .foregroundStyle(Color.accentColor)
+        #endif
     }
 }
 

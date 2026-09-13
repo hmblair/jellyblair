@@ -45,6 +45,24 @@ extension UIColor {
 }
 #endif
 
+#if canImport(AppKit)
+/// A symbol tinted in one color as a non-template image, so even the Mac's
+/// toolbar, which paints template icons in its own color, renders the tint.
+/// The tint fills the symbol's monochrome shape, so its cutouts stay. The
+/// size configuration matches the symbols the toolbar draws itself.
+func tintedSymbol(_ name: String, color: NSColor) -> NSImage? {
+    let configuration = NSImage.SymbolConfiguration(textStyle: .body, scale: .large)
+    guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+        .withSymbolConfiguration(configuration) else { return nil }
+    return NSImage(size: symbol.size, flipped: false) { rect in
+        symbol.draw(in: rect)
+        color.set()
+        rect.fill(using: .sourceAtop)
+        return true
+    }
+}
+#endif
+
 extension Image {
     /// Creates an Image from the platform's native image type.
     init(platformImage: PlatformImage) {
