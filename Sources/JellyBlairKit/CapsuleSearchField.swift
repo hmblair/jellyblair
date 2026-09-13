@@ -3,11 +3,11 @@ import SwiftUI
 /// The app's search field: a slim capsule with a magnifier, a clear button,
 /// and room for a trailing accessory, used by the library and chapter lists.
 public struct CapsuleSearchField<Accessory: View>: View {
-    let prompt: String
+    let prompt: LocalizedStringKey
     @Binding var text: String
     let accessory: Accessory
 
-    public init(_ prompt: String, text: Binding<String>, @ViewBuilder accessory: () -> Accessory) {
+    public init(_ prompt: LocalizedStringKey, text: Binding<String>, @ViewBuilder accessory: () -> Accessory) {
         self.prompt = prompt
         _text = text
         self.accessory = accessory()
@@ -42,7 +42,7 @@ public struct CapsuleSearchField<Accessory: View>: View {
 }
 
 public extension CapsuleSearchField where Accessory == EmptyView {
-    init(_ prompt: String, text: Binding<String>) {
+    init(_ prompt: LocalizedStringKey, text: Binding<String>) {
         self.init(prompt, text: text) { EmptyView() }
     }
 }
@@ -56,12 +56,12 @@ public struct CapsuleIconButton: View {
     let iconName: String
     let iconWeight: Font.Weight
     let isOn: Bool
-    let helpText: String
+    let helpText: LocalizedStringKey
     let action: () -> Void
 
     @State private var isHovering = false
 
-    public init(_ iconName: String, weight: Font.Weight = .regular, isOn: Bool = false, help: String, action: @escaping () -> Void) {
+    public init(_ iconName: String, weight: Font.Weight = .regular, isOn: Bool = false, help: LocalizedStringKey, action: @escaping () -> Void) {
         self.iconName = iconName
         iconWeight = weight
         self.isOn = isOn

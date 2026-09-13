@@ -216,11 +216,12 @@ public final class Library {
         let scope = group?.books ?? books
         let active = filters.activeFilters
         guard booksPassingFilters(in: scope, active: active, loadedBookID: loadedBookID).isEmpty else {
-            return "No Matching \(active.booksName)"
+            return String(localized: "No Matching \(active.booksName)")
         }
         let emptyFilters = filtersKeepingNoBook(in: scope, active: active, loadedBookID: loadedBookID)
-        guard !emptyFilters.isEmpty else { return "No \(active.booksName)" }
-        return "No " + emptyFilters.map { [$0].booksName }.joined(separator: " or ")
+        guard !emptyFilters.isEmpty else { return String(localized: "No \(active.booksName)") }
+        let names = emptyFilters.map { [$0].booksName }.joined(separator: String(localized: " or "))
+        return String(localized: "No \(names)")
     }
 
     /// The scope's books passing the active filters, ignoring the search.

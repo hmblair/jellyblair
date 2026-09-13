@@ -16,7 +16,9 @@ targetTemplates:
     # One asset catalog too: it holds the app icon for each platform and
     # the shared glyph image. The Icon Composer file carries the icon for
     # macOS 26 and iOS 26, and the asset catalog serves older systems.
-    sources: [PrivacyInfo.xcprivacy, Assets.xcassets, AppIcon.icon]
+    # The string catalog holds the localized strings for both apps and the
+    # package, whose keys resolve against the app bundle.
+    sources: [PrivacyInfo.xcprivacy, Assets.xcassets, AppIcon.icon, Localizable.xcstrings]
     dependencies:
       - package: JellyBlair
         product: JellyBlairKit

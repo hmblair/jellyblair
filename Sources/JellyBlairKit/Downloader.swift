@@ -83,7 +83,7 @@ final class Downloader: NSObject, URLSessionDownloadDelegate {
     private func adoptFile(at location: URL, from task: URLSessionDownloadTask) -> DownloadOutcome {
         let status = (task.response as? HTTPURLResponse)?.statusCode ?? -1
         guard (200...299).contains(status) else {
-            return .failed(message: "The server returned status \(status).")
+            return .failed(message: String(localized: "The server returned status \(status)."))
         }
         try? FileManager.default.removeItem(at: destination)
         do {
@@ -91,7 +91,7 @@ final class Downloader: NSObject, URLSessionDownloadDelegate {
         } catch {
             // The user-facing message stays short; the log keeps the cause.
             Log.downloads.error("Cannot move the finished download into place: \(String(describing: error), privacy: .public)")
-            return .failed(message: "Cannot save the file.")
+            return .failed(message: String(localized: "Cannot save the file."))
         }
         return .succeeded
     }

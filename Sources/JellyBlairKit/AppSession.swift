@@ -42,14 +42,14 @@ public final class AppSession {
         case .invalid:
             Log.session.warning("The server rejected the stored token; sign-in required")
             store.clearCredentials()
-            loginErrorMessage = "Your session expired. Sign in again."
+            loginErrorMessage = String(localized: "Your session expired. Sign in again.")
             state = .needsLogin
         }
     }
 
     public func login(serverURLString: String, username: String, password: String) async {
         guard let url = ServerURL.parse(serverURLString) else {
-            loginErrorMessage = "Enter a valid server URL."
+            loginErrorMessage = String(localized: "Enter a valid server URL.")
             return
         }
         isAuthenticating = true
@@ -62,7 +62,7 @@ public final class AppSession {
         do {
             try await client.authenticate(username: username, password: password)
             guard let token = client.sessionToken else {
-                loginErrorMessage = "The server did not return a session."
+                loginErrorMessage = String(localized: "The server did not return a session.")
                 return
             }
             store.save(serverURL: url, username: username, token: token)
@@ -103,19 +103,19 @@ public final class AppSession {
     }
 
     private static func outdatedServerText(for version: ServerVersion) -> String {
-        "This server runs Jellyfin \(version). The app needs \(ServerVersion.minimumSupported) or newer."
+        String(localized: "This server runs Jellyfin \(version.description). The app needs \(ServerVersion.minimumSupported.description) or newer.")
     }
 
     private static func loginErrorText(for error: Error) -> String {
         switch error {
         case JellyfinError.unauthorized:
-            return "Wrong username or password."
+            return String(localized: "Wrong username or password.")
         case JellyfinError.badStatus(let code):
-            return "The server returned status \(code)."
+            return String(localized: "The server returned status \(code).")
         case let error where isBlockedForInsecureTransport(error):
-            return "The system blocks plain HTTP to this address. Use https instead."
+            return String(localized: "The system blocks plain HTTP to this address. Use https instead.")
         default:
-            return "Cannot reach the server."
+            return String(localized: "Cannot reach the server.")
         }
     }
 

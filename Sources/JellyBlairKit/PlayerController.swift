@@ -225,7 +225,7 @@ public final class PlayerController {
         let ready = await waitUntilReady(item)
         guard generation == openGeneration else { return }
         guard ready else {
-            handlePlaybackFailure(item.error?.localizedDescription ?? "Cannot reach the server.")
+            handlePlaybackFailure(item.error?.localizedDescription ?? String(localized: "Cannot reach the server."))
             return
         }
         isReady = true
@@ -344,7 +344,7 @@ public final class PlayerController {
         let ready = await waitUntilReady(item)
         guard swapStillApplies(generation, player) else { return }
         guard ready else {
-            handlePlaybackFailure(item.error?.localizedDescription ?? "Playback failed.")
+            handlePlaybackFailure(item.error?.localizedDescription ?? String(localized: "Playback failed."))
             return
         }
         observeTimebaseRate(of: item)
@@ -704,7 +704,7 @@ public final class PlayerController {
     private func observeFailure(of item: AVPlayerItem) {
         statusObservation = item.observe(\.status) { [weak self] item, _ in
             guard item.status == .failed else { return }
-            let message = item.error?.localizedDescription ?? "Playback failed."
+            let message = item.error?.localizedDescription ?? String(localized: "Playback failed.")
             Task { @MainActor in
                 self?.handlePlaybackFailure(message)
             }
@@ -736,7 +736,7 @@ public final class PlayerController {
             queue: nil
         ) { [weak self] notification in
             let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
-            let message = error?.localizedDescription ?? "Playback failed."
+            let message = error?.localizedDescription ?? String(localized: "Playback failed.")
             Task { @MainActor in
                 self?.handleMidPlaybackFailure(message)
             }

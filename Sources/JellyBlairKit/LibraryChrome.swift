@@ -102,7 +102,7 @@ public struct LibraryFilterToolbarButtons: View {
 
     /// A toolbar menu behind one icon button, showing the icon's accented
     /// form while highlighted.
-    private func toolbarMenu(_ icon: Icon, help: String, isHighlighted: Bool = false, @ViewBuilder choices: () -> some View) -> some View {
+    private func toolbarMenu(_ icon: Icon, help: LocalizedStringKey, isHighlighted: Bool = false, @ViewBuilder choices: () -> some View) -> some View {
         Menu {
             choices()
         } label: {
@@ -118,7 +118,7 @@ public struct LibraryFilterToolbarButtons: View {
 
     /// One choice in a menu: its icon shows its accented image while the
     /// choice is active, in place of the system check mark.
-    private func menuChoice(_ title: String, icon: Icon, isOn: Bool, action: @escaping () -> Void) -> some View {
+    private func menuChoice(_ title: LocalizedStringKey, icon: Icon, isOn: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label {
                 Text(title)

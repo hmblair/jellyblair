@@ -105,7 +105,7 @@ public struct BookView: View {
         } label: {
             Image(systemName: book.screenState.isShowingTranscript ? "list.bullet" : "text.quote")
         }
-        .help(book.screenState.isShowingTranscript ? "Show the chapters" : "Show the transcript")
+        .help(book.screenState.isShowingTranscript ? Text("Show the chapters") : Text("Show the transcript"))
     }
 
     /// Actions on this book, in its title bar so it is clear which book
@@ -379,7 +379,11 @@ public struct BookView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "play.fill")
-                Text(book.isStarted ? "Resume" : "Play")
+                if book.isStarted {
+                    Text("Resume")
+                } else {
+                    Text("Play")
+                }
                 if let title = resumeChapterTitle {
                     Text(title)
                         .fontWeight(.light)

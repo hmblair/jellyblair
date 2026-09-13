@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// The order a list of books is shown in. The titles start at A and the
 /// durations at the shortest book. The plays start at the most recent one,
@@ -12,7 +12,7 @@ public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
     public var id: Self { self }
 
     /// The order's name in the sort menu.
-    public var label: String {
+    public var label: LocalizedStringKey {
         switch self {
         case .name:
             return "Title"
@@ -109,11 +109,11 @@ public enum BookFilter: CaseIterable {
     var adjective: String {
         switch self {
         case .started:
-            return "Started"
+            return String(localized: "Started")
         case .downloaded:
-            return "Downloaded"
+            return String(localized: "Downloaded")
         case .favorites:
-            return "Favorite"
+            return String(localized: "Favorite")
         }
     }
 }
@@ -122,6 +122,6 @@ public extension [BookFilter] {
     /// The books this combination of filters keeps, as the empty state
     /// names them: each filter's adjective in menu order, before "Books".
     var booksName: String {
-        (map(\.adjective) + ["Books"]).joined(separator: " ")
+        (map(\.adjective) + [String(localized: "Books")]).joined(separator: " ")
     }
 }

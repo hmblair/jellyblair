@@ -105,7 +105,7 @@ struct MatchNavigator: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(isCaseSensitive ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary))
-            .help(isCaseSensitive ? "Match any case" : "Match case exactly")
+            .help(isCaseSensitive ? Text("Match any case") : Text("Match case exactly"))
             if isSearching {
                 ProgressView()
                     .controlSize(.mini)
