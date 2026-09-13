@@ -468,6 +468,7 @@ public final class PlayerController {
             #endif
             if let book, !hasActiveSession {
                 hasActiveSession = true
+                book.recordPlaybackStart()
                 reportSessionStarted(for: book)
             }
             startProgressReports()

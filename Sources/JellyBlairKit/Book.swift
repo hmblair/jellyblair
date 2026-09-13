@@ -134,6 +134,14 @@ public final class Book: Identifiable {
         onRecordChanged?()
     }
 
+    /// Records that playback started now and notifies the library, so the
+    /// last-played sort follows a play without a server fetch. The next
+    /// refresh adopts the server's own timestamp.
+    func recordPlaybackStart() {
+        record = record.withLastPlayedTimestamp(formatServerDate(Date()))
+        onRecordChanged?()
+    }
+
     /// True when the position is past the start, which is what makes the
     /// play button offer Resume and the reset available.
     public var isInProgress: Bool {

@@ -140,6 +140,17 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         return copy
     }
 
+    /// Returns a copy of the book with a new last-played timestamp.
+    public func withLastPlayedTimestamp(_ timestamp: String) -> BookRecord {
+        var copy = self
+        copy.userData = BookUserData(
+            playbackPositionTicks: userData?.playbackPositionTicks ?? 0,
+            lastPlayedTimestamp: timestamp,
+            isFavorite: userData?.isFavorite
+        )
+        return copy
+    }
+
     /// Returns a copy of the book at a different favorite state.
     public func withFavorite(_ isFavorite: Bool) -> BookRecord {
         var copy = self
