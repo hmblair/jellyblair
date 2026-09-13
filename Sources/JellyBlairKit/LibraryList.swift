@@ -60,7 +60,7 @@ public struct LibraryList: View {
             await library.load()
         }
         .overlay {
-            LibraryEmptyOverlay(list)
+            LibraryEmptyOverlay(list, scope: scope, filters: filters)
         }
     }
 

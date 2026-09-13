@@ -31,8 +31,8 @@ public let titleSortIcon = Icon("textformat")
 /// The symbol for the last-played sort order, in the sort menu.
 public let lastPlayedSortIcon = Icon("clock.arrow.circlepath")
 
-/// The symbol for a book in progress, in the filter menu.
-public let inProgressIcon = Icon("bookmark.fill")
+/// The symbol for a started book, in the filter menu.
+public let startedIcon = Icon("bookmark.fill")
 
 /// The symbol for a downloaded book, shared by the filter menu and the book
 /// screen's download control.

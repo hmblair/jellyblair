@@ -46,7 +46,7 @@ public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
 public struct LibraryFilters: Equatable {
     public var searchQuery = ""
     public var downloadedOnly = false
-    public private(set) var inProgressOnly = false
+    public private(set) var startedOnly = false
     public var favoritesOnly = false
     public var sortOrder = BookSortOrder.name
 
@@ -54,15 +54,74 @@ public struct LibraryFilters: Equatable {
 
     /// Whether at least one filter toggle is on.
     public var hasActiveFilter: Bool {
-        downloadedOnly || inProgressOnly || favoritesOnly
+        !activeFilters.isEmpty
     }
 
-    /// Turns the in-progress filter on or off, and puts the list in the
-    /// order that suits it: the books in progress read most recently played
-    /// first, and the whole library reads by title. The sort menu can then
-    /// choose another order.
-    public mutating func setInProgressOnly(_ isOn: Bool) {
-        inProgressOnly = isOn
+    /// The filter toggles that are on, in the filter menu's order.
+    public var activeFilters: [BookFilter] {
+        BookFilter.allCases.filter { $0.isOn(in: self) }
+    }
+
+    /// Turns the started filter on or off, and puts the list in the order
+    /// that suits it: the started books read most recently played first,
+    /// and the whole library reads by title. The sort menu can then choose
+    /// another order.
+    public mutating func setStartedOnly(_ isOn: Bool) {
+        startedOnly = isOn
         sortOrder = isOn ? .lastPlayed : .name
+    }
+}
+
+/// One of the library's filter toggles: it reads its state from the
+/// filters, tests one book, and names its books in the empty state.
+public enum BookFilter: CaseIterable {
+    case started
+    case downloaded
+    case favorites
+
+    /// True when this filter's toggle is on.
+    func isOn(in filters: LibraryFilters) -> Bool {
+        switch self {
+        case .started:
+            return filters.startedOnly
+        case .downloaded:
+            return filters.downloadedOnly
+        case .favorites:
+            return filters.favoritesOnly
+        }
+    }
+
+    /// True when the book passes this filter. The loaded book counts as
+    /// started even before playback's first position write.
+    @MainActor
+    func passes(_ book: Book, loadedBookID: String?) -> Bool {
+        switch self {
+        case .started:
+            return book.isStarted || book.id == loadedBookID
+        case .downloaded:
+            return book.isDownloaded
+        case .favorites:
+            return book.isFavorite
+        }
+    }
+
+    /// The word this filter puts before "Books" in the empty state.
+    var adjective: String {
+        switch self {
+        case .started:
+            return "Started"
+        case .downloaded:
+            return "Downloaded"
+        case .favorites:
+            return "Favorite"
+        }
+    }
+}
+
+public extension [BookFilter] {
+    /// The books this combination of filters keeps, as the empty state
+    /// names them: each filter's adjective in menu order, before "Books".
+    var booksName: String {
+        (map(\.adjective) + ["Books"]).joined(separator: " ")
     }
 }

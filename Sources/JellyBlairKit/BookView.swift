@@ -379,7 +379,7 @@ public struct BookView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "play.fill")
-                Text(book.isInProgress ? "Resume" : "Play")
+                Text(book.isStarted ? "Resume" : "Play")
                 if let title = resumeChapterTitle {
                     Text(title)
                         .fontWeight(.light)
@@ -395,7 +395,7 @@ public struct BookView: View {
 
     /// The chapter the Resume button will land in, once chapters are known.
     private var resumeChapterTitle: String? {
-        guard book.isInProgress,
+        guard book.isStarted,
               let index = markedChapterIndex,
               chapters.indices.contains(index)
         else { return nil }
@@ -408,7 +408,7 @@ public struct BookView: View {
         if isLoaded {
             return player.currentChapterIndex
         }
-        guard book.isInProgress else { return nil }
+        guard book.isStarted else { return nil }
         return chapters.last(where: { $0.startSeconds <= book.resumePositionSeconds + Chapter.startSlackSeconds })?.index
     }
 
@@ -576,7 +576,7 @@ public struct BookActionsMenuItems: View {
                 resetPlaybackIcon.plain
             }
         }
-        .disabled(!connection.isServerReachable || !book.isInProgress)
+        .disabled(!connection.isServerReachable || !book.isStarted)
     }
 
     /// Re-reads everything the server and the file know about this book: the

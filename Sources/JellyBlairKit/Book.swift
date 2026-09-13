@@ -144,7 +144,7 @@ public final class Book: Identifiable {
 
     /// True when the position is past the start, which is what makes the
     /// play button offer Resume and the reset available.
-    public var isInProgress: Bool {
+    public var isStarted: Bool {
         resumePositionSeconds > 0
     }
 

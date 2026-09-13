@@ -88,8 +88,8 @@ public struct LibraryFilterToolbarButtons: View {
 
     private var filterMenu: some View {
         toolbarMenu(filterMenuIcon, help: "Filter the books", isHighlighted: filters.hasActiveFilter) {
-            menuChoice("In Progress", icon: inProgressIcon, isOn: filters.inProgressOnly) {
-                filters.setInProgressOnly(!filters.inProgressOnly)
+            menuChoice("Started", icon: startedIcon, isOn: filters.startedOnly) {
+                filters.setStartedOnly(!filters.startedOnly)
             }
             menuChoice("Downloaded", icon: downloadedIcon, isOn: filters.downloadedOnly) {
                 filters.downloadedOnly.toggle()
@@ -129,16 +129,22 @@ public struct LibraryFilterToolbarButtons: View {
     }
 }
 
-/// The library list's empty states: loading, a failed first load, or no
-/// books passing the search and filters. A refresh failure keeps the
-/// current list; these only cover an empty one.
+/// The library list's empty states: loading, a failed first load, an empty
+/// library, or no books passing the search and filters, titled by what
+/// there is none of. A refresh failure keeps the current list; these only
+/// cover an empty one.
 public struct LibraryEmptyOverlay: View {
     let list: BookList
+    let scope: BookGroup?
+    let filters: LibraryFilters
 
     @Environment(Library.self) private var library
+    @Environment(PlayerController.self) private var player
 
-    public init(_ list: BookList) {
+    public init(_ list: BookList, scope: BookGroup?, filters: LibraryFilters) {
         self.list = list
+        self.scope = scope
+        self.filters = filters
     }
 
     public var body: some View {
@@ -147,11 +153,16 @@ public struct LibraryEmptyOverlay: View {
                 ProgressView()
             } else if let message = library.errorMessage {
                 ContentUnavailableView("Cannot load the library", systemImage: "exclamationmark.triangle", description: Text(message))
+            } else {
+                ContentUnavailableView("No Books", systemImage: "books.vertical")
             }
         } else if !list.hasVisibleContent {
-            // Emptiness can come from the search or the filter toggles, so
-            // the message stays generic.
-            ContentUnavailableView("No Results", systemImage: "magnifyingglass")
+            ContentUnavailableView(emptyTitle, systemImage: "magnifyingglass")
         }
+    }
+
+    /// The title naming what the search and filters left none of.
+    private var emptyTitle: String {
+        library.emptyListTitle(in: scope, filters: filters, loadedBookID: player.book?.id)
     }
 }

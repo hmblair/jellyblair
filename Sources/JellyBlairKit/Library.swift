@@ -201,12 +201,36 @@ public final class Library {
         return Self.sorted(matching, by: filters.sortOrder)
     }
 
-    /// True when the book passes every filter that is on. The loaded book
-    /// counts as in progress even before playback's first position write.
+    /// True when the book passes every filter that is on.
     private func passesFilters(_ book: Book, filters: LibraryFilters, loadedBookID: String?) -> Bool {
-        (!filters.downloadedOnly || book.isDownloaded)
-            && (!filters.inProgressOnly || book.isInProgress || book.id == loadedBookID)
-            && (!filters.favoritesOnly || book.isFavorite)
+        filters.activeFilters.allSatisfy { $0.passes(book, loadedBookID: loadedBookID) }
+    }
+
+    // MARK: - Empty lists
+
+    /// The empty state's title when no book passes the search and filters.
+    /// It names the filters that keep no book of the scope at all, or the
+    /// active combination when each filter keeps books on its own, or a
+    /// missing search match when the filters alone leave books.
+    public func emptyListTitle(in group: BookGroup?, filters: LibraryFilters, loadedBookID: String?) -> String {
+        let scope = group?.books ?? books
+        let active = filters.activeFilters
+        guard booksPassingFilters(in: scope, active: active, loadedBookID: loadedBookID).isEmpty else {
+            return "No Matching \(active.booksName)"
+        }
+        let emptyFilters = filtersKeepingNoBook(in: scope, active: active, loadedBookID: loadedBookID)
+        guard !emptyFilters.isEmpty else { return "No \(active.booksName)" }
+        return "No " + emptyFilters.map { [$0].booksName }.joined(separator: " or ")
+    }
+
+    /// The scope's books passing the active filters, ignoring the search.
+    private func booksPassingFilters(in scope: [Book], active: [BookFilter], loadedBookID: String?) -> [Book] {
+        scope.filter { book in active.allSatisfy { $0.passes(book, loadedBookID: loadedBookID) } }
+    }
+
+    /// The active filters that no book of the scope passes on its own.
+    private func filtersKeepingNoBook(in scope: [Book], active: [BookFilter], loadedBookID: String?) -> [BookFilter] {
+        active.filter { filter in !scope.contains { filter.passes($0, loadedBookID: loadedBookID) } }
     }
 
     // MARK: - Sorting
