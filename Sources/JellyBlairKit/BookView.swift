@@ -85,9 +85,6 @@ public struct BookView: View {
                     transcriptToggle
                 }
             }
-            ToolbarItem(placement: .primaryAction) {
-                bookActionsMenu
-            }
             // Last, so the settings button keeps the same place on every screen.
             ToolbarItem(placement: .primaryAction) {
                 SettingsToolbarButton()
@@ -116,17 +113,6 @@ public struct BookView: View {
             Image(systemName: book.screenState.isShowingTranscript ? "list.bullet" : "text.quote")
         }
         .help(book.screenState.isShowingTranscript ? Text("Show the chapters") : Text("Show the transcript"))
-    }
-
-    /// Actions on this book, in its title bar so it is clear which book
-    /// they apply to.
-    private var bookActionsMenu: some View {
-        Menu {
-            BookActionsMenuItems(book: book)
-        } label: {
-            Image(systemName: "ellipsis.circle.fill")
-        }
-        .menuIndicator(.hidden)
     }
 
     /// True while the transcript pane is the visible one. A transcript that
@@ -458,72 +444,4 @@ public struct OpenBookGroupAction {
 
 public extension EnvironmentValues {
     @Entry var openBookGroup: OpenBookGroupAction?
-}
-
-/// The actions on one book, shared by the book screen's title-bar menu and
-/// the library rows' context menus.
-public struct BookActionsMenuItems: View {
-    let book: Book
-
-    @Environment(PlayerController.self) private var player
-    @Environment(ConnectionMonitor.self) private var connection
-
-    public init(book: Book) {
-        self.book = book
-    }
-
-    private var isLoaded: Bool {
-        player.book?.id == book.id
-    }
-
-    public var body: some View {
-        Button {
-            refreshMetadata()
-        } label: {
-            Label {
-                Text("Refresh Metadata")
-            } icon: {
-                refreshMetadataIcon.plain
-            }
-        }
-        .disabled(!connection.isServerReachable)
-        Button {
-            resetPlayback()
-        } label: {
-            Label {
-                Text("Reset Playback")
-            } icon: {
-                resetPlaybackIcon.plain
-            }
-        }
-        .disabled(!connection.isServerReachable || !book.isStarted)
-    }
-
-    /// Re-reads everything the server and the file know about this book: the
-    /// cover, the chapter list, the transcript, and the record with its
-    /// resume position.
-    private func refreshMetadata() {
-        Task {
-            await CoverImageLoader.shared.refresh(for: book.id, from: book.coverURL)
-            if isLoaded {
-                await player.refreshChapters()
-                await player.refreshArtwork()
-            } else {
-                await book.refreshChapters()
-            }
-            await book.refreshLyrics()
-            await book.refreshFromServer()
-        }
-    }
-
-    /// Resets the book: the loaded book closes first, so playback stops,
-    /// then the position returns to zero here and on the server.
-    private func resetPlayback() {
-        Task {
-            if isLoaded {
-                await player.close()
-            }
-            await book.resetPlayback()
-        }
-    }
 }

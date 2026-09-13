@@ -41,8 +41,15 @@ public let lastPlayedSortIcon = Icon("clock.arrow.circlepath")
 /// The symbol for a started book, in the filter menu.
 public let startedIcon = Icon("bookmark.fill")
 
-/// The symbol for a downloaded book, in the filter menu.
+/// The symbol for a downloaded book, shared by the filter menu and the book
+/// actions menu's download entry.
 public let downloadedIcon = Icon("arrow.down.circle.fill", hasGlyphLayer: true)
+
+/// The symbol for cancelling a book's download, in the book actions menu.
+public let cancelDownloadIcon = Icon("xmark.circle")
+
+/// The symbol for removing a book's download, in the book actions menu.
+public let removeDownloadIcon = Icon("trash.fill")
 
 /// The symbol for a favorite book, in the filter menu.
 public let favoriteIcon = Icon("heart.fill")

@@ -6,6 +6,7 @@ import SwiftUI
 public struct BookFileInfoSheet: View {
     let book: Book
 
+    @Environment(PlayerController.self) private var player
     @Environment(ConnectionMonitor.self) private var connection
     @Environment(\.dismiss) private var dismiss
 
@@ -25,7 +26,7 @@ public struct BookFileInfoSheet: View {
     private var macBody: some View {
         MacSheet(title: Text("File Information")) {
             form
-            actionArea
+            actionRow
                 .padding(.horizontal, sheetEdgePadding)
         }
     }
@@ -41,7 +42,7 @@ public struct BookFileInfoSheet: View {
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
-                    actionArea
+                    actionRow
                         .padding(.horizontal, sheetEdgePadding)
                         .padding(.bottom, 8)
                 }
@@ -110,39 +111,65 @@ public struct BookFileInfoSheet: View {
         }
     }
 
-    private var actionArea: some View {
+    private var actions: BookActions {
+        BookActions(book: book, player: player, connection: connection)
+    }
+
+    /// The sheet's actions on one row, mirrored by the library rows'
+    /// context menus. The error and the progress bar sit above the row.
+    private var actionRow: some View {
         VStack(spacing: 12) {
             errorLine
-            actionButton
+            downloadProgress
+            HStack(spacing: 12) {
+                downloadButton
+                Button("Refresh") {
+                    actions.refreshMetadata()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!actions.canRefreshMetadata)
+                DestructiveActionButton(requiresConfirmation: false) {
+                    actions.resetPlayback()
+                } label: {
+                    Text("Reset")
+                }
+                .disabled(!actions.canResetPlayback)
+            }
         }
     }
 
     @ViewBuilder
-    private var actionButton: some View {
+    private var downloadButton: some View {
         switch book.downloadState {
         case .notDownloaded:
             Button("Download") {
                 book.download()
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!connection.isServerReachable)
-        case .downloading(let progress):
-            // An unknown fraction draws as an empty bar, never as the
-            // indeterminate style: the Mac's linear bar keeps the
-            // indeterminate bounce even after real fractions arrive.
-            ProgressView(value: progress ?? 0)
-                .progressViewStyle(.linear)
+            .disabled(!actions.canDownload)
+        case .downloading:
             DestructiveActionButton(requiresConfirmation: false) {
                 book.cancelDownload()
             } label: {
-                Text("Cancel Download")
+                Text("Cancel")
             }
         case .downloaded:
             DestructiveActionButton {
                 book.removeDownload()
             } label: {
-                Text("Remove Download")
+                Text("Remove")
             }
+        }
+    }
+
+    @ViewBuilder
+    private var downloadProgress: some View {
+        if case .downloading(let progress) = book.downloadState {
+            // An unknown fraction draws as an empty bar, never as the
+            // indeterminate style: the Mac's linear bar keeps the
+            // indeterminate bounce even after real fractions arrive.
+            ProgressView(value: progress ?? 0)
+                .progressViewStyle(.linear)
         }
     }
 
