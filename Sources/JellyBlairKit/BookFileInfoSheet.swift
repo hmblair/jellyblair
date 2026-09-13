@@ -9,14 +9,6 @@ public struct BookFileInfoSheet: View {
     @Environment(ConnectionMonitor.self) private var connection
     @Environment(\.dismiss) private var dismiss
 
-    /// Removal asks once: the first tap turns the button into a red
-    /// confirmation that reverts after a few seconds; a second tap within
-    /// that window deletes.
-    @State private var isConfirmingRemoval = false
-    @State private var removalConfirmationTimeout: Task<Void, Never>?
-
-    private static let edgePadding: CGFloat = 20
-
     public init(book: Book) {
         self.book = book
     }
@@ -31,30 +23,11 @@ public struct BookFileInfoSheet: View {
 
     #if os(macOS)
     private var macBody: some View {
-        VStack(spacing: 0) {
-            Text("File Information")
-                .font(.headline)
-                .padding(.top, Self.edgePadding)
+        MacSheet(title: Text("File Information")) {
             form
             actionArea
-                .padding(.horizontal, Self.edgePadding)
-            HStack {
-                Spacer()
-                doneButton
-            }
-            .padding([.horizontal, .bottom], Self.edgePadding)
-            .padding(.top, 16)
+                .padding(.horizontal, sheetEdgePadding)
         }
-        .frame(width: 380)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    /// Closes the sheet, which the Mac cannot swipe away.
-    private var doneButton: some View {
-        Button("Done") {
-            dismiss()
-        }
-        .keyboardShortcut(.cancelAction)
     }
     #else
     private var phoneBody: some View {
@@ -69,7 +42,7 @@ public struct BookFileInfoSheet: View {
                 }
                 .safeAreaInset(edge: .bottom) {
                     actionArea
-                        .padding(.horizontal, Self.edgePadding)
+                        .padding(.horizontal, sheetEdgePadding)
                         .padding(.bottom, 8)
                 }
         }
@@ -159,23 +132,17 @@ public struct BookFileInfoSheet: View {
             // indeterminate bounce even after real fractions arrive.
             ProgressView(value: progress ?? 0)
                 .progressViewStyle(.linear)
-            Button("Cancel Download") {
+            DestructiveActionButton(requiresConfirmation: false) {
                 book.cancelDownload()
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-        case .downloaded:
-            Button {
-                handleRemovalTap()
             } label: {
-                if isConfirmingRemoval {
-                    Text("Confirm Removal")
-                } else {
-                    Text("Remove Download")
-                }
+                Text("Cancel Download")
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
+        case .downloaded:
+            DestructiveActionButton {
+                book.removeDownload()
+            } label: {
+                Text("Remove Download")
+            }
         }
     }
 
@@ -190,18 +157,4 @@ public struct BookFileInfoSheet: View {
         }
     }
 
-    private func handleRemovalTap() {
-        removalConfirmationTimeout?.cancel()
-        guard isConfirmingRemoval else {
-            isConfirmingRemoval = true
-            removalConfirmationTimeout = Task { @MainActor in
-                try? await Task.sleep(for: .seconds(4))
-                guard !Task.isCancelled else { return }
-                isConfirmingRemoval = false
-            }
-            return
-        }
-        isConfirmingRemoval = false
-        book.removeDownload()
-    }
 }

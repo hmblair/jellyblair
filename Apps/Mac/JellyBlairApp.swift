@@ -16,6 +16,7 @@ struct JellyBlairApp: App {
         // at it.
         .windowStyle(.hiddenTitleBar)
         .commands {
+            SettingsCommands()
             CommandGroup(after: .appSettings) {
                 Button("Sign Out") {
                     session.signOut()
@@ -24,16 +25,16 @@ struct JellyBlairApp: App {
             }
             RefreshCommands()
         }
-
-        Settings {
-            SettingsView(session: session)
-        }
     }
 }
 
-/// Switches between the login form and the main window based on session state.
+/// Switches between the login form and the main window based on session
+/// state. The settings sheet presents here, over whichever screen shows,
+/// so the toolbar button and the app menu share one presentation.
 struct RootView: View {
     let session: AppSession
+
+    @State private var isShowingSettings = false
 
     var body: some View {
         Group {
@@ -48,6 +49,15 @@ struct RootView: View {
             }
         }
         .resolvingLayoutDensity()
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsView(session: session)
+        }
+        .environment(\.openSettings, JellyBlairKit.OpenSettingsAction {
+            isShowingSettings = true
+        })
+        .focusedSceneValue(\.openAppSettings, JellyBlairKit.OpenSettingsAction {
+            isShowingSettings = true
+        })
         .task {
             await session.start()
         }
@@ -68,8 +78,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 struct ContentView: View {
-    @Environment(\.openSettings) private var openSettingsWindow: SwiftUI.OpenSettingsAction
-
     @State private var scope: SessionScope
 
     init(client: JellyfinClient) {
@@ -101,8 +109,5 @@ struct ContentView: View {
             .focusedSceneValue(\.refreshActions, RefreshActions(
                 refreshLibrary: { [library = scope.library] in Task { await library.load() } }
             ))
-            .environment(\.openSettings, JellyBlairKit.OpenSettingsAction {
-                openSettingsWindow()
-            })
     }
 }
