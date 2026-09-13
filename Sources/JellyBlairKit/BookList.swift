@@ -10,16 +10,16 @@ public struct BookGroup: Identifiable {
         case genre
 
         /// The symbol for this role.
-        public var iconName: String {
+        public var icon: Icon {
             switch self {
             case .author:
-                return authorIconName
+                return authorIcon
             case .narrator:
-                return narratorIconName
+                return narratorIcon
             case .publisher:
-                return publisherIconName
+                return publisherIcon
             case .genre:
-                return genreIconName
+                return genreIcon
             }
         }
 
@@ -40,7 +40,7 @@ public struct BookGroup: Identifiable {
     }
 
     /// The symbol for the group's role.
-    public var iconName: String { kind.iconName }
+    public var icon: Icon { kind.icon }
 
     public let name: String
     public let kind: Kind
@@ -66,5 +66,5 @@ public struct BookList {
 /// The text and symbol above a scoped list.
 public struct BookListHeading {
     public let name: String
-    public let iconName: String
+    public let icon: Icon
 }

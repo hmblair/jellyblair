@@ -112,7 +112,7 @@ public struct GroupHeading: View {
                 Image(systemName: "chevron.left")
                     .font(.caption)
             }
-            Image(systemName: heading.iconName)
+            heading.icon.plain
                 .imageScale(.small)
             Text(heading.name)
                 .font(.callout)

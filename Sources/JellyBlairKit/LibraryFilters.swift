@@ -26,16 +26,16 @@ public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
     }
 
     /// The symbol beside the order's name in the sort menu.
-    public var iconName: String {
+    public var icon: Icon {
         switch self {
         case .name:
-            return "textformat"
+            return titleSortIcon
         case .lastPlayed:
-            return "clock.arrow.circlepath"
+            return lastPlayedSortIcon
         case .year:
-            return yearIconName
+            return yearIcon
         case .duration:
-            return durationIconName
+            return durationIcon
         }
     }
 }

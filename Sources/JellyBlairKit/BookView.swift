@@ -225,12 +225,12 @@ public struct BookView: View {
             groupLine(.narrator)
             groupLine(.publisher)
             if let year = book.productionYear {
-                metadataLine(icon: yearIconName) { Text(verbatim: String(year)) }
+                metadataLine(icon: yearIcon) { Text(verbatim: String(year)) }
             }
             groupLine(.genre)
-            metadataLine(icon: durationIconName) { lengthLine }
+            metadataLine(icon: durationIcon) { lengthLine }
             if let kbps = book.bitrateKbps {
-                metadataLine(icon: "waveform") { Text("\(kbps) kbps") }
+                metadataLine(icon: bitrateIcon) { Text("\(kbps) kbps") }
             }
             downloadRow
         }
@@ -244,16 +244,16 @@ public struct BookView: View {
     private func groupLine(_ kind: BookGroup.Kind) -> some View {
         let names = kind.names(of: book)
         if !names.isEmpty {
-            metadataLine(icon: kind.iconName) {
+            metadataLine(icon: kind.icon) {
                 NameListLine(kind: kind, names: names, open: openBookGroup)
             }
         }
     }
 
     /// A metadata row: a small dimmed icon beside its text.
-    private func metadataLine(icon: String, @ViewBuilder content: () -> some View) -> some View {
+    private func metadataLine(icon: Icon, @ViewBuilder content: () -> some View) -> some View {
         metadataLine {
-            Image(systemName: icon)
+            icon.plain
                 .imageScale(.small)
         } content: {
             content()
@@ -323,7 +323,7 @@ public struct BookView: View {
             Button {
                 book.download()
             } label: {
-                Image(systemName: "arrow.down.circle.fill")
+                downloadedIcon.plain
                     .foregroundStyle(.primary)
                     .opacity(isHoveringDownload ? 0.6 : 1)
                     .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
@@ -339,9 +339,9 @@ public struct BookView: View {
                 book.cancelDownload()
             } label: {
                 ZStack {
-                    Image(systemName: "arrow.down.circle.fill")
+                    downloadedIcon.plain
                         .foregroundStyle(.quaternary)
-                    Image(systemName: "arrow.down.circle.fill")
+                    downloadedIcon.plain
                         .foregroundStyle(.primary)
                         .mask {
                             GeometryReader { geometry in

@@ -179,7 +179,7 @@ public final class Library {
             )
         }
         return BookList(
-            heading: BookListHeading(name: group.name, iconName: group.iconName),
+            heading: BookListHeading(name: group.name, icon: group.icon),
             books: visibleBooks(in: group, filters: filters, loadedBookID: loadedBookID)
         )
     }

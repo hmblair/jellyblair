@@ -53,11 +53,19 @@ public extension View {
     }
 }
 
+/// The symbol on the sort menu's toolbar button.
+private let sortMenuIcon = Icon("arrow.up.arrow.down.circle.fill", hasGlyphLayer: true)
+
+/// The symbol on the filter menu's toolbar button.
+private let filterMenuIcon = Icon("line.3.horizontal.decrease.circle.fill", hasGlyphLayer: true)
+
 /// The library's sort menu and filter menu for a toolbar, marking the
-/// active choices with the system check marks. The in-progress filter
+/// active choices by coloring their icons accent. The in-progress filter
 /// also puts the list in last-played order.
 public struct LibraryFilterToolbarButtons: View {
     @Binding var filters: LibraryFilters
+
+    @Environment(\.self) private var environment
 
     public init(filters: Binding<LibraryFilters>) {
         _filters = filters
@@ -69,64 +77,55 @@ public struct LibraryFilterToolbarButtons: View {
     }
 
     private var sortMenu: some View {
-        toolbarMenu("arrow.up.arrow.down.circle.fill", help: "Sort the books") {
-            Picker("Sort By", selection: $filters.sortOrder) {
-                ForEach(BookSortOrder.allCases) { order in
-                    Label(order.label, systemImage: order.iconName)
-                        .tag(order)
+        toolbarMenu(sortMenuIcon, help: "Sort the books") {
+            ForEach(BookSortOrder.allCases) { order in
+                menuChoice(order.label, icon: order.icon, isOn: filters.sortOrder == order) {
+                    filters.sortOrder = order
                 }
             }
-            .pickerStyle(.inline)
-            .labelsHidden()
         }
     }
 
     private var filterMenu: some View {
-        toolbarMenu("line.3.horizontal.decrease.circle.fill", help: "Filter the books", isHighlighted: filters.hasActiveFilter) {
-            Toggle(isOn: Binding(get: { filters.inProgressOnly }, set: { filters.setInProgressOnly($0) })) {
-                Label("In Progress", systemImage: "bookmark.fill")
+        toolbarMenu(filterMenuIcon, help: "Filter the books", isHighlighted: filters.hasActiveFilter) {
+            menuChoice("In Progress", icon: inProgressIcon, isOn: filters.inProgressOnly) {
+                filters.setInProgressOnly(!filters.inProgressOnly)
             }
-            Toggle(isOn: $filters.downloadedOnly) {
-                Label("Downloaded", systemImage: "arrow.down.circle.fill")
+            menuChoice("Downloaded", icon: downloadedIcon, isOn: filters.downloadedOnly) {
+                filters.downloadedOnly.toggle()
             }
-            Toggle(isOn: $filters.favoritesOnly) {
-                Label("Favorites", systemImage: "heart.fill")
+            menuChoice("Favorites", icon: favoriteIcon, isOn: filters.favoritesOnly) {
+                filters.favoritesOnly.toggle()
             }
         }
     }
 
-    /// A toolbar menu behind one icon button, tinted with the accent color
-    /// when highlighted.
-    private func toolbarMenu(_ iconName: String, help: String, isHighlighted: Bool = false, @ViewBuilder choices: () -> some View) -> some View {
+    /// A toolbar menu behind one icon button, showing the icon's accented
+    /// form while highlighted.
+    private func toolbarMenu(_ icon: Icon, help: String, isHighlighted: Bool = false, @ViewBuilder choices: () -> some View) -> some View {
         Menu {
             choices()
         } label: {
             if isHighlighted {
-                highlightedIcon(iconName)
+                icon.accented
             } else {
-                Image(systemName: iconName)
+                icon.plain
             }
         }
         .menuIndicator(.hidden)
         .help(help)
     }
 
-    /// A toolbar icon in the accent color. The Mac's toolbar paints
-    /// template symbol images and ignores foreground styles, so it gets a
-    /// baked native image; see tintedSymbol. The iOS toolbar keeps a
-    /// foreground style, so there the style tints the symbol image.
-    @ViewBuilder
-    private func highlightedIcon(_ iconName: String) -> some View {
-        #if canImport(AppKit)
-        if let tinted = tintedSymbol(iconName, color: .accent) {
-            Image(platformImage: tinted)
-        } else {
-            Image(systemName: iconName)
+    /// One choice in a menu: its icon shows its accented image while the
+    /// choice is active, in place of the system check mark.
+    private func menuChoice(_ title: String, icon: Icon, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label {
+                Text(title)
+            } icon: {
+                isOn ? icon.accentedImage(in: environment) : icon.plain
+            }
         }
-        #else
-        Image(systemName: iconName)
-            .foregroundStyle(Color.accentColor)
-        #endif
     }
 }
 
