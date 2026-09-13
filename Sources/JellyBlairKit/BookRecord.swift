@@ -43,6 +43,11 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         mediaSources?.first?.size
     }
 
+    /// The audio stream's codec, when the server reports it.
+    public var codec: String? {
+        mediaSources?.first?.mediaStreams?.first(where: { $0.type == "Audio" })?.codec
+    }
+
     /// The file's overall bitrate in kilobits per second, when the server
     /// reports it.
     public var bitrateKbps: Int? {
@@ -199,10 +204,22 @@ public struct MediaSource: Codable, Hashable {
     public let container: String?
     public let size: Int64?
     public let bitrate: Int?
+    public let mediaStreams: [MediaStream]?
 
     enum CodingKeys: String, CodingKey {
         case container = "Container"
         case size = "Size"
         case bitrate = "Bitrate"
+        case mediaStreams = "MediaStreams"
+    }
+}
+
+public struct MediaStream: Codable, Hashable {
+    public let type: String?
+    public let codec: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type = "Type"
+        case codec = "Codec"
     }
 }

@@ -84,6 +84,8 @@ public final class Book: Identifiable {
     public var runTimeSeconds: Double { record.runTimeSeconds }
     public var fileSizeBytes: Int64? { record.fileSizeBytes }
     public var bitrateKbps: Int? { record.bitrateKbps }
+    public var container: String? { record.container }
+    public var codec: String? { record.codec }
     public var hasLyrics: Bool { record.hasLyrics == true }
     public var isFavorite: Bool { record.isFavorite }
     public var resumePositionSeconds: Double { record.resumePositionSeconds }

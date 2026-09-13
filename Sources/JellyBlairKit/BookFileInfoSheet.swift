@@ -90,15 +90,35 @@ public struct BookFileInfoSheet: View {
 
     @ViewBuilder
     private var detailRows: some View {
-        if let kbps = book.bitrateKbps {
-            detailRow(icon: bitrateIcon, label: Text("Bitrate")) {
-                Text("\(kbps) kbps")
+        if let format = book.container {
+            detailRow(icon: formatIcon, label: Text("Format")) {
+                Text(verbatim: format.uppercased())
+            }
+        }
+        if let line = codecLine {
+            detailRow(icon: bitrateIcon, label: Text("Codec")) {
+                line
             }
         }
         if let bytes = book.fileSizeBytes {
             detailRow(icon: fileSizeIcon, label: Text("Size")) {
                 Text(formatFileSize(bytes))
             }
+        }
+    }
+
+    /// The bitrate and codec as one value, such as "68 kbps AAC", from
+    /// whichever parts the server reports.
+    private var codecLine: Text? {
+        switch (book.bitrateKbps, book.codec?.uppercased()) {
+        case (let kbps?, let codec?):
+            Text("\(kbps) kbps \(codec)")
+        case (let kbps?, nil):
+            Text("\(kbps) kbps")
+        case (nil, let codec?):
+            Text(verbatim: codec)
+        case (nil, nil):
+            nil
         }
     }
 
@@ -109,9 +129,10 @@ public struct BookFileInfoSheet: View {
             Label {
                 label
             } icon: {
-                // Accented explicitly: the phone's form tints label icons
-                // by itself, but the Mac's draws them plain.
-                icon.accented
+                // The explicit style overrides the phone form's own accent
+                // tint on label icons.
+                icon.plain
+                    .foregroundStyle(.primary)
             }
         }
     }

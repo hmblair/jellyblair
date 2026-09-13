@@ -22,11 +22,15 @@ public let durationIcon = Icon("clock.fill")
 /// and the sort menu.
 public let yearIcon = Icon("calendar")
 
-/// The symbol for a book's bitrate, on the file info sheet's lines.
+/// The symbol for a book's bitrate and codec, on the file info sheet's
+/// lines.
 public let bitrateIcon = Icon("waveform")
 
 /// The symbol for a book's file size, on the file info sheet's lines.
 public let fileSizeIcon = Icon("internaldrive.fill")
+
+/// The symbol for a book's container format, on the file info sheet's lines.
+public let formatIcon = Icon("doc.fill")
 
 /// The symbol for the title sort order, in the sort menu.
 public let titleSortIcon = Icon("textformat")
