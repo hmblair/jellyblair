@@ -40,3 +40,9 @@ public let downloadedIcon = Icon("arrow.down.circle.fill", hasGlyphLayer: true)
 
 /// The symbol for a favorite book, in the filter menu.
 public let favoriteIcon = Icon("heart.fill")
+
+/// The symbol for refreshing a book's metadata, in the book actions menu.
+public let refreshMetadataIcon = Icon("arrow.clockwise")
+
+/// The symbol for resetting a book's playback, in the book actions menu.
+public let resetPlaybackIcon = Icon("clock.arrow.trianglehead.counterclockwise.rotate.90")

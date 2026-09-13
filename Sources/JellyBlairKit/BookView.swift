@@ -557,12 +557,24 @@ public struct BookActionsMenuItems: View {
     }
 
     public var body: some View {
-        Button("Refresh Metadata") {
+        Button {
             refreshMetadata()
+        } label: {
+            Label {
+                Text("Refresh Metadata")
+            } icon: {
+                refreshMetadataIcon.plain
+            }
         }
         .disabled(!connection.isServerReachable)
-        Button("Reset Playback") {
+        Button {
             resetPlayback()
+        } label: {
+            Label {
+                Text("Reset Playback")
+            } icon: {
+                resetPlaybackIcon.plain
+            }
         }
         .disabled(!connection.isServerReachable || !book.isInProgress)
     }
