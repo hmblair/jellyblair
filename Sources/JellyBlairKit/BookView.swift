@@ -114,7 +114,7 @@ public struct BookView: View {
         Menu {
             BookActionsMenuItems(book: book)
         } label: {
-            Image(systemName: "ellipsis.circle")
+            Image(systemName: "ellipsis.circle.fill")
         }
         .menuIndicator(.hidden)
     }
