@@ -23,16 +23,11 @@ public struct BookView: View {
 
     @Environment(\.layoutMetrics) private var metrics
 
-    @State private var isHoveringDownload = false
-
     /// Measured height of the header's metadata column, which sizes the
     /// cover as a square of the same height.
     @State private var metadataHeight: CGFloat = 0
 
-    /// Removal asks once: the first tap shows a red question mark that
-    /// reverts after a few seconds; a second tap within that window deletes.
-    @State private var isConfirmingRemoval = false
-    @State private var removalConfirmationTimeout: Task<Void, Never>?
+    @State private var isShowingFileInfo = false
 
     public init(book: Book) {
         self.book = book
@@ -82,6 +77,9 @@ public struct BookView: View {
             // spacer pushes them back to the trailing one.
             ToolbarSpacer(.flexible)
             #endif
+            ToolbarItem(placement: .primaryAction) {
+                fileInfoButton
+            }
             if hasTranscript {
                 ToolbarItem(placement: .primaryAction) {
                     transcriptToggle
@@ -95,6 +93,18 @@ public struct BookView: View {
                 SettingsToolbarButton()
             }
         }
+        .sheet(isPresented: $isShowingFileInfo) {
+            BookFileInfoSheet(book: book)
+        }
+    }
+
+    private var fileInfoButton: some View {
+        Button {
+            isShowingFileInfo = true
+        } label: {
+            Image(systemName: "info.circle.fill")
+        }
+        .help("Show the file details")
     }
 
     /// Swaps the list below between the chapters and the transcript.
@@ -229,10 +239,6 @@ public struct BookView: View {
             }
             groupLine(.genre)
             metadataLine(icon: durationIcon) { lengthLine }
-            if let kbps = book.bitrateKbps {
-                metadataLine(icon: bitrateIcon) { Text("\(kbps) kbps") }
-            }
-            downloadRow
         }
         .font(metrics.bookScreen.lineFont)
     }
@@ -281,96 +287,6 @@ public struct BookView: View {
     private var lengthLine: some View {
         Text(formatHoursMinutes(book.runTimeSeconds))
             .monospacedDigit()
-    }
-
-    /// The download control in the icon column, with the file's size beside
-    /// it, or the last failure until a retry starts.
-    private var downloadRow: some View {
-        metadataLine {
-            downloadControl
-                .imageScale(.small)
-        } content: {
-            if let message = book.downloadErrorMessage {
-                Text(message)
-                    .foregroundStyle(.red)
-            } else if let bytes = book.fileSizeBytes {
-                Text(formatFileSize(bytes))
-            }
-        }
-    }
-
-    private func handleRemovalTap() {
-        removalConfirmationTimeout?.cancel()
-        guard isConfirmingRemoval else {
-            isConfirmingRemoval = true
-            removalConfirmationTimeout = Task { @MainActor in
-                try? await Task.sleep(for: .seconds(4))
-                guard !Task.isCancelled else { return }
-                isConfirmingRemoval = false
-            }
-            return
-        }
-        isConfirmingRemoval = false
-        book.removeDownload()
-    }
-
-    /// Download the book, cancel a download in progress, or show that the
-    /// offline copy exists.
-    @ViewBuilder
-    private var downloadControl: some View {
-        switch book.downloadState {
-        case .notDownloaded:
-            Button {
-                book.download()
-            } label: {
-                downloadedIcon.plain
-                    .foregroundStyle(.primary)
-                    .opacity(isHoveringDownload ? 0.6 : 1)
-                    .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
-            }
-            .buttonStyle(.plain)
-            .onHover { isHoveringDownload = $0 }
-            .disabled(!connection.isServerReachable)
-            .opacity(connection.isServerReachable ? 1 : 0.4)
-        case .downloading(let progress):
-            // The icon is the gauge: a faint vessel under a full-color copy
-            // masked to the completed fraction. Tapping cancels.
-            Button {
-                book.cancelDownload()
-            } label: {
-                ZStack {
-                    downloadedIcon.plain
-                        .foregroundStyle(.quaternary)
-                    downloadedIcon.plain
-                        .foregroundStyle(.primary)
-                        .mask {
-                            GeometryReader { geometry in
-                                Rectangle()
-                                    .frame(height: geometry.size.height * (progress ?? 0))
-                                    .frame(maxHeight: .infinity, alignment: .bottom)
-                            }
-                        }
-                }
-                .animation(.linear(duration: 0.3), value: progress)
-                .opacity(isHoveringDownload ? 0.6 : 1)
-                .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
-            }
-            .buttonStyle(.plain)
-            .onHover { isHoveringDownload = $0 }
-        case .downloaded:
-            Button {
-                handleRemovalTap()
-            } label: {
-                Image(systemName: isConfirmingRemoval ? "questionmark.circle.fill" : "checkmark.circle.fill")
-                    .foregroundStyle(isConfirmingRemoval ? Color.red : Color.green)
-                    .contentTransition(.identity)
-                    .animation(nil, value: isConfirmingRemoval)
-                    .opacity(isHoveringDownload ? 0.6 : 1)
-                    .animation(.easeOut(duration: 0.1), value: isHoveringDownload)
-            }
-            .buttonStyle(.plain)
-            .onHover { isHoveringDownload = $0 }
-        }
     }
 
     private var playButton: some View {

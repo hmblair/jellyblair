@@ -22,8 +22,11 @@ public let durationIcon = Icon("clock.fill")
 /// and the sort menu.
 public let yearIcon = Icon("calendar")
 
-/// The symbol for a book's bitrate, on the book screen's metadata lines.
+/// The symbol for a book's bitrate, on the file info sheet's lines.
 public let bitrateIcon = Icon("waveform")
+
+/// The symbol for a book's file size, on the file info sheet's lines.
+public let fileSizeIcon = Icon("internaldrive.fill")
 
 /// The symbol for the title sort order, in the sort menu.
 public let titleSortIcon = Icon("textformat")
@@ -34,8 +37,7 @@ public let lastPlayedSortIcon = Icon("clock.arrow.circlepath")
 /// The symbol for a started book, in the filter menu.
 public let startedIcon = Icon("bookmark.fill")
 
-/// The symbol for a downloaded book, shared by the filter menu and the book
-/// screen's download control.
+/// The symbol for a downloaded book, in the filter menu.
 public let downloadedIcon = Icon("arrow.down.circle.fill", hasGlyphLayer: true)
 
 /// The symbol for a favorite book, in the filter menu.
