@@ -31,5 +31,6 @@ public struct SettingsRows: View {
         Section("Playback") {
             SkipIntervalSettings()
         }
+        SettingsInfoSection()
     }
 }
