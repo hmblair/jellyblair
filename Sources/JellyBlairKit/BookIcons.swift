@@ -32,6 +32,12 @@ public let fileSizeIcon = Icon("internaldrive.fill")
 /// The symbol for a book's container format, on the file info sheet's lines.
 public let formatIcon = Icon("doc.fill")
 
+/// The symbol for the ascending sort direction, in the sort menu.
+public let ascendingIcon = Icon("arrow.up")
+
+/// The symbol for the descending sort direction, in the sort menu.
+public let descendingIcon = Icon("arrow.down")
+
 /// The symbol for the title sort order, in the sort menu.
 public let titleSortIcon = Icon("textformat")
 

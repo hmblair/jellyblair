@@ -36,20 +36,29 @@ public extension View {
     }
 }
 
-/// Ties a library list's identity to the sort order, so each order shows a
-/// fresh list, which starts at the top.
+/// Ties a library list's identity to the sort order and direction, so each
+/// sorting shows a fresh list, which starts at the top.
 private struct ScrollToTopOnSortChange: ViewModifier {
-    let sortOrder: BookSortOrder
+    struct Sorting: Hashable {
+        let order: BookSortOrder
+        let direction: SortDirection
+    }
+
+    let sorting: Sorting
 
     func body(content: Content) -> some View {
-        content.id(sortOrder)
+        content.id(sorting)
     }
 }
 
 public extension View {
-    /// Keeps a library list at its top through a change of sort order.
+    /// Keeps a library list at its top through a change of sort order or
+    /// direction.
     func scrolledToTopOnSortChange(filters: LibraryFilters) -> some View {
-        modifier(ScrollToTopOnSortChange(sortOrder: filters.sortOrder))
+        modifier(ScrollToTopOnSortChange(sorting: .init(
+            order: filters.sortOrder,
+            direction: filters.sortDirection
+        )))
     }
 }
 
@@ -80,8 +89,13 @@ public struct LibraryFilterToolbarButtons: View {
         toolbarMenu(sortMenuIcon, help: "Sort the books") {
             ForEach(BookSortOrder.allCases) { order in
                 menuChoice(order.label, icon: order.icon, isOn: filters.sortOrder == order) {
-                    filters.sortOrder = order
+                    filters.setSortOrder(order)
                 }
+            }
+            Divider()
+            // Shows the current direction; choosing it flips the list.
+            menuChoice(filters.sortDirection.label, icon: filters.sortDirection.icon, isOn: false) {
+                filters.toggleSortDirection()
             }
         }
     }

@@ -187,7 +187,7 @@ public final class Library {
     /// All books in the filters' sort order, matching the query and passing
     /// the active filters.
     private func visibleBooksInLibrary(filters: LibraryFilters, loadedBookID: String?) -> [Book] {
-        books(inOrder: filters.sortOrder).filter { book in
+        books(inOrder: filters.sortOrder, direction: filters.sortDirection).filter { book in
             (filters.searchQuery.isEmpty || book.matches(filters.searchQuery))
                 && passesFilters(book, filters: filters, loadedBookID: loadedBookID)
         }
@@ -198,7 +198,7 @@ public final class Library {
     private func visibleBooks(in group: BookGroup, filters: LibraryFilters, loadedBookID: String?) -> [Book] {
         let matching = books(in: group, matching: filters.searchQuery)
             .filter { passesFilters($0, filters: filters, loadedBookID: loadedBookID) }
-        return Self.sorted(matching, by: filters.sortOrder)
+        return Self.sorted(matching, by: filters.sortOrder, direction: filters.sortDirection)
     }
 
     /// True when the book passes every filter that is on.
@@ -236,52 +236,54 @@ public final class Library {
 
     // MARK: - Sorting
 
-    /// The books in each order the library list can show.
-    public func books(inOrder order: BookSortOrder) -> [Book] {
-        sortedBooks[order] ?? []
+    /// The books in one order and direction. The cache holds each order in
+    /// its default direction; the flipped direction sorts on demand.
+    public func books(inOrder order: BookSortOrder, direction: SortDirection) -> [Book] {
+        let cached = sortedBooks[order] ?? []
+        guard direction != order.defaultDirection else { return cached }
+        return Self.sorted(cached, by: order, direction: direction)
     }
 
-    /// Sorts a list once for every order.
+    /// Sorts a list once for every order, in the order's default direction.
     private static func sortedInEveryOrder(_ books: [Book]) -> [BookSortOrder: [Book]] {
-        Dictionary(uniqueKeysWithValues: BookSortOrder.allCases.map { ($0, sorted(books, by: $0)) })
+        Dictionary(uniqueKeysWithValues: BookSortOrder.allCases.map {
+            ($0, sorted(books, by: $0, direction: $0.defaultDirection))
+        })
     }
 
-    /// Sorts a list in one order.
-    private static func sorted(_ books: [Book], by order: BookSortOrder) -> [Book] {
+    /// Sorts a list in one order and direction.
+    private static func sorted(_ books: [Book], by order: BookSortOrder, direction: SortDirection) -> [Book] {
         switch order {
         case .name:
-            return sortedByName(books)
+            return sortedByName(books, direction: direction)
         case .lastPlayed:
-            return sortedLargestFirst(books) { $0.record.lastPlayedDate }
+            return sortedByValue(books, direction: direction) { $0.record.lastPlayedDate }
         case .year:
-            return sortedLargestFirst(books) { $0.record.productionYear }
+            return sortedByValue(books, direction: direction) { $0.record.productionYear }
         case .duration:
-            return sortedSmallestFirst(books) { $0.record.runTimeTicks }
+            return sortedByValue(books, direction: direction) { $0.record.runTimeTicks }
         }
     }
 
     /// Sorts a list by name.
-    private static func sortedByName(_ books: [Book]) -> [Book] {
-        books.sorted { comesFirstByName($0, $1) }
+    private static func sortedByName(_ books: [Book], direction: SortDirection) -> [Book] {
+        books.sorted { left, right in
+            switch direction {
+            case .ascending:
+                return comesFirstByName(left, right)
+            case .descending:
+                return comesFirstByName(right, left)
+            }
+        }
     }
 
-    /// Sorts a list by one of the books' values, largest first.
-    private static func sortedLargestFirst<Value: Comparable>(_ books: [Book], by value: (Book) -> Value?) -> [Book] {
-        sortedByValue(books, by: value) { $0 > $1 }
-    }
-
-    /// Sorts a list by one of the books' values, smallest first.
-    private static func sortedSmallestFirst<Value: Comparable>(_ books: [Book], by value: (Book) -> Value?) -> [Book] {
-        sortedByValue(books, by: value) { $0 < $1 }
-    }
-
-    /// Sorts a list by one of the books' values, in the order the comparison
-    /// gives. A book the server reports no value for comes after every book
-    /// that has one, and books with equal values read by name.
+    /// Sorts a list by one of the books' values, in the given direction.
+    /// A book the server reports no value for comes last in either
+    /// direction, and books with equal values read by name.
     private static func sortedByValue<Value: Comparable>(
         _ books: [Book],
-        by value: (Book) -> Value?,
-        comesFirst: (Value, Value) -> Bool
+        direction: SortDirection,
+        by value: (Book) -> Value?
     ) -> [Book] {
         books.sorted { left, right in
             let leftValue = value(left)
@@ -289,7 +291,12 @@ public final class Library {
             guard leftValue != rightValue else { return comesFirstByName(left, right) }
             guard let leftValue else { return false }
             guard let rightValue else { return true }
-            return comesFirst(leftValue, rightValue)
+            switch direction {
+            case .ascending:
+                return leftValue < rightValue
+            case .descending:
+                return leftValue > rightValue
+            }
         }
     }
 

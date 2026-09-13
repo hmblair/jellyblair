@@ -1,5 +1,25 @@
 import SwiftUI
 
+/// The direction a sort order runs in.
+public enum SortDirection: Hashable {
+    case ascending
+    case descending
+
+    public var flipped: SortDirection {
+        self == .ascending ? .descending : .ascending
+    }
+
+    /// The direction's name in the sort menu.
+    public var label: LocalizedStringKey {
+        self == .ascending ? "Ascending" : "Descending"
+    }
+
+    /// The symbol beside the direction's name in the sort menu.
+    public var icon: Icon {
+        self == .ascending ? ascendingIcon : descendingIcon
+    }
+}
+
 /// The order a list of books is shown in. The titles start at A and the
 /// durations at the shortest book. The plays start at the most recent one,
 /// and the years at the newest.
@@ -10,6 +30,16 @@ public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
     case duration
 
     public var id: Self { self }
+
+    /// The direction the order starts in when chosen.
+    public var defaultDirection: SortDirection {
+        switch self {
+        case .name, .duration:
+            return .ascending
+        case .lastPlayed, .year:
+            return .descending
+        }
+    }
 
     /// The order's name in the sort menu.
     public var label: LocalizedStringKey {
@@ -48,9 +78,21 @@ public struct LibraryFilters: Equatable {
     public var downloadedOnly = false
     public private(set) var startedOnly = false
     public var favoritesOnly = false
-    public var sortOrder = BookSortOrder.name
+    public private(set) var sortOrder = BookSortOrder.name
+    public private(set) var sortDirection = BookSortOrder.name.defaultDirection
 
     public init() {}
+
+    /// Chooses the order and starts it in its default direction.
+    public mutating func setSortOrder(_ order: BookSortOrder) {
+        sortOrder = order
+        sortDirection = order.defaultDirection
+    }
+
+    /// Flips the current order's direction.
+    public mutating func toggleSortDirection() {
+        sortDirection = sortDirection.flipped
+    }
 
     /// Whether at least one filter toggle is on.
     public var hasActiveFilter: Bool {
@@ -68,7 +110,7 @@ public struct LibraryFilters: Equatable {
     /// another order.
     public mutating func setStartedOnly(_ isOn: Bool) {
         startedOnly = isOn
-        sortOrder = isOn ? .lastPlayed : .name
+        setSortOrder(isOn ? .lastPlayed : .name)
     }
 }
 
