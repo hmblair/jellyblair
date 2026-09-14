@@ -250,8 +250,8 @@ struct TransportControlsView: View {
     }
 }
 
-/// One skip button, whose arrow turns once for each tap, like the system's
-/// Now Playing buttons.
+/// One skip button, whose arrow turns once for each skip in its direction,
+/// wherever the skip came from.
 private struct SkipButton: View {
     let skip: TransportSkip
     let size: CGFloat
@@ -262,9 +262,6 @@ private struct SkipButton: View {
     /// the numbered symbol.
     @AppStorage private var intervalSeconds: Double
 
-    /// Counts the taps, so each one runs the symbol's turn.
-    @State private var tapCount = 0
-
     init(skip: TransportSkip, size: CGFloat) {
         self.skip = skip
         self.size = size
@@ -273,12 +270,11 @@ private struct SkipButton: View {
 
     var body: some View {
         Button {
-            tapCount += 1
             skip.perform(on: player)
         } label: {
             Image(systemName: skip.symbolName)
                 .font(.system(size: size))
-                .symbolEffect(.rotate, options: .nonRepeating.speed(2), value: tapCount)
+                .symbolEffect(.rotate, options: .nonRepeating.speed(2), value: player.skipCounts[skip, default: 0])
         }
         .buttonStyle(HoverDimButtonStyle())
     }

@@ -27,7 +27,7 @@ public enum SkipIntervals {
 /// One of the two skip buttons that sit beside play and pause. Every
 /// surface performs the skips from here: the transport controls, the
 /// system Now Playing buttons, and the AirPods taps.
-public enum TransportSkip {
+public enum TransportSkip: Hashable {
     case back
     case forward
 
@@ -52,9 +52,11 @@ public enum TransportSkip {
         return "\(arrow).\(Int(intervalSeconds))"
     }
 
-    /// Moves the player by this skip.
+    /// Moves the player by this skip and counts it, so the transport
+    /// button animates whichever surface performed it.
     @MainActor
     public func perform(on player: PlayerController) {
+        player.countSkip(self)
         Task { await player.skip(by: offsetSeconds) }
     }
 }

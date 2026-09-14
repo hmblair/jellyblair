@@ -54,6 +54,10 @@ public final class PlayerController {
 
     public private(set) var duration: Double = 0
 
+    /// How many skips each direction has run, so a skip from any surface
+    /// animates the matching transport button.
+    public private(set) var skipCounts: [TransportSkip: Int] = [:]
+
     /// The projected position now. For a display that must stay current over
     /// time, use projectedTime(at:) inside a TimelineView instead.
     public var currentTime: Double { projectedTime(at: Date()) }
@@ -524,6 +528,11 @@ public final class PlayerController {
 
     public func skip(by seconds: Double) async {
         await seek(to: currentTime + seconds)
+    }
+
+    /// Counts one skip, which the transport buttons animate on.
+    func countSkip(_ skip: TransportSkip) {
+        skipCounts[skip, default: 0] += 1
     }
 
     /// Jumps to a chapter and plays it, like clicking a song in a music app.
