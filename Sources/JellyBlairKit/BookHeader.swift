@@ -72,9 +72,9 @@ struct BookPlaybackCaption: View {
     }
 }
 
-/// The title over the metadata lines: each line a step smaller and dimmer
-/// than the one above, so the type carries the hierarchy. The lines wrap,
-/// following the given alignment.
+/// The title block as three groups — the title with its subtitle, the
+/// credit lines, and one catalog line — spaced apart so each reads at a
+/// glance. The lines wrap, following the given alignment.
 struct BookTitleBlock: View {
     let book: Book
     let alignment: HorizontalAlignment
@@ -82,105 +82,57 @@ struct BookTitleBlock: View {
     @Environment(\.openBookGroup) private var openBookGroup
     @Environment(\.layoutMetrics) private var metrics
 
+    /// The space between the three groups, wider than the space inside
+    /// them, so the block reads as three units.
+    private static let groupSpacing: CGFloat = 12
+
     var body: some View {
-        VStack(alignment: alignment, spacing: 6) {
-            titleLines
-            creditLines
-            publisherYearLine
-            genreLine
+        VStack(alignment: alignment, spacing: Self.groupSpacing) {
+            titleGroup
+            creditsGroup
+            catalogLine
         }
         .multilineTextAlignment(alignment == .center ? .center : .leading)
     }
 
-    /// The title over its subtitle, the subtitle one step smaller and
-    /// dimmer. A title with no colon shows one line.
-    @ViewBuilder
-    private var titleLines: some View {
-        Text(book.mainTitle)
-            .font(metrics.bookScreen.titleFont)
-        if let subtitle = book.subtitle {
-            Text(subtitle)
-                .font(metrics.bookScreen.subtitleFont)
-                .foregroundStyle(.secondary)
+    /// The title tight over its subtitle, the subtitle one step smaller
+    /// and dimmer. A title with no colon shows one line.
+    private var titleGroup: some View {
+        VStack(alignment: alignment, spacing: 2) {
+            Text(book.mainTitle)
+                .font(metrics.bookScreen.titleFont)
+            if let subtitle = book.subtitle {
+                Text(subtitle)
+                    .font(metrics.bookScreen.subtitleFont)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
     /// One credit line per group of roles naming the same people, from
     /// "Written by" through "Written, translated, and read by". Every
     /// name opens the person's shelf, whichever roles it holds.
-    private var creditLines: some View {
-        ForEach(book.credits, id: \.self) { credit in
-            creditLine(prefix: credit.roles.creditPrefix, names: credit.names)
-        }
-    }
-
-    private func creditLine(prefix: String, names: [String]) -> some View {
-        namesLine(prefix: prefix, kind: .person, names: names)
-            .font(metrics.bookScreen.lineFont)
-            .foregroundStyle(.secondary)
-    }
-
-    /// The publisher names and the year on one line, the block's quietest.
     @ViewBuilder
-    private var publisherYearLine: some View {
-        let names = BookGroup.Kind.publisher.names(of: book)
-        let year = book.productionYear
-        Group {
-            if !names.isEmpty {
-                namesLine(kind: .publisher, names: names, suffix: year.map { "· \($0)" })
-            } else if let year {
-                Text(verbatim: String(year))
-            }
-        }
-        .font(metrics.bookScreen.detailFont)
-        .foregroundStyle(.tertiary)
-    }
-
-    /// The genres joined by dots, each opening its genre shelf. Dots
-    /// instead of commas, since genres read as tags rather than names.
-    @ViewBuilder
-    private var genreLine: some View {
-        let names = BookGroup.Kind.genre.names(of: book)
-        if !names.isEmpty {
-            dottedLine(kind: .genre, names: names)
-                .font(metrics.bookScreen.detailFont)
-                .foregroundStyle(.tertiary)
-        }
-    }
-
-    /// One line naming a group's members with dot separators, each name
-    /// its own hover-and-click target. A dot lives with the name before
-    /// it, so a wrap never strands one.
-    private func dottedLine(kind: BookGroup.Kind, names: [String]) -> some View {
-        FlowLine(alignment: alignment) {
-            ForEach(Array(names.enumerated()), id: \.offset) { index, name in
-                HStack(spacing: 4) {
-                    GroupNameButton(kind: kind, name: name, open: openBookGroup)
-                    if index < names.count - 1 {
-                        Text(verbatim: "·")
-                    }
+    private var creditsGroup: some View {
+        if !book.credits.isEmpty {
+            VStack(alignment: alignment, spacing: 3) {
+                ForEach(book.credits, id: \.self) { credit in
+                    creditLine(prefix: credit.roles.creditPrefix, names: credit.names)
                 }
             }
         }
     }
 
-    /// One line naming a group's members — "x", "x and y", or "x, y, and
-    /// z" — with each name its own hover-and-click target. The words flow
-    /// and wrap like text; a comma lives with the name before it, so a
-    /// wrap never strands one.
-    private func namesLine(
-        prefix: String? = nil,
-        kind: BookGroup.Kind,
-        names: [String],
-        suffix: String? = nil
-    ) -> some View {
+    /// One line reading "Prefix x", "Prefix x and y", or "Prefix x, y,
+    /// and z", with each name its own hover-and-click target. The words
+    /// flow and wrap like text; a comma lives with the name before it,
+    /// so a wrap never strands one.
+    private func creditLine(prefix: String, names: [String]) -> some View {
         FlowLine(alignment: alignment) {
-            if let prefix {
-                Text(verbatim: prefix)
-            }
+            Text(verbatim: prefix)
             ForEach(Array(names.enumerated()), id: \.offset) { index, name in
                 HStack(spacing: 0) {
-                    GroupNameButton(kind: kind, name: name, open: openBookGroup)
+                    GroupNameButton(kind: .person, name: name, open: openBookGroup)
                     if names.count > 2, index < names.count - 1 {
                         Text(verbatim: ",")
                     }
@@ -189,10 +141,50 @@ struct BookTitleBlock: View {
                     Text("and")
                 }
             }
-            if let suffix {
-                Text(verbatim: suffix)
-            }
         }
+        .font(metrics.bookScreen.lineFont)
+        .foregroundStyle(.secondary)
+    }
+
+    /// The publisher names, the year, and the genres joined by dots on
+    /// one line, the block's quietest. Publisher and genre names open
+    /// their shelves; dots instead of commas, since the entries read as
+    /// tags rather than a sentence. A dot lives with the entry before
+    /// it, so a wrap never strands one.
+    @ViewBuilder
+    private var catalogLine: some View {
+        let entries = catalogEntries
+        if !entries.isEmpty {
+            FlowLine(alignment: alignment) {
+                ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
+                    HStack(spacing: 4) {
+                        if let kind = entry.kind {
+                            GroupNameButton(kind: kind, name: entry.text, open: openBookGroup)
+                        } else {
+                            Text(verbatim: entry.text)
+                        }
+                        if index < entries.count - 1 {
+                            Text(verbatim: "·")
+                        }
+                    }
+                }
+            }
+            .font(metrics.bookScreen.detailFont)
+            .foregroundStyle(.tertiary)
+        }
+    }
+
+    /// The catalog line's entries in order: publishers, the year, then
+    /// genres. Each entry carries the shelf kind it opens, or none for
+    /// the year.
+    private var catalogEntries: [(kind: BookGroup.Kind?, text: String)] {
+        var entries: [(kind: BookGroup.Kind?, text: String)] = []
+        entries += BookGroup.Kind.publisher.names(of: book).map { (.publisher, $0) }
+        if let year = book.productionYear {
+            entries.append((nil, String(year)))
+        }
+        entries += BookGroup.Kind.genre.names(of: book).map { (.genre, $0) }
+        return entries
     }
 }
 
