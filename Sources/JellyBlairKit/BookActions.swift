@@ -23,18 +23,43 @@ public struct BookActions {
     }
 
     public var canRefreshMetadata: Bool {
+        connection.isServerReachable && !book.isSyncing
+    }
+
+    public var canToggleFavorite: Bool {
         connection.isServerReachable
     }
 
-    public var canResetPlayback: Bool {
-        connection.isServerReachable && book.isStarted
+    public var canTogglePlayed: Bool {
+        connection.isServerReachable
+    }
+
+    /// Flips the favorite mark on the server.
+    public func toggleFavorite() {
+        Task {
+            await book.toggleFavorite()
+        }
+    }
+
+    /// Flips the played mark. The server clears the resume position with
+    /// either flip, so the loaded book closes first and playback stops.
+    public func togglePlayed() {
+        Task {
+            if isLoaded {
+                await player.close()
+            }
+            await book.togglePlayed()
+        }
     }
 
     /// Re-reads everything the server and the file know about this book: the
     /// cover, the chapter list, the transcript, and the record with its
-    /// resume position.
+    /// resume position. The book shows as syncing throughout.
     public func refreshMetadata() {
+        guard !book.isSyncing else { return }
+        book.isSyncing = true
         Task {
+            defer { book.isSyncing = false }
             await CoverImageLoader.shared.refresh(for: book.id, from: book.coverURL)
             if isLoaded {
                 await player.refreshChapters()
@@ -46,21 +71,10 @@ public struct BookActions {
             await book.refreshFromServer()
         }
     }
-
-    /// Resets the book: the loaded book closes first, so playback stops,
-    /// then the position returns to zero here and on the server.
-    public func resetPlayback() {
-        Task {
-            if isLoaded {
-                await player.close()
-            }
-            await book.resetPlayback()
-        }
-    }
 }
 
 /// The actions on one book as menu items, for the library rows' context
-/// menus. They mirror the file information sheet's buttons.
+/// menus. They mirror the details sheet's rows.
 public struct BookActionsMenuItems: View {
     let book: Book
 
@@ -76,27 +90,52 @@ public struct BookActionsMenuItems: View {
     }
 
     public var body: some View {
+        playedItem
+        favoriteItem
         downloadItem
+        syncItem
+    }
+
+    /// Flips the read mark, named and pictured by the state it moves to.
+    private var playedItem: some View {
+        Button {
+            actions.togglePlayed()
+        } label: {
+            Label {
+                book.isPlayed ? Text("Mark Unread") : Text("Mark Read")
+            } icon: {
+                (book.isPlayed ? unreadIcon : readIcon).plain
+            }
+        }
+        .disabled(!actions.canTogglePlayed)
+    }
+
+    /// Flips the favorite mark, named and pictured by the state it moves
+    /// to.
+    private var favoriteItem: some View {
+        Button {
+            actions.toggleFavorite()
+        } label: {
+            Label {
+                book.isFavorite ? Text("Mark Not Favorite") : Text("Mark Favorite")
+            } icon: {
+                (book.isFavorite ? notFavoriteIcon : favoriteIcon).plain
+            }
+        }
+        .disabled(!actions.canToggleFavorite)
+    }
+
+    private var syncItem: some View {
         Button {
             actions.refreshMetadata()
         } label: {
             Label {
-                Text("Refresh Metadata")
+                Text("Sync")
             } icon: {
                 refreshMetadataIcon.plain
             }
         }
         .disabled(!actions.canRefreshMetadata)
-        Button {
-            actions.resetPlayback()
-        } label: {
-            Label {
-                Text("Reset Playback")
-            } icon: {
-                resetPlaybackIcon.plain
-            }
-        }
-        .disabled(!actions.canResetPlayback)
     }
 
     @ViewBuilder

@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// How long a confirmation stands before the button reverts.
-private let confirmationWindow: Duration = .seconds(4)
+/// How long a confirmation stands before the control reverts, shared by
+/// the confirming buttons and rows.
+let confirmationWindow: Duration = .seconds(4)
 
 /// A filled red button with white text, for destructive actions. The
 /// explicit tint keeps the fill red on both platforms, where the

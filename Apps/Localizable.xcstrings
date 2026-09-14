@@ -20,6 +20,36 @@
           }
         }
       }
+    },
+    "Mark Favorite" : {
+      "localizations" : {
+        "en-GB" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark Favourite"
+          }
+        }
+      }
+    },
+    "Mark Not Favorite" : {
+      "localizations" : {
+        "en-GB" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark Not Favourite"
+          }
+        }
+      }
+    },
+    "Not Favorite" : {
+      "localizations" : {
+        "en-GB" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not Favourite"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

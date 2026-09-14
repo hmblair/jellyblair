@@ -23,6 +23,10 @@ public final class Book: Identifiable {
     /// The book screen's remembered state; see BookScreenState.
     public var screenState = BookScreenState()
 
+    /// True while a metadata sync runs, so the sync controls can show and
+    /// bar it.
+    public internal(set) var isSyncing = false
+
     public private(set) var lyrics: [LyricLine] = []
     public private(set) var isFetchingLyrics = false
     private let lyricsStore = LyricsStore()
@@ -89,6 +93,7 @@ public final class Book: Identifiable {
     public var hasLyrics: Bool { record.hasLyrics == true }
     public var isFavorite: Bool { record.isFavorite }
     public var isPlayed: Bool { record.isPlayed }
+    public var lastSyncedDate: Date? { record.lastSyncedDate }
     public var resumePositionSeconds: Double { record.resumePositionSeconds }
 
     /// True when the title, author, narrator, genre, or publisher contains
@@ -166,11 +171,14 @@ public final class Book: Identifiable {
         onRecordChanged?()
     }
 
-    /// Clears the played state and the resume position, on the server first
-    /// so the two never disagree. A failed call changes nothing.
-    public func resetPlayback() async {
-        guard (try? await client.resetPlayback(bookID: id)) != nil else { return }
-        recordSettledPosition(0)
+    /// Flips the played mark, on the server first so the two never
+    /// disagree. The server clears the resume position with either flip,
+    /// and the record follows it. A failed call changes nothing.
+    public func togglePlayed() async {
+        let target = !isPlayed
+        guard (try? await client.setPlayed(target, bookID: id)) != nil else { return }
+        record = record.withPlayed(target)
+        onRecordChanged?()
     }
 
     // MARK: - Stream asset

@@ -57,17 +57,22 @@ public let readIcon = Icon("checkmark.circle.fill", hasGlyphLayer: true)
 /// actions menu's download entry.
 public let downloadedIcon = Icon("arrow.down.circle.fill", hasGlyphLayer: true)
 
+/// The symbol for a book that is not downloaded, on the details sheet's
+/// download row.
+public let notDownloadedIcon = Icon("arrow.down.circle")
+
 /// The symbol for cancelling a book's download, in the book actions menu.
 public let cancelDownloadIcon = Icon("xmark.circle")
 
 /// The symbol for removing a book's download, in the book actions menu.
-public let removeDownloadIcon = Icon("trash.fill")
+public let removeDownloadIcon = Icon("trash")
 
 /// The symbol for a favorite book, in the filter menu.
 public let favoriteIcon = Icon("heart.fill")
 
-/// The symbol for refreshing a book's metadata, in the book actions menu.
-public let refreshMetadataIcon = Icon("arrow.clockwise")
+/// The symbol for a book that is not a favorite, on the info sheet's
+/// favorite row.
+public let notFavoriteIcon = Icon("heart")
 
-/// The symbol for resetting a book's playback, in the book actions menu.
-public let resetPlaybackIcon = Icon("clock.arrow.trianglehead.counterclockwise.rotate.90")
+/// The symbol for refreshing a book's metadata, in the book actions menu.
+public let refreshMetadataIcon = Icon("arrow.trianglehead.2.clockwise.rotate.90")

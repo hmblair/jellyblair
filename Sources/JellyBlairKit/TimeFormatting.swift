@@ -42,3 +42,9 @@ public func formatHoursMinutes(_ seconds: Double) -> String {
 public func formatFileSize(_ bytes: Int64) -> String {
     bytes.formatted(.byteCount(style: .file, spellsOutZero: false))
 }
+
+/// Formats a completed and a total byte count, such as "500 KB/381.9 MB",
+/// each in the file sizes' own system format.
+public func formatFileSizeProgress(_ completed: Int64, of total: Int64) -> String {
+    "\(formatFileSize(completed))/\(formatFileSize(total))"
+}

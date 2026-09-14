@@ -17,6 +17,10 @@ public struct BookRecord: Codable, Identifiable, Hashable {
     public let hasLyrics: Bool?
     /// The year of the audiobook edition, from the file's year tag.
     public let productionYear: Int?
+    /// When the client fetched this record from the server. The client
+    /// stamps every fetched record, so it is nil only in snapshots written
+    /// before the stamp existed.
+    public private(set) var lastSyncedTimestamp: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "Id"
@@ -31,6 +35,7 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         case studios = "Studios"
         case hasLyrics = "HasLyrics"
         case productionYear = "ProductionYear"
+        case lastSyncedTimestamp = "LastSyncedDate"
     }
 
     /// The audio container format, for naming downloaded files.
@@ -140,6 +145,19 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         userData?.played == true
     }
 
+    /// When the client last fetched this record from the server.
+    public var lastSyncedDate: Date? {
+        guard let timestamp = lastSyncedTimestamp else { return nil }
+        return parseServerDate(timestamp)
+    }
+
+    /// Returns a copy of the record stamped at a sync time.
+    public func withSyncTimestamp(_ timestamp: String) -> BookRecord {
+        var copy = self
+        copy.lastSyncedTimestamp = timestamp
+        return copy
+    }
+
     /// Returns a copy of the book at a different resume position.
     public func withResumePosition(_ seconds: Double) -> BookRecord {
         var copy = self
@@ -160,6 +178,19 @@ public struct BookRecord: Codable, Identifiable, Hashable {
             lastPlayedTimestamp: timestamp,
             isFavorite: userData?.isFavorite,
             played: userData?.played
+        )
+        return copy
+    }
+
+    /// Returns a copy of the book at a different played state. The server
+    /// clears the resume position with either change, so the copy does too.
+    public func withPlayed(_ played: Bool) -> BookRecord {
+        var copy = self
+        copy.userData = BookUserData(
+            playbackPositionTicks: 0,
+            lastPlayedTimestamp: userData?.lastPlayedTimestamp,
+            isFavorite: userData?.isFavorite,
+            played: played
         )
         return copy
     }

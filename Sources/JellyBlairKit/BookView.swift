@@ -26,7 +26,7 @@ public struct BookView: View {
     @Environment(\.layoutDensity) private var density
     @Environment(\.layoutMetrics) private var metrics
 
-    @State private var isShowingFileInfo = false
+    @State private var isShowingDetails = false
 
     /// Measured height of the regular play button, which hangs under the
     /// title block by its own height; see regularHeader.
@@ -80,7 +80,7 @@ public struct BookView: View {
             ToolbarSpacer(.flexible)
             #endif
             ToolbarItem(placement: .primaryAction) {
-                fileInfoButton
+                detailsButton
             }
             if density == .regular, hasTranscript {
                 ToolbarItem(placement: .primaryAction) {
@@ -92,8 +92,8 @@ public struct BookView: View {
                 SettingsToolbarButton()
             }
         }
-        .sheet(isPresented: $isShowingFileInfo) {
-            BookFileInfoSheet(book: book)
+        .sheet(isPresented: $isShowingDetails) {
+            BookDetailsSheet(book: book)
         }
         .sheet(isPresented: $isShowingChapterSheet) {
             PhoneSheet(title: Text("Chapters")) {
@@ -277,13 +277,13 @@ public struct BookView: View {
 
     // MARK: - Shared
 
-    private var fileInfoButton: some View {
+    private var detailsButton: some View {
         Button {
-            isShowingFileInfo = true
+            isShowingDetails = true
         } label: {
             Image(systemName: "info.circle.fill")
         }
-        .help("Show the file details")
+        .help("Show the book's details")
     }
 
     /// The height of the cover wash, fading to nothing before the page's

@@ -195,7 +195,7 @@ public final class JellyfinClient {
         ]
         let request = makeRequest(path: "Items", query: query)
         let data = try await send(request)
-        return try decode(ItemsResponse.self, from: data).items
+        return try decode(ItemsResponse.self, from: data).items.map(stampedWithSyncTime)
     }
 
     /// Fetches a single book's record with fresh user data, such as the
@@ -203,7 +203,14 @@ public final class JellyfinClient {
     public func fetchBook(id: String) async -> BookRecord? {
         let request = makeRequest(path: "Items/\(id)")
         guard let data = try? await send(request) else { return nil }
-        return try? decode(BookRecord.self, from: data)
+        return (try? decode(BookRecord.self, from: data)).map(stampedWithSyncTime)
+    }
+
+    /// Stamps a fetched record with the current time as its sync time.
+    /// Every record enters the app through this stamp, so each book always
+    /// knows when the server last confirmed it.
+    private func stampedWithSyncTime(_ record: BookRecord) -> BookRecord {
+        record.withSyncTimestamp(formatServerDate(Date()))
     }
 
     /// Fetches a book's lyric sidecar, parsed by the server into transcript
@@ -257,10 +264,11 @@ public final class JellyfinClient {
         _ = try await send(makeRequest(path: "UserFavoriteItems/\(bookID)", method: isFavorite ? "POST" : "DELETE"))
     }
 
-    /// Clears the book's played state and resume position for the user.
-    /// Throws when the server does not confirm.
-    func resetPlayback(bookID: String) async throws {
-        _ = try await send(makeRequest(path: "UserPlayedItems/\(bookID)", method: "DELETE"))
+    /// Marks or unmarks the book as played for the user. The server clears
+    /// the resume position with either change. Throws when the server does
+    /// not confirm.
+    func setPlayed(_ isPlayed: Bool, bookID: String) async throws {
+        _ = try await send(makeRequest(path: "UserPlayedItems/\(bookID)", method: isPlayed ? "POST" : "DELETE"))
     }
 
     func reportPlaybackStarted(bookID: String, positionSeconds: Double) async {
