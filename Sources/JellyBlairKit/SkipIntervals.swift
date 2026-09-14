@@ -24,6 +24,36 @@ public enum SkipIntervals {
     }
 }
 
+/// One of the two skip buttons that sit beside play and pause. Every
+/// surface performs the skips from here: the transport controls, the
+/// system Now Playing buttons, and the AirPods taps.
+public enum TransportSkip {
+    case back
+    case forward
+
+    /// The stored interval this skip moves by.
+    public var intervalSeconds: Double {
+        self == .back ? SkipIntervals.back : SkipIntervals.forward
+    }
+
+    /// The change of position, which the backward skip makes negative.
+    public var offsetSeconds: Double {
+        self == .back ? -intervalSeconds : intervalSeconds
+    }
+
+    /// The numbered arrow symbol carrying the interval.
+    public var symbolName: String {
+        let arrow = self == .back ? "gobackward" : "goforward"
+        return "\(arrow).\(Int(intervalSeconds))"
+    }
+
+    /// Moves the player by this skip.
+    @MainActor
+    public func perform(on player: PlayerController) {
+        Task { await player.skip(by: offsetSeconds) }
+    }
+}
+
 /// The two skip interval pickers, shared by both platforms' settings
 /// screens.
 public struct SkipIntervalSettings: View {

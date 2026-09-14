@@ -214,10 +214,9 @@ struct SeekTimeRow<BelowCenter: View>: View {
 /// Height of the seek bar's hit area.
 private let seekBarHeight: CGFloat = 18
 
-/// The skip and play/pause buttons, driving the loaded book. The skip
-/// amounts come from the stored intervals, with the numbered arrow symbols
-/// following them. Chapter navigation lives in the system Now Playing
-/// commands and the chapter list.
+/// The skip and play/pause buttons, driving the loaded book. The skips
+/// come from the shared transport skips, and the stored intervals are read
+/// here so a change of interval redraws the buttons.
 struct TransportControlsView: View {
     /// Sizes override for the player screen; the playback bar's metrics
     /// otherwise.
@@ -235,9 +234,9 @@ struct TransportControlsView: View {
 
     var body: some View {
         HStack(spacing: resolvedSizes.buttonSpacing) {
-            skipButton(by: -skipBackSeconds, symbol: "gobackward.\(Int(skipBackSeconds))")
+            skipButton(.back)
             playPauseButton
-            skipButton(by: skipForwardSeconds, symbol: "goforward.\(Int(skipForwardSeconds))")
+            skipButton(.forward)
         }
         .disabled(!player.isReady)
         .opacity(player.isReady ? 1 : 0.4)
@@ -255,11 +254,11 @@ struct TransportControlsView: View {
         .buttonStyle(HoverDimButtonStyle())
     }
 
-    private func skipButton(by seconds: Double, symbol: String) -> some View {
+    private func skipButton(_ skip: TransportSkip) -> some View {
         Button {
-            Task { await player.skip(by: seconds) }
+            skip.perform(on: player)
         } label: {
-            Image(systemName: symbol).font(.system(size: resolvedSizes.skipButtonSize))
+            Image(systemName: skip.symbolName).font(.system(size: resolvedSizes.skipButtonSize))
         }
         .buttonStyle(HoverDimButtonStyle())
     }

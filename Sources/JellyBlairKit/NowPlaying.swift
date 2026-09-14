@@ -58,8 +58,8 @@ final class NowPlayingCenter {
     /// the settings screens can change at any time.
     private func syncSkipIntervals() {
         let commands = MPRemoteCommandCenter.shared()
-        commands.skipBackwardCommand.preferredIntervals = [NSNumber(value: SkipIntervals.back)]
-        commands.skipForwardCommand.preferredIntervals = [NSNumber(value: SkipIntervals.forward)]
+        commands.skipBackwardCommand.preferredIntervals = [NSNumber(value: TransportSkip.back.intervalSeconds)]
+        commands.skipForwardCommand.preferredIntervals = [NSNumber(value: TransportSkip.forward.intervalSeconds)]
     }
 
     /// The explicit playback state only exists on macOS; iOS infers it.
@@ -74,11 +74,13 @@ final class NowPlayingCenter {
         register(center.playCommand) { $0.play() }
         register(center.pauseCommand) { $0.pause() }
         register(center.togglePlayPauseCommand) { $0.togglePlayback() }
-        register(center.skipForwardCommand) { player in Task { await player.skip(by: SkipIntervals.forward) } }
-        register(center.skipBackwardCommand) { player in Task { await player.skip(by: -SkipIntervals.back) } }
+        register(center.skipForwardCommand) { TransportSkip.forward.perform(on: $0) }
+        register(center.skipBackwardCommand) { TransportSkip.back.perform(on: $0) }
         syncSkipIntervals()
-        register(center.nextTrackCommand) { player in Task { await player.nextChapter() } }
-        register(center.previousTrackCommand) { player in Task { await player.previousChapter() } }
+        // The AirPods taps arrive as the track commands, and perform the
+        // transport's skips like every other surface.
+        register(center.nextTrackCommand) { TransportSkip.forward.perform(on: $0) }
+        register(center.previousTrackCommand) { TransportSkip.back.perform(on: $0) }
         registerScrub(center.changePlaybackPositionCommand)
     }
 
