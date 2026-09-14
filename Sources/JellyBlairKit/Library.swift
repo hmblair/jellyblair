@@ -179,9 +179,19 @@ public final class Library {
             )
         }
         return BookList(
-            heading: BookListHeading(name: group.name, icon: group.icon),
+            heading: BookListHeading(name: group.name, detail: headingDetail(of: group)),
             sections: sections(of: visibleBooks(in: group, filters: filters, loadedBookID: loadedBookID), in: group)
         )
+    }
+
+    /// The heading's detail line: the group's kind, its book count, and
+    /// the books' total length, over the whole group regardless of the
+    /// filters.
+    private func headingDetail(of group: BookGroup) -> String {
+        let count = group.books.count
+        let books = count == 1 ? String(localized: "1 Book") : String(localized: "\(count) Books")
+        let length = formatHoursMinutes(group.books.reduce(0) { $0 + $1.runTimeSeconds })
+        return [group.kind.label, books, length].joined(separator: " · ")
     }
 
     /// The visible books as the group's screen sections them: a person's

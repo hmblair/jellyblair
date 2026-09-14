@@ -80,9 +80,9 @@ public struct BookRow: View {
     }
 }
 
-/// A group section heading: plain text in the platform's header style,
-/// clickable across its full width when it has an action. It carries the
-/// group's role icon, and on the Mac a back chevron.
+/// A group heading: the group's name centered over the kind, count, and
+/// length line, clickable across its full width when it has an action. On
+/// the Mac a back chevron sits at the leading edge.
 public struct GroupHeading: View {
     let heading: BookListHeading
     let showsBackChevron: Bool
@@ -107,16 +107,28 @@ public struct GroupHeading: View {
     }
 
     private var label: some View {
-        HStack(spacing: 5) {
+        VStack(spacing: 2) {
+            Text(heading.name)
+                .font(.title2.bold())
+                .foregroundStyle(.primary)
+            Text(verbatim: heading.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        // The chevron overlays the edge, so the lines center on the full
+        // width rather than beside it.
+        .overlay(alignment: .leading) {
             if showsBackChevron {
                 Image(systemName: "chevron.left")
-                    .font(.caption)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
-            heading.icon.plain
-                .imageScale(.small)
-            Text(heading.name)
-                .font(.callout)
-            Spacer()
         }
+        // The list's header style would upcase the name; the heading keeps
+        // its own case.
+        .textCase(nil)
+        .padding(.vertical, 6)
     }
 }

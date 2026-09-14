@@ -7,15 +7,15 @@ public struct BookGroup: Identifiable {
         case publisher
         case genre
 
-        /// The symbol for this role.
-        public var icon: Icon {
+        /// The role's name, on the group heading's detail line.
+        public var label: String {
             switch self {
             case .person:
-                return authorIcon
+                return String(localized: "Person")
             case .publisher:
-                return publisherIcon
+                return String(localized: "Publisher")
             case .genre:
-                return genreIcon
+                return String(localized: "Genre")
             }
         }
 
@@ -34,9 +34,6 @@ public struct BookGroup: Identifiable {
             }
         }
     }
-
-    /// The symbol for the group's role.
-    public var icon: Icon { kind.icon }
 
     public let name: String
     public let kind: Kind
@@ -82,8 +79,10 @@ public struct BookListSection: Identifiable {
     public var id: String { title ?? "" }
 }
 
-/// The text and symbol above a scoped list.
+/// The text above a scoped list, with the quiet line beneath the name.
 public struct BookListHeading {
     public let name: String
-    public let icon: Icon
+    /// The line under the name: the group's kind, book count, and total
+    /// length.
+    public let detail: String
 }

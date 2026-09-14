@@ -45,10 +45,20 @@ public struct LibraryList: View {
     private var bookList: some View {
         List(selection: $selection) {
             if let heading = list.heading {
-                Section {
+                switch density {
+                case .regular:
+                    Section {
+                        rows
+                    } header: {
+                        GroupHeading(heading, showsBackChevron: true, action: exitScope)
+                    }
+                case .compact:
+                    // A plain list pins its section headers over the rows,
+                    // so the heading scrolls as a row of its own instead.
+                    GroupHeading(heading)
+                        .listRowSeparator(.hidden)
+                        .selectionDisabled()
                     rows
-                } header: {
-                    GroupHeading(heading, showsBackChevron: exitsScopeInPlace, action: exitsScopeInPlace ? exitScope : nil)
                 }
             } else {
                 rows
@@ -62,12 +72,6 @@ public struct LibraryList: View {
         .overlay {
             LibraryEmptyOverlay(list, scope: scope, filters: filters)
         }
-    }
-
-    /// A regular list swaps its scope in place, so its heading carries the
-    /// way back out. A compact list was pushed onto a stack, which has one.
-    private var exitsScopeInPlace: Bool {
-        density == .regular
     }
 
     private var rows: some View {

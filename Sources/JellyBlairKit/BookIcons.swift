@@ -1,15 +1,3 @@
-/// The symbol for a book's authors, shared by the book screen's metadata
-/// lines and the group views.
-public let authorIcon = Icon("person.fill")
-
-/// The symbol for a book's publisher, shared by the book screen's metadata
-/// lines and the group views.
-public let publisherIcon = Icon("building.2.fill")
-
-/// The symbol for a book's genres, shared by the book screen's metadata
-/// lines and the group views.
-public let genreIcon = Icon("tag.fill")
-
 /// The symbol for a book's length, shared by the book screen's metadata
 /// lines and the sort menu.
 public let durationIcon = Icon("clock.fill")
