@@ -215,8 +215,7 @@ struct SeekTimeRow<BelowCenter: View>: View {
 private let seekBarHeight: CGFloat = 18
 
 /// The skip and play/pause buttons, driving the loaded book. The skips
-/// come from the shared transport skips, and the stored intervals are read
-/// here so a change of interval redraws the buttons.
+/// come from the shared transport skips.
 struct TransportControlsView: View {
     /// Sizes override for the player screen; the playback bar's metrics
     /// otherwise.
@@ -225,18 +224,15 @@ struct TransportControlsView: View {
     @Environment(PlayerController.self) private var player
     @Environment(\.layoutMetrics) private var metrics
 
-    @AppStorage(SkipIntervals.backKey) private var skipBackSeconds: Double = SkipIntervals.defaultSeconds
-    @AppStorage(SkipIntervals.forwardKey) private var skipForwardSeconds: Double = SkipIntervals.defaultSeconds
-
     private var resolvedSizes: TransportMetrics {
         sizes ?? metrics.transport
     }
 
     var body: some View {
         HStack(spacing: resolvedSizes.buttonSpacing) {
-            skipButton(.back)
+            SkipButton(skip: .back, size: resolvedSizes.skipButtonSize)
             playPauseButton
-            skipButton(.forward)
+            SkipButton(skip: .forward, size: resolvedSizes.skipButtonSize)
         }
         .disabled(!player.isReady)
         .opacity(player.isReady ? 1 : 0.4)
@@ -248,17 +244,41 @@ struct TransportControlsView: View {
         } label: {
             Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                 .font(.system(size: resolvedSizes.playButtonSize))
-                .contentTransition(.identity)
-                .animation(nil, value: player.isPlaying)
+                .contentTransition(.symbolEffect(.replace, options: .speed(2)))
         }
         .buttonStyle(HoverDimButtonStyle())
     }
+}
 
-    private func skipButton(_ skip: TransportSkip) -> some View {
+/// One skip button, whose arrow turns once for each tap, like the system's
+/// Now Playing buttons.
+private struct SkipButton: View {
+    let skip: TransportSkip
+    let size: CGFloat
+
+    @Environment(PlayerController.self) private var player
+
+    /// The stored interval, read so a change of it in the settings redraws
+    /// the numbered symbol.
+    @AppStorage private var intervalSeconds: Double
+
+    /// Counts the taps, so each one runs the symbol's turn.
+    @State private var tapCount = 0
+
+    init(skip: TransportSkip, size: CGFloat) {
+        self.skip = skip
+        self.size = size
+        _intervalSeconds = AppStorage(wrappedValue: SkipIntervals.defaultSeconds, skip.storageKey)
+    }
+
+    var body: some View {
         Button {
+            tapCount += 1
             skip.perform(on: player)
         } label: {
-            Image(systemName: skip.symbolName).font(.system(size: resolvedSizes.skipButtonSize))
+            Image(systemName: skip.symbolName)
+                .font(.system(size: size))
+                .symbolEffect(.rotate, options: .nonRepeating.speed(2), value: tapCount)
         }
         .buttonStyle(HoverDimButtonStyle())
     }

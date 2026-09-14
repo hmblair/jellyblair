@@ -18,7 +18,7 @@ public enum SkipIntervals {
     /// The stored forward interval.
     public static var forward: Double { value(forKey: forwardKey) }
 
-    private static func value(forKey key: String) -> Double {
+    static func value(forKey key: String) -> Double {
         let stored = UserDefaults.standard.double(forKey: key)
         return stored > 0 ? stored : defaultSeconds
     }
@@ -31,9 +31,14 @@ public enum TransportSkip {
     case back
     case forward
 
+    /// Where this skip's interval is stored.
+    public var storageKey: String {
+        self == .back ? SkipIntervals.backKey : SkipIntervals.forwardKey
+    }
+
     /// The stored interval this skip moves by.
     public var intervalSeconds: Double {
-        self == .back ? SkipIntervals.back : SkipIntervals.forward
+        SkipIntervals.value(forKey: storageKey)
     }
 
     /// The change of position, which the backward skip makes negative.

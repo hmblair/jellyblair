@@ -98,10 +98,10 @@ struct ContentView: View {
             // Blank, so the window shows no title text over the book screen.
             .navigationTitle("")
             .onKeyPress(.leftArrow) { [player = scope.player] in
-                playbackKeyResult(player) { Task { await player.skip(by: -SkipIntervals.back) } }
+                playbackKeyResult(player) { TransportSkip.back.perform(on: player) }
             }
             .onKeyPress(.rightArrow) { [player = scope.player] in
-                playbackKeyResult(player) { Task { await player.skip(by: SkipIntervals.forward) } }
+                playbackKeyResult(player) { TransportSkip.forward.perform(on: player) }
             }
             .onKeyPress(.space) { [player = scope.player] in
                 playbackKeyResult(player) { player.togglePlayback() }
