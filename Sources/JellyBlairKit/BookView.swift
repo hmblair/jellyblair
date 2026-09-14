@@ -146,12 +146,14 @@ public struct BookView: View {
     /// the compact screen has no room for.
     private var paneButtons: some View {
         HStack(spacing: 44) {
-            Button {
-                isShowingChapterSheet = true
-            } label: {
-                Image(systemName: "list.bullet")
+            if !chapters.isEmpty {
+                Button {
+                    isShowingChapterSheet = true
+                } label: {
+                    Image(systemName: "list.bullet")
+                }
+                .help("Show the chapters")
             }
-            .help("Show the chapters")
             if hasTranscript {
                 Button {
                     isShowingTranscriptSheet = true
