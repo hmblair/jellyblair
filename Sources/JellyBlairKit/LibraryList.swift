@@ -15,7 +15,7 @@ public struct LibraryList: View {
     @Environment(PlayerController.self) private var player
     @Environment(\.layoutDensity) private var density
 
-    @State private var filters = LibraryFilters()
+    @State private var filters = DefaultLibraryFilters.stored
 
     public init(selection: Binding<String?>, scope: Binding<BookGroup?>, isShowing: Bool = true) {
         _selection = selection

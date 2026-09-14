@@ -28,6 +28,9 @@ public struct SettingsRows: View {
             Text("Not signed in")
                 .foregroundStyle(.secondary)
         }
+        Section("Library") {
+            DefaultLibraryFilterSettings()
+        }
         Section("Playback") {
             SkipIntervalSettings()
         }

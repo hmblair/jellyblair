@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The direction a sort order runs in.
-public enum SortDirection: Hashable {
+public enum SortDirection: Codable, Hashable {
     case ascending
     case descending
 
@@ -23,7 +23,7 @@ public enum SortDirection: Hashable {
 /// The order a list of books is shown in. The titles start at A, and the
 /// durations and the remaining times at the shortest. The plays start at
 /// the most recent one, and the years at the newest.
-public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
+public enum BookSortOrder: CaseIterable, Codable, Hashable, Identifiable {
     case name
     case lastPlayed
     case year
@@ -78,7 +78,13 @@ public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
 /// The library list's filters and sort order, threaded whole from the filter
 /// bar to the visibility functions, so a new filter touches neither
 /// platform's screen.
-public struct LibraryFilters: Equatable {
+public struct LibraryFilters: Codable, Equatable {
+    /// The stored choices, leaving out the search query, which a list
+    /// always opens without.
+    private enum CodingKeys: String, CodingKey {
+        case downloadedOnly, readingOnly, playedFilter, favoritesOnly, sortOrder, sortDirection
+    }
+
     public var searchQuery = ""
     public var downloadedOnly = false
     public private(set) var readingOnly = false
@@ -128,7 +134,7 @@ public struct LibraryFilters: Equatable {
 
 /// The two sides of the server's played flag: Read keeps the books the
 /// server marks played, and Unread keeps the rest.
-public enum PlayedFilter {
+public enum PlayedFilter: Codable {
     case read
     case unread
 }

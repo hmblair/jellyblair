@@ -62,62 +62,108 @@ public extension View {
     }
 }
 
-/// The symbol on the sort menu's toolbar button.
-private let sortMenuIcon = Icon("arrow.up.arrow.down.circle.fill", hasGlyphLayer: true)
+/// The symbol for the sort menu, on its toolbar button and its settings
+/// row.
+let sortMenuIcon = Icon("arrow.up.arrow.down.circle.fill", hasGlyphLayer: true)
 
-/// The symbol on the filter menu's toolbar button.
-private let filterMenuIcon = Icon("line.3.horizontal.decrease.circle.fill", hasGlyphLayer: true)
+/// The symbol for the filter menu, on its toolbar button and its settings
+/// row.
+let filterMenuIcon = Icon("line.3.horizontal.decrease.circle.fill", hasGlyphLayer: true)
 
-/// The library's sort menu and filter menu for a toolbar, marking the
-/// active choices by coloring their icons accent. The reading filter also
-/// puts the list in last-played order.
-public struct LibraryFilterToolbarButtons: View {
+/// The choices in the library's sort menu: every order, then the current
+/// direction, which flips when chosen.
+public struct LibrarySortMenuChoices: View {
     @Binding var filters: LibraryFilters
-
-    @Environment(\.self) private var environment
 
     public init(filters: Binding<LibraryFilters>) {
         _filters = filters
     }
 
     public var body: some View {
-        sortMenu
-        filterMenu
+        ForEach(BookSortOrder.allCases) { order in
+            MenuChoice(order.label, icon: order.icon, isOn: filters.sortOrder == order) {
+                filters.setSortOrder(order)
+            }
+        }
+        Divider()
+        MenuChoice(filters.sortDirection.label, icon: filters.sortDirection.icon, isOn: false) {
+            filters.toggleSortDirection()
+        }
+    }
+}
+
+/// The choices in the library's filter menu. The reading filter also puts
+/// the list in last-played order.
+public struct LibraryFilterMenuChoices: View {
+    @Binding var filters: LibraryFilters
+
+    public init(filters: Binding<LibraryFilters>) {
+        _filters = filters
     }
 
-    private var sortMenu: some View {
-        toolbarMenu(sortMenuIcon, help: "Sort the books") {
-            ForEach(BookSortOrder.allCases) { order in
-                menuChoice(order.label, icon: order.icon, isOn: filters.sortOrder == order) {
-                    filters.setSortOrder(order)
-                }
-            }
-            Divider()
-            // Shows the current direction; choosing it flips the list.
-            menuChoice(filters.sortDirection.label, icon: filters.sortDirection.icon, isOn: false) {
-                filters.toggleSortDirection()
+    public var body: some View {
+        MenuChoice("Unread", icon: unreadIcon, isOn: filters.playedFilter == .unread) {
+            filters.togglePlayedFilter(.unread)
+        }
+        MenuChoice("Read", icon: readIcon, isOn: filters.playedFilter == .read) {
+            filters.togglePlayedFilter(.read)
+        }
+        Divider()
+        MenuChoice("Reading", icon: readingIcon, isOn: filters.readingOnly) {
+            filters.setReadingOnly(!filters.readingOnly)
+        }
+        MenuChoice("Downloaded", icon: downloadedIcon, isOn: filters.downloadedOnly) {
+            filters.downloadedOnly.toggle()
+        }
+        MenuChoice("Favorites", icon: favoriteIcon, isOn: filters.favoritesOnly) {
+            filters.favoritesOnly.toggle()
+        }
+    }
+}
+
+/// One choice in a menu: its icon shows its accented image while the
+/// choice is active, in place of the system check mark.
+struct MenuChoice: View {
+    let title: LocalizedStringKey
+    let icon: Icon
+    let isOn: Bool
+    let action: () -> Void
+
+    @Environment(\.self) private var environment
+
+    init(_ title: LocalizedStringKey, icon: Icon, isOn: Bool, action: @escaping () -> Void) {
+        self.title = title
+        self.icon = icon
+        self.isOn = isOn
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Label {
+                Text(title)
+            } icon: {
+                isOn ? icon.accentedImage(in: environment) : icon.plain
             }
         }
     }
+}
 
-    private var filterMenu: some View {
+/// The library's sort menu and filter menu for a toolbar, marking the
+/// active choices by coloring their icons accent.
+public struct LibraryFilterToolbarButtons: View {
+    @Binding var filters: LibraryFilters
+
+    public init(filters: Binding<LibraryFilters>) {
+        _filters = filters
+    }
+
+    public var body: some View {
+        toolbarMenu(sortMenuIcon, help: "Sort the books") {
+            LibrarySortMenuChoices(filters: $filters)
+        }
         toolbarMenu(filterMenuIcon, help: "Filter the books", isHighlighted: filters.hasActiveFilter) {
-            menuChoice("Unread", icon: unreadIcon, isOn: filters.playedFilter == .unread) {
-                filters.togglePlayedFilter(.unread)
-            }
-            menuChoice("Read", icon: readIcon, isOn: filters.playedFilter == .read) {
-                filters.togglePlayedFilter(.read)
-            }
-            Divider()
-            menuChoice("Reading", icon: readingIcon, isOn: filters.readingOnly) {
-                filters.setReadingOnly(!filters.readingOnly)
-            }
-            menuChoice("Downloaded", icon: downloadedIcon, isOn: filters.downloadedOnly) {
-                filters.downloadedOnly.toggle()
-            }
-            menuChoice("Favorites", icon: favoriteIcon, isOn: filters.favoritesOnly) {
-                filters.favoritesOnly.toggle()
-            }
+            LibraryFilterMenuChoices(filters: $filters)
         }
     }
 
@@ -135,18 +181,6 @@ public struct LibraryFilterToolbarButtons: View {
         }
         .menuIndicator(.hidden)
         .help(help)
-    }
-
-    /// One choice in a menu: its icon shows its accented image while the
-    /// choice is active, in place of the system check mark.
-    private func menuChoice(_ title: LocalizedStringKey, icon: Icon, isOn: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label {
-                Text(title)
-            } icon: {
-                isOn ? icon.accentedImage(in: environment) : icon.plain
-            }
-        }
     }
 }
 
