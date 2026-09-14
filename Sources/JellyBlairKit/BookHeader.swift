@@ -56,7 +56,7 @@ struct BookPlaybackCaption: View {
     var body: some View {
         Group {
             if book.isStarted {
-                let remaining = formatHoursMinutes(book.runTimeSeconds - book.resumePositionSeconds)
+                let remaining = formatHoursMinutes(book.remainingSeconds)
                 if let title = book.resumeChapter?.title {
                     Text("\(title) · \(remaining) remaining")
                 } else {

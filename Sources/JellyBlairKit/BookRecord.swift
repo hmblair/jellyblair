@@ -173,6 +173,11 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         Double(userData?.playbackPositionTicks ?? 0) / ticksPerSecond
     }
 
+    /// The listening time left from the resume position to the end.
+    public var remainingSeconds: Double {
+        max(0, runTimeSeconds - resumePositionSeconds)
+    }
+
     /// When the book was last played, or nil when the server has never seen
     /// it played.
     public var lastPlayedDate: Date? {

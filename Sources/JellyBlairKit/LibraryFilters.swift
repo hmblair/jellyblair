@@ -20,21 +20,22 @@ public enum SortDirection: Hashable {
     }
 }
 
-/// The order a list of books is shown in. The titles start at A and the
-/// durations at the shortest book. The plays start at the most recent one,
-/// and the years at the newest.
+/// The order a list of books is shown in. The titles start at A, and the
+/// durations and the remaining times at the shortest. The plays start at
+/// the most recent one, and the years at the newest.
 public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
     case name
     case lastPlayed
     case year
     case duration
+    case remaining
 
     public var id: Self { self }
 
     /// The direction the order starts in when chosen.
     public var defaultDirection: SortDirection {
         switch self {
-        case .name, .duration:
+        case .name, .duration, .remaining:
             return .ascending
         case .lastPlayed, .year:
             return .descending
@@ -52,6 +53,8 @@ public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
             return "Year"
         case .duration:
             return "Duration"
+        case .remaining:
+            return "Time Remaining"
         }
     }
 
@@ -66,6 +69,8 @@ public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
             return yearIcon
         case .duration:
             return durationIcon
+        case .remaining:
+            return remainingSortIcon
         }
     }
 }

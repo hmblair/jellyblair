@@ -99,6 +99,7 @@ public final class Book: Identifiable {
     public var isPlayed: Bool { record.isPlayed }
     public var lastSyncedDate: Date? { record.lastSyncedDate }
     public var resumePositionSeconds: Double { record.resumePositionSeconds }
+    public var remainingSeconds: Double { record.remainingSeconds }
 
     /// True when the title, author, narrator, genre, or publisher contains
     /// the query.
