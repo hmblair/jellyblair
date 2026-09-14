@@ -200,6 +200,9 @@ public struct BookDetailsSheet: View {
                 Text(formatFileSize(bytes))
             }
         }
+        detailRow(icon: durationIcon, label: Text("Duration")) {
+            Text(formatHoursMinutes(book.runTimeSeconds))
+        }
     }
 
     /// The bitrate and codec as one value, such as "68 kbps AAC", from
