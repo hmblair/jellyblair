@@ -13,9 +13,9 @@ public struct BookScreenState {
 /// is the playback screen: the cover and title block over the loaded
 /// book's live transport, or over the play button for any other book, with
 /// the chapters and the transcript as sheets. When regular it is a detail
-/// page — the title block beside the cover, with the play button for a
-/// book not loaded — over the inline panes, leaving the transport to the
-/// playback bar. A play button or chapter tap switches playback here;
+/// page — the centered title block under the cover, with the play button
+/// for a book not loaded — over the inline panes, leaving the transport to
+/// the playback bar. A play button or chapter tap switches playback here;
 /// browsing never disturbs whatever is playing.
 public struct BookView: View {
     let book: Book
@@ -27,10 +27,6 @@ public struct BookView: View {
     @Environment(\.layoutMetrics) private var metrics
 
     @State private var isShowingDetails = false
-
-    /// Measured height of the regular play button, which hangs under the
-    /// title block by its own height; see regularHeader.
-    @State private var playButtonHeight: CGFloat = 0
 
     /// The compact screen's pane sheets.
     @State private var isShowingChapterSheet = false
@@ -162,32 +158,21 @@ public struct BookView: View {
 
     // MARK: - Regular header
 
-    /// The detail header: the title block and the play button beside the
-    /// cover, sharing the pane's width so the edges line up. The bottom
-    /// bar carries the chapter and time readouts, so the page repeats
-    /// neither, and while this book is loaded the button leaves too —
-    /// playback is the bar's to control.
+    /// The detail header: the centered title block under the cover, the
+    /// compact screen's arrangement, capped at the pane's width so the
+    /// text never runs wider than the list below. The bottom bar carries
+    /// the chapter and time readouts, so the page repeats neither, and
+    /// while this book is loaded the play button leaves too — playback
+    /// is the bar's to control.
     private var regularHeader: some View {
-        HStack(spacing: 24) {
+        VStack(spacing: 0) {
             BookPlayerCover(book: book)
-            BookTitleBlock(book: book, alignment: .leading)
-                // The button hangs below the block without joining the
-                // layout, so the text keeps its centering against the
-                // cover and nothing moves when the button leaves on load.
-                // The measured height shifts it fully past the block's
-                // bottom edge.
-                .overlay(alignment: .bottomLeading) {
-                    if !isLoaded {
-                        BookPlayButton(book: book, canStart: canStartPlayback)
-                            .onGeometryChange(for: CGFloat.self) { proxy in
-                                proxy.size.height
-                            } action: { height in
-                                playButtonHeight = height
-                            }
-                            .offset(y: playButtonHeight + 16)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            BookTitleBlock(book: book, alignment: .center)
+                .padding(.top, 20)
+            if !isLoaded {
+                BookPlayButton(book: book, canStart: canStartPlayback)
+                    .padding(.top, 16)
+            }
         }
         .frame(maxWidth: metrics.pane.maxWidth)
         .frame(maxWidth: .infinity)
