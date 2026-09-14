@@ -8,7 +8,6 @@ public struct BookFileInfoSheet: View {
 
     @Environment(PlayerController.self) private var player
     @Environment(ConnectionMonitor.self) private var connection
-    @Environment(\.dismiss) private var dismiss
 
     public init(book: Book) {
         self.book = book
@@ -32,22 +31,14 @@ public struct BookFileInfoSheet: View {
     }
     #else
     private var phoneBody: some View {
-        NavigationStack {
+        PhoneSheet(title: Text("File Information")) {
             form
-                .navigationTitle("File Information")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
                 .safeAreaInset(edge: .bottom) {
                     actionRow
                         .padding(.horizontal, sheetEdgePadding)
                         .padding(.bottom, 8)
                 }
         }
-        .presentationDetents([.medium])
     }
     #endif
 

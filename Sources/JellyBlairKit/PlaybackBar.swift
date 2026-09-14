@@ -8,12 +8,8 @@ public struct PlaybackBar: View {
     @Environment(PlayerController.self) private var player
     @Environment(\.layoutMetrics) private var metrics
 
-    /// Width cap of the single-row bar's info block; longer names truncate.
-    private static let infoMaxWidth: CGFloat = 280
-
-    /// Width cap of the single-row bar's seek cluster, so the bar reads as one
-    /// control instead of a line spanning the window. The time labels and
-    /// the speed menu take roughly 250 points of it; the rest is the bar.
+    /// Width cap of the single-row bar's seek cluster, so the bar reads as
+    /// one control instead of a line spanning the window.
     private static let seekClusterMaxWidth: CGFloat = 720
 
     public init(onOpen: @escaping (Book) -> Void) {
@@ -40,41 +36,51 @@ public struct PlaybackBar: View {
 
     @ViewBuilder
     private func controls(for book: Book) -> some View {
-        if metrics.playbackBar.usesSingleRow {
-            singleRowControls(for: book)
+        if metrics.playbackBar.showsSeekCluster {
+            seekClusterControls(for: book)
         } else {
-            stackedControls(for: book)
+            infoTransportControls(for: book)
         }
     }
 
-    /// One row: the info at the leading edge, the transport at the trailing
-    /// edge, and the seek cluster centered in the space between them. The
-    /// bar layout sizes and places each element independently.
-    private func singleRowControls(for book: Book) -> some View {
-        BarLayout(infoMaximum: Self.infoMaxWidth, clusterMaximum: Self.seekClusterMaxWidth, spacing: 16) {
+    /// The info at the leading edge, the transport at the trailing edge,
+    /// and the seek cluster centered on the bar itself. The bar layout
+    /// sizes and places each element independently.
+    private func seekClusterControls(for book: Book) -> some View {
+        BarLayout(clusterMaximum: Self.seekClusterMaxWidth, spacing: 32) {
             info(for: book)
             seekCluster
+            transportWithSpeed
+        }
+    }
+
+    /// The info with the transport, inset a step from the bar's edges.
+    /// This bar carries neither the seek cluster nor the speed menu; the
+    /// book screen's own transport does both.
+    private func infoTransportControls(for book: Book) -> some View {
+        HStack(spacing: 12) {
+            info(for: book)
+            Spacer(minLength: 12)
             TransportControlsView()
         }
+        .padding(.horizontal, 8)
     }
 
-    /// Two rows: the seek cluster, then the info with the transport.
-    private func stackedControls(for book: Book) -> some View {
-        VStack(spacing: 8) {
-            seekCluster
-            HStack(spacing: 12) {
-                info(for: book)
-                Spacer(minLength: 12)
-                TransportControlsView()
-            }
+    /// The seek bar in the player layout: the times under the bar's ends
+    /// with the remaining time between them.
+    private var seekCluster: some View {
+        SeekTimeRow {
+            RemainingTimeView()
+                .font(metrics.transport.readoutFont)
         }
     }
 
-    /// The seek bar with the speed menu beside it.
-    private var seekCluster: some View {
-        HStack(spacing: 8) {
-            SeekTimeRow()
+    /// The transport with the speed menu leading its skip-back button,
+    /// centered like the buttons.
+    private var transportWithSpeed: some View {
+        HStack(spacing: metrics.transport.buttonSpacing) {
             PlaybackSpeedMenu()
+            TransportControlsView()
         }
     }
 
@@ -116,14 +122,14 @@ public struct PlaybackBar: View {
     }
 }
 
-/// Places the bar's three elements independently of each other: the first
-/// at the leading edge, the third at the trailing edge, and the second
-/// centered in the space between its two neighbors, each centered
-/// vertically. The info hugs its content up to its cap, the transport
-/// takes its own size, and the cluster gets all the space they leave, up
-/// to its cap.
+/// Places the bar's three elements independently of each other, each
+/// centered vertically: the info at the leading edge, the transport at
+/// the trailing edge, and the cluster centered on the bar itself — not in
+/// the gap between its neighbors — so the two sides keep an even balance.
+/// The transport takes its own size; the cluster spans twice the distance
+/// from the bar's center to the transport's spacing, up to its cap; and
+/// the info truncates into the space the cluster's leading edge leaves.
 private struct BarLayout: Layout {
-    let infoMaximum: CGFloat
     let clusterMaximum: CGFloat
     let spacing: CGFloat
 
@@ -164,10 +170,8 @@ private struct BarLayout: Layout {
             anchor: .leading,
             proposal: ProposedViewSize(sizes.info)
         )
-        // The midpoint of the gap between the info and the transport.
-        let clusterX = (bounds.minX + sizes.info.width + bounds.maxX - sizes.transport.width) / 2
         elements.cluster.place(
-            at: CGPoint(x: clusterX, y: bounds.midY),
+            at: CGPoint(x: bounds.midX, y: bounds.midY),
             anchor: .center,
             proposal: ProposedViewSize(sizes.cluster)
         )
@@ -178,14 +182,22 @@ private struct BarLayout: Layout {
         )
     }
 
-    /// The elements' sizes for the given bar width: the info at its content
-    /// width up to its cap, the transport at its own size, and the cluster
-    /// at the width those two leave between them, up to its cap.
+    /// The elements' sizes for the given bar width: the transport at its
+    /// own size, the centered cluster at twice the center-to-transport
+    /// distance up to its cap, and the info truncating into the space up
+    /// to the cluster's leading edge.
     private func sizes(of elements: Elements, inBarWidth barWidth: CGFloat?) -> ElementSizes {
         let transport = elements.transport.sizeThatFits(.unspecified)
-        let infoWidth = min(elements.info.sizeThatFits(.unspecified).width, infoMaximum)
-        let available = (barWidth ?? .infinity) - infoWidth - transport.width - 2 * spacing
-        let clusterWidth = max(0, min(clusterMaximum, available))
+        let infoIdeal = elements.info.sizeThatFits(.unspecified).width
+        guard let barWidth else {
+            return ElementSizes(
+                info: CGSize(width: infoIdeal, height: height(of: elements.info, atWidth: infoIdeal)),
+                cluster: CGSize(width: clusterMaximum, height: height(of: elements.cluster, atWidth: clusterMaximum)),
+                transport: transport
+            )
+        }
+        let clusterWidth = max(0, min(clusterMaximum, barWidth - 2 * (transport.width + spacing)))
+        let infoWidth = max(0, min(infoIdeal, (barWidth - clusterWidth) / 2 - spacing))
         return ElementSizes(
             info: CGSize(width: infoWidth, height: height(of: elements.info, atWidth: infoWidth)),
             cluster: CGSize(width: clusterWidth, height: height(of: elements.cluster, atWidth: clusterWidth)),

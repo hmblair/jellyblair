@@ -12,7 +12,7 @@ public struct RemainingTimeView: View {
         // Inherits the font from its context, so it always matches the
         // total length displayed beside it.
         TimelineView(.periodic(from: .now, by: 1.0)) { context in
-            Text(text(at: context.date))
+            Text("\(text(at: context.date)) remaining")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
@@ -28,6 +28,10 @@ public struct RemainingTimeView: View {
 
 /// The playback speed as a menu of the preset speeds.
 struct PlaybackSpeedMenu: View {
+    /// Font override for the player screen; the playback bar's readout
+    /// font otherwise.
+    var font: Font?
+
     @Environment(PlayerController.self) private var player
     @Environment(\.layoutMetrics) private var metrics
 
@@ -48,7 +52,7 @@ struct PlaybackSpeedMenu: View {
             .pickerStyle(.inline)
         } label: {
             Text(formatPlaybackSpeed(player.playbackSpeed))
-                .font(metrics.transport.readoutFont)
+                .font(font ?? metrics.transport.readoutFont)
                 .foregroundStyle(.secondary)
         }
         .fixedSize()
@@ -67,12 +71,19 @@ struct PlaybackSpeedMenu: View {
     }
 }
 
-/// The seek bar flanked by the elapsed and total time, scoped to the
-/// current chapter, or to the book when there are no chapters. The bar's
-/// motion is a Core Animation animation projected from the position anchor,
-/// and the elapsed readout ticks once per displayed second, so playback
-/// drives no frequent view updates.
-struct SeekTimeRow: View {
+/// The seek bar over its times row — the elapsed and total at the ends,
+/// with the caller's content centered between them — scoped to the current
+/// chapter, or to the book when there are no chapters. The bar's motion is
+/// a Core Animation animation projected from the position anchor, and the
+/// elapsed readout ticks once per displayed second, so playback drives no
+/// frequent view updates.
+struct SeekTimeRow<BelowCenter: View>: View {
+    /// Sizes override for the player screen; the playback bar's metrics
+    /// otherwise.
+    var sizes: TransportMetrics?
+    /// Content centered in the time-labels row under the bar.
+    private let belowCenter: BelowCenter
+
     @Environment(PlayerController.self) private var player
     @Environment(\.layoutMetrics) private var metrics
 
@@ -80,19 +91,40 @@ struct SeekTimeRow: View {
     /// seek lands, so the bar does not flash back to the pre-seek time.
     @State private var dragFraction: Double?
 
+    init(sizes: TransportMetrics? = nil, @ViewBuilder belowCenter: () -> BelowCenter) {
+        self.sizes = sizes
+        self.belowCenter = belowCenter()
+    }
+
     var body: some View {
-        HStack(spacing: 8) {
-            TimelineView(.periodic(from: .now, by: tickInterval)) { context in
-                Text(elapsedText(at: context.date))
-            }
-            .font(metrics.transport.readoutFont)
-            .foregroundStyle(.secondary)
+        VStack(spacing: 6) {
             seekBar
                 .opacity(player.isReady ? 1 : 0.4)
-            Text(totalText)
-                .font(metrics.transport.readoutFont)
-                .foregroundStyle(.secondary)
+            HStack {
+                elapsedLabel
+                Spacer()
+                totalLabel
+            }
+            .overlay { belowCenter }
         }
+    }
+
+    private var readoutFont: Font {
+        (sizes ?? metrics.transport).readoutFont
+    }
+
+    private var elapsedLabel: some View {
+        TimelineView(.periodic(from: .now, by: tickInterval)) { context in
+            Text(elapsedText(at: context.date))
+        }
+        .font(readoutFont)
+        .foregroundStyle(.secondary)
+    }
+
+    private var totalLabel: some View {
+        Text(totalText)
+            .font(readoutFont)
+            .foregroundStyle(.secondary)
     }
 
     private var seekBar: some View {
@@ -105,7 +137,7 @@ struct SeekTimeRow: View {
                         .gesture(scrubGesture(width: geometry.size.width))
                 }
         }
-        .frame(height: 18)
+        .frame(height: seekBarHeight)
     }
 
     /// The bar's anchor in chapter-fraction space: the scrub position while
@@ -179,45 +211,57 @@ struct SeekTimeRow: View {
     }
 }
 
-/// The skip and play/pause buttons. The skip amounts come from the stored
-/// intervals, with the numbered arrow symbols following them. Chapter
-/// navigation lives in the system Now Playing commands and the chapter
-/// list.
+/// Height of the seek bar's hit area.
+private let seekBarHeight: CGFloat = 18
+
+/// The skip and play/pause buttons, driving the loaded book. The skip
+/// amounts come from the stored intervals, with the numbered arrow symbols
+/// following them. Chapter navigation lives in the system Now Playing
+/// commands and the chapter list.
 struct TransportControlsView: View {
+    /// Sizes override for the player screen; the playback bar's metrics
+    /// otherwise.
+    var sizes: TransportMetrics?
+
     @Environment(PlayerController.self) private var player
     @Environment(\.layoutMetrics) private var metrics
 
     @AppStorage(SkipIntervals.backKey) private var skipBackSeconds: Double = SkipIntervals.defaultSeconds
     @AppStorage(SkipIntervals.forwardKey) private var skipForwardSeconds: Double = SkipIntervals.defaultSeconds
 
+    private var resolvedSizes: TransportMetrics {
+        sizes ?? metrics.transport
+    }
+
     var body: some View {
-        HStack(spacing: metrics.transport.buttonSpacing) {
-            Button {
-                Task { await player.skip(by: -skipBackSeconds) }
-            } label: {
-                Image(systemName: "gobackward.\(Int(skipBackSeconds))").font(.system(size: metrics.transport.skipButtonSize))
-            }
-            .buttonStyle(HoverDimButtonStyle())
-
-            Button {
-                player.togglePlayback()
-            } label: {
-                Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: metrics.transport.playButtonSize))
-                    .contentTransition(.identity)
-                    .animation(nil, value: player.isPlaying)
-            }
-            .buttonStyle(HoverDimButtonStyle())
-
-            Button {
-                Task { await player.skip(by: skipForwardSeconds) }
-            } label: {
-                Image(systemName: "goforward.\(Int(skipForwardSeconds))").font(.system(size: metrics.transport.skipButtonSize))
-            }
-            .buttonStyle(HoverDimButtonStyle())
+        HStack(spacing: resolvedSizes.buttonSpacing) {
+            skipButton(by: -skipBackSeconds, symbol: "gobackward.\(Int(skipBackSeconds))")
+            playPauseButton
+            skipButton(by: skipForwardSeconds, symbol: "goforward.\(Int(skipForwardSeconds))")
         }
         .disabled(!player.isReady)
         .opacity(player.isReady ? 1 : 0.4)
+    }
+
+    private var playPauseButton: some View {
+        Button {
+            player.togglePlayback()
+        } label: {
+            Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                .font(.system(size: resolvedSizes.playButtonSize))
+                .contentTransition(.identity)
+                .animation(nil, value: player.isPlaying)
+        }
+        .buttonStyle(HoverDimButtonStyle())
+    }
+
+    private func skipButton(by seconds: Double, symbol: String) -> some View {
+        Button {
+            Task { await player.skip(by: seconds) }
+        } label: {
+            Image(systemName: symbol).font(.system(size: resolvedSizes.skipButtonSize))
+        }
+        .buttonStyle(HoverDimButtonStyle())
     }
 }
 

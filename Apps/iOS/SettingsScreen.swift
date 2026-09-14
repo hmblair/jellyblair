@@ -9,16 +9,9 @@ struct SettingsScreen: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        PhoneSheet(title: Text("Settings")) {
             Form {
                 SettingsRows(session: session) {
-                    dismiss()
-                }
-            }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                Button("Done") {
                     dismiss()
                 }
             }

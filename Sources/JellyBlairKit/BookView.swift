@@ -9,25 +9,32 @@ public struct BookScreenState {
     public init() {}
 }
 
-/// One book's screen. For the loaded book it is the playback screen with the
-/// full controls; for any other book it is a preview whose Play button or
-/// chapter tap switches playback here. Browsing previews never disturbs
-/// whatever is playing.
+/// One book's screen, composed from the header components. When compact it
+/// is the playback screen: the cover and title block over the loaded
+/// book's live transport, or over the play button for any other book, with
+/// the chapters and the transcript as sheets. When regular it is a detail
+/// page — the title block beside the cover, with the play button for a
+/// book not loaded — over the inline panes, leaving the transport to the
+/// playback bar. A play button or chapter tap switches playback here;
+/// browsing never disturbs whatever is playing.
 public struct BookView: View {
     let book: Book
 
     @Environment(PlayerController.self) private var player
     @Environment(ConnectionMonitor.self) private var connection
 
-    @Environment(\.openBookGroup) private var openBookGroup
-
+    @Environment(\.layoutDensity) private var density
     @Environment(\.layoutMetrics) private var metrics
 
-    /// Measured height of the header's metadata column, which sizes the
-    /// cover as a square of the same height.
-    @State private var metadataHeight: CGFloat = 0
-
     @State private var isShowingFileInfo = false
+
+    /// Measured height of the regular play button, which hangs under the
+    /// title block by its own height; see regularHeader.
+    @State private var playButtonHeight: CGFloat = 0
+
+    /// The compact screen's pane sheets.
+    @State private var isShowingChapterSheet = false
+    @State private var isShowingTranscriptSheet = false
 
     public init(book: Book) {
         self.book = book
@@ -47,18 +54,13 @@ public struct BookView: View {
     }
 
     public var body: some View {
-        // When compact the list runs edge to edge and only the upper content
-        // keeps side padding; a regular page pads as a whole. The loaded
-        // book's controls live in the app-wide playback bar, not here.
         VStack(spacing: 16) {
-            Group {
-                header
-                if !isLoaded {
-                    playButton
-                }
+            if density == .compact {
+                compactPlayer
+            } else {
+                regularHeader
+                listSection
             }
-            .padding(.horizontal, metrics.bookScreen.contentHorizontalPadding)
-            listSection
         }
         .padding(.horizontal, metrics.bookScreen.pageHorizontalPadding)
         .padding(.top, metrics.bookScreen.pageTopPadding)
@@ -80,7 +82,7 @@ public struct BookView: View {
             ToolbarItem(placement: .primaryAction) {
                 fileInfoButton
             }
-            if hasTranscript {
+            if density == .regular, hasTranscript {
                 ToolbarItem(placement: .primaryAction) {
                     transcriptToggle
                 }
@@ -93,16 +95,111 @@ public struct BookView: View {
         .sheet(isPresented: $isShowingFileInfo) {
             BookFileInfoSheet(book: book)
         }
+        .sheet(isPresented: $isShowingChapterSheet) {
+            PhoneSheet(title: Text("Chapters")) {
+                chapterPane
+                    .paneBackdrop(metrics.pane.backdrop)
+            }
+        }
+        .sheet(isPresented: $isShowingTranscriptSheet) {
+            PhoneSheet(title: Text("Transcript")) {
+                transcriptPane(isVisible: true)
+                    .paneBackdrop(metrics.pane.backdrop)
+            }
+        }
     }
 
-    private var fileInfoButton: some View {
-        Button {
-            isShowingFileInfo = true
-        } label: {
-            Image(systemName: "info.circle.fill")
+    // MARK: - Compact player
+
+    /// The playback screen filling the compact page: the centered column
+    /// between the spacers, with the pane buttons at the bottom.
+    @ViewBuilder
+    private var compactPlayer: some View {
+        Spacer(minLength: 0)
+        VStack(spacing: 0) {
+            BookPlayerCover(book: book)
+            BookTitleBlock(book: book, alignment: .center)
+                .padding(.top, 20)
+            playbackSection
+                .padding(.top, 24)
         }
-        .help("Show the file details")
+        .padding(.horizontal, metrics.bookScreen.contentHorizontalPadding)
+        Spacer(minLength: 0)
+        paneButtons
     }
+
+    /// The loaded book's live transport, or the play button with its
+    /// caption for any other book, whose bottom bar has the transport.
+    @ViewBuilder
+    private var playbackSection: some View {
+        if isLoaded {
+            BookTransport()
+        } else {
+            VStack(spacing: 10) {
+                BookPlayButton(book: book, canStart: canStartPlayback)
+                BookPlaybackCaption(book: book)
+            }
+        }
+    }
+
+    /// Opens the chapter and transcript sheets, standing in for the panes
+    /// the compact screen has no room for.
+    private var paneButtons: some View {
+        HStack(spacing: 44) {
+            Button {
+                isShowingChapterSheet = true
+            } label: {
+                Image(systemName: "list.bullet")
+            }
+            .help("Show the chapters")
+            if hasTranscript {
+                Button {
+                    isShowingTranscriptSheet = true
+                } label: {
+                    Image(systemName: "text.quote")
+                }
+                .help("Show the transcript")
+            }
+        }
+        .font(.system(size: 18))
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+    }
+
+    // MARK: - Regular header
+
+    /// The detail header: the title block and the play button beside the
+    /// cover, sharing the pane's width so the edges line up. The bottom
+    /// bar carries the chapter and time readouts, so the page repeats
+    /// neither, and while this book is loaded the button leaves too —
+    /// playback is the bar's to control.
+    private var regularHeader: some View {
+        HStack(spacing: 24) {
+            BookPlayerCover(book: book)
+            BookTitleBlock(book: book, alignment: .leading)
+                // The button hangs below the block without joining the
+                // layout, so the text keeps its centering against the
+                // cover and nothing moves when the button leaves on load.
+                // The measured height shifts it fully past the block's
+                // bottom edge.
+                .overlay(alignment: .bottomLeading) {
+                    if !isLoaded {
+                        BookPlayButton(book: book, canStart: canStartPlayback)
+                            .onGeometryChange(for: CGFloat.self) { proxy in
+                                proxy.size.height
+                            } action: { height in
+                                playButtonHeight = height
+                            }
+                            .offset(y: playButtonHeight + 16)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: metrics.pane.maxWidth)
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Panes
 
     /// Swaps the list below between the chapters and the transcript.
     /// The icon shows the view the button switches to.
@@ -135,25 +232,13 @@ public struct BookView: View {
     /// Each pane carries its own search bar and tracking button.
     private var listSection: some View {
         ZStack {
-            ChapterListPane(
-                book: book,
-                chapters: chapters,
-                marked: markedChapterIndex,
-                isLoaded: isLoaded,
-                canStartPlayback: canStartPlayback
-            )
-            .opacity(showsTranscriptPane ? 0 : 1)
-            .allowsHitTesting(!showsTranscriptPane)
+            chapterPane
+                .opacity(showsTranscriptPane ? 0 : 1)
+                .allowsHitTesting(!showsTranscriptPane)
             if hasTranscript {
-                TranscriptPane(
-                    book: book,
-                    chapters: chapters,
-                    isLoaded: isLoaded,
-                    canStartPlayback: canStartPlayback,
-                    isVisible: showsTranscriptPane
-                )
-                .opacity(showsTranscriptPane ? 1 : 0)
-                .allowsHitTesting(showsTranscriptPane)
+                transcriptPane(isVisible: showsTranscriptPane)
+                    .opacity(showsTranscriptPane ? 1 : 0)
+                    .allowsHitTesting(showsTranscriptPane)
             }
         }
         #if os(macOS)
@@ -166,7 +251,40 @@ public struct BookView: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Header
+    /// The chapter pane on this book, shared by the regular list section
+    /// and the compact sheet.
+    private var chapterPane: some View {
+        ChapterListPane(
+            book: book,
+            chapters: chapters,
+            marked: markedChapterIndex,
+            isLoaded: isLoaded,
+            canStartPlayback: canStartPlayback
+        )
+    }
+
+    /// The transcript pane on this book, shared by the regular list
+    /// section and the compact sheet.
+    private func transcriptPane(isVisible: Bool) -> some View {
+        TranscriptPane(
+            book: book,
+            chapters: chapters,
+            isLoaded: isLoaded,
+            canStartPlayback: canStartPlayback,
+            isVisible: isVisible
+        )
+    }
+
+    // MARK: - Shared
+
+    private var fileInfoButton: some View {
+        Button {
+            isShowingFileInfo = true
+        } label: {
+            Image(systemName: "info.circle.fill")
+        }
+        .help("Show the file details")
+    }
 
     /// The height of the cover wash, fading to nothing before the page's
     /// lower half.
@@ -184,130 +302,6 @@ public struct BookView: View {
             .allowsHitTesting(false)
     }
 
-    /// Centered title over a side-by-side section: cover at the left,
-    /// left-aligned metadata lines beside it. The cover is a square with
-    /// the metadata column's height, so the two sides always share one
-    /// height.
-    private var header: some View {
-        VStack(spacing: 12) {
-            Text(book.name)
-                .font(metrics.bookScreen.titleFont)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-
-            // Two equal halves: the measured metadata column sizes the
-            // cover, and each half claims its side of the center seam.
-            HStack(alignment: .top, spacing: metrics.bookScreen.coverSpacing) {
-                cover
-                    .frame(width: metadataHeight, height: metadataHeight)
-                    .clipShape(RoundedRectangle(cornerRadius: metrics.bookScreen.coverCornerRadius))
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-
-                metadataColumn
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.size.height
-                    } action: { height in
-                        metadataHeight = height
-                    }
-            }
-        }
-        .fixedSize(horizontal: false, vertical: metrics.bookScreen.headerKeepsIntrinsicHeight)
-    }
-
-    private var metadataColumn: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            groupLine(.author)
-            groupLine(.narrator)
-            groupLine(.publisher)
-            if let year = book.productionYear {
-                metadataLine(icon: yearIcon) { Text(verbatim: String(year)) }
-            }
-            groupLine(.genre)
-            metadataLine(icon: durationIcon) { lengthLine }
-        }
-        .font(metrics.bookScreen.lineFont)
-    }
-
-    /// A metadata row for one grouping kind, with each name navigating to
-    /// that name's books. The row disappears when the book has no names of
-    /// the kind.
-    @ViewBuilder
-    private func groupLine(_ kind: BookGroup.Kind) -> some View {
-        let names = kind.names(of: book)
-        if !names.isEmpty {
-            metadataLine(icon: kind.icon) {
-                NameListLine(kind: kind, names: names, open: openBookGroup)
-            }
-        }
-    }
-
-    /// A metadata row: a small dimmed icon beside its text.
-    private func metadataLine(icon: Icon, @ViewBuilder content: () -> some View) -> some View {
-        metadataLine {
-            icon.plain
-                .imageScale(.small)
-        } content: {
-            content()
-        }
-    }
-
-    /// A metadata row with a custom view in the icon column. The content
-    /// stays on one line and scrolls horizontally, but only when it
-    /// overflows; a line that fits does not move.
-    private func metadataLine(@ViewBuilder icon: () -> some View, @ViewBuilder content: () -> some View) -> some View {
-        HStack(spacing: 6) {
-            icon()
-                .frame(width: 22)
-            OverflowScrollLine {
-                content()
-            }
-        }
-    }
-
-    private var cover: some View {
-        BookCoverImage(bookID: book.id, url: book.coverURL, contentMode: .fit)
-    }
-
-    /// The book's total length.
-    private var lengthLine: some View {
-        Text(formatHoursMinutes(book.runTimeSeconds))
-            .monospacedDigit()
-    }
-
-    private var playButton: some View {
-        Button {
-            player.open(book, playWhenReady: true)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "play.fill")
-                if book.isStarted {
-                    Text("Resume")
-                } else {
-                    Text("Play")
-                }
-                if let title = resumeChapterTitle {
-                    Text(title)
-                        .fontWeight(.light)
-                        .lineLimit(1)
-                }
-            }
-            .frame(minWidth: 100)
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(metrics.bookScreen.playButtonControlSize)
-        .disabled(!canStartPlayback)
-    }
-
-    /// The chapter the Resume button will land in, once chapters are known.
-    private var resumeChapterTitle: String? {
-        guard book.isStarted,
-              let index = markedChapterIndex,
-              chapters.indices.contains(index)
-        else { return nil }
-        return chapters[index].title
-    }
-
     /// The chapter marked as current: the playing one when loaded,
     /// or the one containing the resume position in a preview.
     private var markedChapterIndex: Int? {
@@ -315,116 +309,13 @@ public struct BookView: View {
             return player.currentChapterIndex
         }
         guard book.isStarted else { return nil }
-        return chapters.last(where: { $0.startSeconds <= book.resumePositionSeconds + Chapter.startSlackSeconds })?.index
+        return book.resumeChapter?.index
     }
 
     /// True when this book can show a transcript: the server reports a lyric
     /// sidecar, or a fetched transcript is already cached.
     private var hasTranscript: Bool {
         book.hasLyrics == true || !book.lyrics.isEmpty
-    }
-}
-
-/// Full width of an overflowing line's edge fade; a smaller overflow
-/// shrinks the fade with it, so the fade dissolves as the edge approaches
-/// the content's end instead of disappearing at full width.
-private let overflowFadeWidth: CGFloat = 20
-
-/// One line of content that scrolls horizontally only when it overflows.
-/// Each clipped edge fades out while more content lies beyond it, so the
-/// fade itself signals that the line can scroll; the fades follow the
-/// scroll position and vanish at the content's true ends.
-private struct OverflowScrollLine<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    /// Points of content clipped beyond each edge.
-    @State private var overflow = EdgeOverflow(leading: 0, trailing: 0)
-
-    private struct EdgeOverflow: Equatable {
-        var leading: CGFloat
-        var trailing: CGFloat
-    }
-
-    var body: some View {
-        ScrollView(.horizontal) {
-            content
-        }
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.basedOnSize, axes: [.horizontal])
-        .onScrollGeometryChange(for: EdgeOverflow.self) { geometry in
-            EdgeOverflow(
-                leading: max(0, geometry.contentOffset.x),
-                trailing: max(0, geometry.contentSize.width - geometry.containerSize.width - geometry.contentOffset.x)
-            )
-        } action: { _, newOverflow in
-            overflow = newOverflow
-        }
-        .mask {
-            fadeMask
-        }
-    }
-
-    private var fadeMask: some View {
-        HStack(spacing: 0) {
-            LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                .frame(width: min(overflowFadeWidth, overflow.leading))
-            Rectangle()
-            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                .frame(width: min(overflowFadeWidth, overflow.trailing))
-        }
-    }
-}
-
-/// A comma-separated list of names on one line, each name its own
-/// click-and-hover target navigating to that name's books when the shell
-/// provides a destination.
-private struct NameListLine: View {
-    let kind: BookGroup.Kind
-    let names: [String]
-    let open: OpenBookGroupAction?
-
-    @State private var hoveredName: String?
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(Array(names.enumerated()), id: \.offset) { index, name in
-                item(name, isLast: index == names.count - 1)
-            }
-        }
-    }
-
-    /// The separating comma stays outside the name, so it takes no part in
-    /// the hover effect.
-    private func item(_ name: String, isLast: Bool) -> some View {
-        HStack(spacing: 0) {
-            nameView(name)
-            if !isLast {
-                Text(",")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func nameView(_ name: String) -> some View {
-        if let open {
-            Button {
-                open(kind, name)
-            } label: {
-                Text(name)
-                    .opacity(hoveredName == name ? 0.6 : 1)
-                    .animation(.easeOut(duration: 0.1), value: hoveredName == name)
-            }
-            .buttonStyle(.plain)
-            .onHover { hovering in
-                if hovering {
-                    hoveredName = name
-                } else if hoveredName == name {
-                    hoveredName = nil
-                }
-            }
-        } else {
-            Text(name)
-        }
     }
 }
 

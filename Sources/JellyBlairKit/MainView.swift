@@ -23,6 +23,10 @@ public struct MainView: View {
     /// The compact layout's stack of pushed screens.
     @State private var path: [LibraryRoute] = []
 
+    /// The window's bottom safe-area inset, measured at the root; the
+    /// playback bar sinks halfway into it.
+    @State private var bottomSafeAreaInset: CGFloat = 0
+
     public init(scope: SessionScope) {
         self.scope = scope
     }
@@ -39,6 +43,11 @@ public struct MainView: View {
             .onChange(of: scope.connection.isServerReachable) { _, reachable in
                 guard reachable, scope.library.errorMessage != nil else { return }
                 Task { await scope.library.load() }
+            }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.safeAreaInsets.bottom
+            } action: { inset in
+                bottomSafeAreaInset = inset
             }
             .environment(\.openBookGroup, OpenBookGroupAction { openGroup(ofKind: $0, named: $1) })
             .environment(scope.library)
@@ -77,6 +86,7 @@ public struct MainView: View {
             .navigationSplitViewStyle(.balanced)
 
             playbackBar
+                .padding(.bottom, -bottomSafeAreaInset / 2)
         }
     }
 
@@ -139,9 +149,14 @@ public struct MainView: View {
                         destination(for: route)
                     }
             }
-            playbackBar
-            OfflineIndicator()
-                .background(.bar)
+            VStack(spacing: 0) {
+                if !isShowingLoadedBookScreen {
+                    playbackBar
+                }
+                OfflineIndicator()
+                    .background(.bar)
+            }
+            .padding(.bottom, -bottomSafeAreaInset / 2)
         }
     }
 
@@ -183,6 +198,14 @@ public struct MainView: View {
     }
 
     // MARK: - Shared
+
+    /// True while the compact loaded book's own screen is on top, whose
+    /// transport the bar would duplicate right below. The regular detail
+    /// screen carries no transport, so its bar always shows.
+    private var isShowingLoadedBookScreen: Bool {
+        guard case .book(let id) = path.last else { return false }
+        return id == scope.player.book?.id
+    }
 
     /// The bar is a stack sibling, not a safe-area inset: an inset lets
     /// scrollable screens extend their frames beneath it, which would put

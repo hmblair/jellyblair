@@ -150,6 +150,12 @@ public final class Book: Identifiable {
         resumePositionSeconds > 0
     }
 
+    /// The chapter the resume position lies in, once the chapters are
+    /// known.
+    public var resumeChapter: Chapter? {
+        chapters.last(where: { $0.startSeconds <= resumePositionSeconds + Chapter.startSlackSeconds })
+    }
+
     /// Flips the favorite mark, on the server first so the two never
     /// disagree. A failed call changes nothing.
     public func toggleFavorite() async {
