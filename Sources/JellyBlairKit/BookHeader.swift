@@ -88,6 +88,7 @@ struct BookTitleBlock: View {
                 .font(metrics.bookScreen.titleFont)
             creditLines
             publisherYearLine
+            genreLine
         }
         .multilineTextAlignment(alignment == .center ? .center : .leading)
     }
@@ -121,6 +122,34 @@ struct BookTitleBlock: View {
         }
         .font(metrics.bookScreen.detailFont)
         .foregroundStyle(.tertiary)
+    }
+
+    /// The genres joined by dots, each opening its genre shelf. Dots
+    /// instead of commas, since genres read as tags rather than names.
+    @ViewBuilder
+    private var genreLine: some View {
+        let names = BookGroup.Kind.genre.names(of: book)
+        if !names.isEmpty {
+            dottedLine(kind: .genre, names: names)
+                .font(metrics.bookScreen.detailFont)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    /// One line naming a group's members with dot separators, each name
+    /// its own hover-and-click target. A dot lives with the name before
+    /// it, so a wrap never strands one.
+    private func dottedLine(kind: BookGroup.Kind, names: [String]) -> some View {
+        FlowLine(alignment: alignment) {
+            ForEach(Array(names.enumerated()), id: \.offset) { index, name in
+                HStack(spacing: 4) {
+                    GroupNameButton(kind: kind, name: name, open: openBookGroup)
+                    if index < names.count - 1 {
+                        Text(verbatim: "·")
+                    }
+                }
+            }
+        }
     }
 
     /// One line naming a group's members — "x", "x and y", or "x, y, and
