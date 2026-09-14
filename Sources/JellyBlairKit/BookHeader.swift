@@ -93,19 +93,20 @@ struct BookTitleBlock: View {
     }
 
     /// The author and narrator lines, merged into one "Written and read
-    /// by" line when the same names fill both roles.
+    /// by" line when the same names fill both roles. Every name opens the
+    /// person's shelf, whichever role it appears in.
     @ViewBuilder
     private var creditLines: some View {
-        let authors = BookGroup.Kind.author.names(of: book)
-        let narrators = BookGroup.Kind.narrator.names(of: book)
+        let authors = book.authors
+        let narrators = book.narrators
         if !authors.isEmpty, authors == narrators {
-            creditLine(prefix: "Written and read by", kind: .author, names: authors)
+            creditLine(prefix: "Written and read by", kind: .person, names: authors)
         } else {
             if !authors.isEmpty {
-                creditLine(prefix: "Written by", kind: .author, names: authors)
+                creditLine(prefix: "Written by", kind: .person, names: authors)
             }
             if !narrators.isEmpty {
-                creditLine(prefix: "Read by", kind: .narrator, names: narrators)
+                creditLine(prefix: "Read by", kind: .person, names: narrators)
             }
         }
     }

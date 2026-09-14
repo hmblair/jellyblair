@@ -71,12 +71,27 @@ public struct LibraryList: View {
     }
 
     private var rows: some View {
-        ForEach(list.books) { book in
-            row(for: book)
-                .contextMenu {
-                    BookActionsMenuItems(book: book)
-                }
+        ForEach(list.sections) { section in
+            if let title = section.title {
+                sectionTitle(title)
+            }
+            ForEach(section.books) { book in
+                row(for: book)
+                    .contextMenu {
+                        BookActionsMenuItems(book: book)
+                    }
+            }
         }
+    }
+
+    /// A role title between a person's rows, as a quiet row of its own
+    /// that a selection passes over.
+    private func sectionTitle(_ title: String) -> some View {
+        Text(verbatim: title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .selectionDisabled()
+            .padding(.top, 8)
     }
 
     /// A regular list reports the choice through the list's own selection. A

@@ -2,10 +2,6 @@
 /// lines and the group views.
 public let authorIcon = Icon("person.fill")
 
-/// The symbol for a book's narrators, shared by the book screen's metadata
-/// lines and the group views.
-public let narratorIcon = Icon("mic.fill")
-
 /// The symbol for a book's publisher, shared by the book screen's metadata
 /// lines and the group views.
 public let publisherIcon = Icon("building.2.fill")

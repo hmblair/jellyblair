@@ -175,13 +175,46 @@ public final class Library {
         guard let group else {
             return BookList(
                 heading: nil,
-                books: visibleBooksInLibrary(filters: filters, loadedBookID: loadedBookID)
+                sections: [BookListSection(title: nil, books: visibleBooksInLibrary(filters: filters, loadedBookID: loadedBookID))]
             )
         }
         return BookList(
             heading: BookListHeading(name: group.name, icon: group.icon),
-            books: visibleBooks(in: group, filters: filters, loadedBookID: loadedBookID)
+            sections: sections(of: visibleBooks(in: group, filters: filters, loadedBookID: loadedBookID), in: group)
         )
+    }
+
+    /// The visible books as the group's screen sections them: a person's
+    /// books under a title per role, and any other group's whole and
+    /// untitled.
+    private func sections(of visible: [Book], in group: BookGroup) -> [BookListSection] {
+        guard group.kind == .person else {
+            return [BookListSection(title: nil, books: visible)]
+        }
+        return personRoleSections(named: group.name, books: visible)
+    }
+
+    /// The person's books split by role, keeping the given order within
+    /// each section. Roles with no books are left out.
+    private func personRoleSections(named name: String, books: [Book]) -> [BookListSection] {
+        var written: [Book] = []
+        var read: [Book] = []
+        var both: [Book] = []
+        for book in books {
+            switch (book.authors.contains(name), book.narrators.contains(name)) {
+            case (true, true):
+                both.append(book)
+            case (true, false):
+                written.append(book)
+            case (false, _):
+                read.append(book)
+            }
+        }
+        return [
+            BookListSection(title: String(localized: "Written and Read"), books: both),
+            BookListSection(title: String(localized: "Written"), books: written),
+            BookListSection(title: String(localized: "Read"), books: read),
+        ].filter { !$0.books.isEmpty }
     }
 
     /// All books in the filters' sort order, matching the query and passing
