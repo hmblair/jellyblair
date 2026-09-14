@@ -13,6 +13,13 @@ public struct Chapter: Identifiable, Hashable, Codable {
 
     public var id: Int { index }
 
+    /// The title up to its first colon, or the whole title when it has
+    /// none. The chapter list and the book screen show the whole title.
+    public var mainTitle: String { splitTitle(title).main }
+
+    /// The title after its first colon, when it has one.
+    public var subtitle: String? { splitTitle(title).subtitle }
+
     public var durationSeconds: Double {
         max(0, endSeconds - startSeconds)
     }

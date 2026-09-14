@@ -84,13 +84,25 @@ struct BookTitleBlock: View {
 
     var body: some View {
         VStack(alignment: alignment, spacing: 6) {
-            Text(book.name)
-                .font(metrics.bookScreen.titleFont)
+            titleLines
             creditLines
             publisherYearLine
             genreLine
         }
         .multilineTextAlignment(alignment == .center ? .center : .leading)
+    }
+
+    /// The title over its subtitle, the subtitle one step smaller and
+    /// dimmer. A title with no colon shows one line.
+    @ViewBuilder
+    private var titleLines: some View {
+        Text(book.mainTitle)
+            .font(metrics.bookScreen.titleFont)
+        if let subtitle = book.subtitle {
+            Text(subtitle)
+                .font(metrics.bookScreen.subtitleFont)
+                .foregroundStyle(.secondary)
+        }
     }
 
     /// One credit line per group of roles naming the same people, from

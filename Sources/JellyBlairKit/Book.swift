@@ -79,6 +79,10 @@ public final class Book: Identifiable {
     // MARK: - Record fields
 
     public var name: String { record.name }
+    /// The name up to its first colon, or the whole name when it has none.
+    public var mainTitle: String { record.splitName.main }
+    /// The name after its first colon, when it has one.
+    public var subtitle: String? { record.splitName.subtitle }
     public var authors: [String] { record.authors }
     public var author: String? { record.author }
     public var credits: [PersonCredit] { record.credits }

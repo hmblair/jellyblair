@@ -84,19 +84,20 @@ public struct PlaybackBar: View {
         }
     }
 
-    /// The loaded book's cover with the chapter title over the book name,
-    /// or the name alone before the chapters are known.
+    /// The loaded book's cover with the chapter title over the book title,
+    /// or the book title alone before the chapters are known. The bar is
+    /// width-bound, so both titles leave out their subtitles.
     private func info(for book: Book) -> some View {
         HStack(spacing: 12) {
             BookCoverImage(bookID: book.id, url: book.coverURL, contentMode: .fill)
                 .frame(width: metrics.playbackBar.coverSize, height: metrics.playbackBar.coverSize)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 2) {
-                Text(player.currentChapter?.title ?? book.name)
+                Text(player.currentChapter?.mainTitle ?? book.mainTitle)
                     .font(metrics.playbackBar.titleFont)
                     .lineLimit(1)
                 if player.currentChapter != nil {
-                    Text(book.name)
+                    Text(book.mainTitle)
                         .font(metrics.playbackBar.subtitleFont)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

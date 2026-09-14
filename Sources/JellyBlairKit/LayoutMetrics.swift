@@ -27,6 +27,8 @@ public struct BookScreenMetrics {
     /// The side of the player header's square cover.
     public let playerCoverSize: CGFloat
     public let titleFont: Font
+    /// The font of the title's subtitle line, one step under the title.
+    public let subtitleFont: Font
     public let lineFont: Font
     /// The font of the header's quietest line, the publisher and year.
     public let detailFont: Font
@@ -129,6 +131,7 @@ public extension LayoutMetrics {
                 coverCornerRadius: 12,
                 playerCoverSize: 280,
                 titleFont: .title2.bold(),
+                subtitleFont: .title3,
                 lineFont: .callout,
                 detailFont: .footnote,
                 // The large control is a thick capsule here; the regular
@@ -179,6 +182,7 @@ public extension LayoutMetrics {
                 coverCornerRadius: 10,
                 playerCoverSize: regularPlayerCoverSize,
                 titleFont: .title.bold(),
+                subtitleFont: .title2,
                 lineFont: .body,
                 detailFont: .callout,
                 playButtonControlSize: regularPlayButtonControlSize

@@ -21,7 +21,7 @@ public struct BookRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(book.name)
+                Text(book.mainTitle)
                     .font(.title3)
                     .lineLimit(1)
                 detailLine

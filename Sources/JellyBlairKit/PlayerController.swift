@@ -608,9 +608,9 @@ public final class PlayerController {
         let scopeStart = currentChapter?.startSeconds ?? 0
         let scopeDuration = currentChapter?.durationSeconds ?? duration
         nowPlaying.update(
-            bookTitle: book?.name,
+            bookTitle: book?.mainTitle,
             author: book?.author,
-            chapterTitle: currentChapter?.title,
+            chapterTitle: currentChapter?.mainTitle,
             elapsed: max(0, currentTime - scopeStart),
             duration: scopeDuration,
             rate: playbackSpeed,

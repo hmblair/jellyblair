@@ -114,6 +114,12 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         return credits
     }
 
+    /// The name divided into its title and subtitle. Searching, sorting,
+    /// and the logs keep the whole name.
+    public var splitName: SplitTitle {
+        splitTitle(name)
+    }
+
     /// True when the title, a person in any role, a genre, or a publisher
     /// contains the query, by the same matching the book screen's
     /// searches use.
