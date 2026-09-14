@@ -44,8 +44,14 @@ public let titleSortIcon = Icon("textformat")
 /// The symbol for the last-played sort order, in the sort menu.
 public let lastPlayedSortIcon = Icon("clock.arrow.circlepath")
 
-/// The symbol for a started book, in the filter menu.
-public let startedIcon = Icon("bookmark.fill")
+/// The symbol for a book being read, in the filter menu.
+public let readingIcon = Icon("bookmark.fill")
+
+/// The symbol for an unread book, in the filter menu.
+public let unreadIcon = Icon("circle")
+
+/// The symbol for a read book, in the filter menu.
+public let readIcon = Icon("checkmark.circle.fill", hasGlyphLayer: true)
 
 /// The symbol for a downloaded book, shared by the filter menu and the book
 /// actions menu's download entry.

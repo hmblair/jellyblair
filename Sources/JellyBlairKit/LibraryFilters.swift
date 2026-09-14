@@ -76,7 +76,8 @@ public enum BookSortOrder: CaseIterable, Hashable, Identifiable {
 public struct LibraryFilters: Equatable {
     public var searchQuery = ""
     public var downloadedOnly = false
-    public private(set) var startedOnly = false
+    public private(set) var readingOnly = false
+    public private(set) var playedFilter: PlayedFilter?
     public var favoritesOnly = false
     public private(set) var sortOrder = BookSortOrder.name
     public private(set) var sortDirection = BookSortOrder.name.defaultDirection
@@ -104,28 +105,47 @@ public struct LibraryFilters: Equatable {
         BookFilter.allCases.filter { $0.isOn(in: self) }
     }
 
-    /// Turns the started filter on or off, and puts the list in the order
-    /// that suits it: the started books read most recently played first,
-    /// and the whole library reads by title. The sort menu can then choose
+    /// Turns the reading filter on or off, and puts the list in the order
+    /// that suits it: the books being read most recently played first, and
+    /// the whole library reads by title. The sort menu can then choose
     /// another order.
-    public mutating func setStartedOnly(_ isOn: Bool) {
-        startedOnly = isOn
+    public mutating func setReadingOnly(_ isOn: Bool) {
+        readingOnly = isOn
         setSortOrder(isOn ? .lastPlayed : .name)
     }
+
+    /// Turns a played filter on, or off when it is already on. Read and
+    /// Unread replace each other, since no book passes both.
+    public mutating func togglePlayedFilter(_ filter: PlayedFilter) {
+        playedFilter = playedFilter == filter ? nil : filter
+    }
+}
+
+/// The two sides of the server's played flag: Read keeps the books the
+/// server marks played, and Unread keeps the rest.
+public enum PlayedFilter {
+    case read
+    case unread
 }
 
 /// One of the library's filter toggles: it reads its state from the
 /// filters, tests one book, and names its books in the empty state.
 public enum BookFilter: CaseIterable {
-    case started
+    case unread
+    case read
+    case reading
     case downloaded
     case favorites
 
     /// True when this filter's toggle is on.
     func isOn(in filters: LibraryFilters) -> Bool {
         switch self {
-        case .started:
-            return filters.startedOnly
+        case .reading:
+            return filters.readingOnly
+        case .unread:
+            return filters.playedFilter == .unread
+        case .read:
+            return filters.playedFilter == .read
         case .downloaded:
             return filters.downloadedOnly
         case .favorites:
@@ -134,12 +154,16 @@ public enum BookFilter: CaseIterable {
     }
 
     /// True when the book passes this filter. The loaded book counts as
-    /// started even before playback's first position write.
+    /// being read even before playback's first position write.
     @MainActor
     func passes(_ book: Book, loadedBookID: String?) -> Bool {
         switch self {
-        case .started:
+        case .reading:
             return book.isStarted || book.id == loadedBookID
+        case .unread:
+            return !book.isPlayed
+        case .read:
+            return book.isPlayed
         case .downloaded:
             return book.isDownloaded
         case .favorites:
@@ -150,8 +174,12 @@ public enum BookFilter: CaseIterable {
     /// The word this filter puts before "Books" in the empty state.
     var adjective: String {
         switch self {
-        case .started:
-            return String(localized: "Started")
+        case .reading:
+            return String(localized: "In-Progress")
+        case .unread:
+            return String(localized: "Unread")
+        case .read:
+            return String(localized: "Read")
         case .downloaded:
             return String(localized: "Downloaded")
         case .favorites:

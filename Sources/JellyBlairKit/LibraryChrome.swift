@@ -69,8 +69,8 @@ private let sortMenuIcon = Icon("arrow.up.arrow.down.circle.fill", hasGlyphLayer
 private let filterMenuIcon = Icon("line.3.horizontal.decrease.circle.fill", hasGlyphLayer: true)
 
 /// The library's sort menu and filter menu for a toolbar, marking the
-/// active choices by coloring their icons accent. The in-progress filter
-/// also puts the list in last-played order.
+/// active choices by coloring their icons accent. The reading filter also
+/// puts the list in last-played order.
 public struct LibraryFilterToolbarButtons: View {
     @Binding var filters: LibraryFilters
 
@@ -102,8 +102,15 @@ public struct LibraryFilterToolbarButtons: View {
 
     private var filterMenu: some View {
         toolbarMenu(filterMenuIcon, help: "Filter the books", isHighlighted: filters.hasActiveFilter) {
-            menuChoice("Started", icon: startedIcon, isOn: filters.startedOnly) {
-                filters.setStartedOnly(!filters.startedOnly)
+            menuChoice("Unread", icon: unreadIcon, isOn: filters.playedFilter == .unread) {
+                filters.togglePlayedFilter(.unread)
+            }
+            menuChoice("Read", icon: readIcon, isOn: filters.playedFilter == .read) {
+                filters.togglePlayedFilter(.read)
+            }
+            Divider()
+            menuChoice("Reading", icon: readingIcon, isOn: filters.readingOnly) {
+                filters.setReadingOnly(!filters.readingOnly)
             }
             menuChoice("Downloaded", icon: downloadedIcon, isOn: filters.downloadedOnly) {
                 filters.downloadedOnly.toggle()

@@ -134,13 +134,20 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         userData?.isFavorite == true
     }
 
+    /// True when the server marks the book played, which it keeps across
+    /// re-plays until the played state is reset.
+    public var isPlayed: Bool {
+        userData?.played == true
+    }
+
     /// Returns a copy of the book at a different resume position.
     public func withResumePosition(_ seconds: Double) -> BookRecord {
         var copy = self
         copy.userData = BookUserData(
             playbackPositionTicks: Int64(seconds * ticksPerSecond),
             lastPlayedTimestamp: userData?.lastPlayedTimestamp,
-            isFavorite: userData?.isFavorite
+            isFavorite: userData?.isFavorite,
+            played: userData?.played
         )
         return copy
     }
@@ -151,7 +158,8 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         copy.userData = BookUserData(
             playbackPositionTicks: userData?.playbackPositionTicks ?? 0,
             lastPlayedTimestamp: timestamp,
-            isFavorite: userData?.isFavorite
+            isFavorite: userData?.isFavorite,
+            played: userData?.played
         )
         return copy
     }
@@ -162,7 +170,8 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         copy.userData = BookUserData(
             playbackPositionTicks: userData?.playbackPositionTicks ?? 0,
             lastPlayedTimestamp: userData?.lastPlayedTimestamp,
-            isFavorite: isFavorite
+            isFavorite: isFavorite,
+            played: userData?.played
         )
         return copy
     }
@@ -174,11 +183,15 @@ public struct BookUserData: Codable, Hashable {
     /// when the server has no record of a play.
     public let lastPlayedTimestamp: String?
     public let isFavorite: Bool?
+    /// Whether the user has finished the book. The server keeps this true
+    /// across re-plays.
+    public let played: Bool?
 
     enum CodingKeys: String, CodingKey {
         case playbackPositionTicks = "PlaybackPositionTicks"
         case lastPlayedTimestamp = "LastPlayedDate"
         case isFavorite = "IsFavorite"
+        case played = "Played"
     }
 }
 

@@ -208,30 +208,87 @@ public final class Library {
 
     // MARK: - Empty lists
 
+    /// One reason the list can be empty: the search query or one filter
+    /// toggle.
+    private enum EmptyListCause {
+        case search(String)
+        case filter(BookFilter)
+    }
+
     /// The empty state's title when no book passes the search and filters.
-    /// It names the filters that keep no book of the scope at all, or the
-    /// active combination when each filter keeps books on its own, or a
-    /// missing search match when the filters alone leave books.
+    /// It blames only the parts responsible: the causes that keep no book
+    /// of the scope on their own, or the smallest combination that keeps
+    /// no book together.
     public func emptyListTitle(in group: BookGroup?, filters: LibraryFilters, loadedBookID: String?) -> String {
         let scope = group?.books ?? books
-        let active = filters.activeFilters
-        guard booksPassingFilters(in: scope, active: active, loadedBookID: loadedBookID).isEmpty else {
-            return String(localized: "No Matching \(active.booksName)")
+        let causes = activeCauses(filters: filters)
+        let emptyAlone = causesKeepingNoBook(in: scope, causes: causes, loadedBookID: loadedBookID)
+        guard emptyAlone.isEmpty else {
+            let names = emptyAlone.map { title(for: [$0]) }.joined(separator: String(localized: " or "))
+            return String(localized: "No \(names)")
         }
-        let emptyFilters = filtersKeepingNoBook(in: scope, active: active, loadedBookID: loadedBookID)
-        guard !emptyFilters.isEmpty else { return String(localized: "No \(active.booksName)") }
-        let names = emptyFilters.map { [$0].booksName }.joined(separator: String(localized: " or "))
-        return String(localized: "No \(names)")
+        let combination = smallestCombinationKeepingNoBook(in: scope, causes: causes, loadedBookID: loadedBookID)
+        return String(localized: "No \(title(for: combination))")
     }
 
-    /// The scope's books passing the active filters, ignoring the search.
-    private func booksPassingFilters(in scope: [Book], active: [BookFilter], loadedBookID: String?) -> [Book] {
-        scope.filter { book in active.allSatisfy { $0.passes(book, loadedBookID: loadedBookID) } }
+    /// The reasons the list can be empty, in the title's order: the search
+    /// when one is typed, then the active filters.
+    private func activeCauses(filters: LibraryFilters) -> [EmptyListCause] {
+        let filterCauses = filters.activeFilters.map(EmptyListCause.filter)
+        guard !filters.searchQuery.isEmpty else { return filterCauses }
+        return [.search(filters.searchQuery)] + filterCauses
     }
 
-    /// The active filters that no book of the scope passes on its own.
-    private func filtersKeepingNoBook(in scope: [Book], active: [BookFilter], loadedBookID: String?) -> [BookFilter] {
-        active.filter { filter in !scope.contains { filter.passes($0, loadedBookID: loadedBookID) } }
+    /// True when the book passes this cause: it matches the search, or it
+    /// passes the filter.
+    private func passes(_ book: Book, cause: EmptyListCause, loadedBookID: String?) -> Bool {
+        switch cause {
+        case .search(let query):
+            return book.matches(query)
+        case .filter(let filter):
+            return filter.passes(book, loadedBookID: loadedBookID)
+        }
+    }
+
+    /// The scope's books passing every cause in the combination.
+    private func booksPassing(in scope: [Book], causes: [EmptyListCause], loadedBookID: String?) -> [Book] {
+        scope.filter { book in causes.allSatisfy { passes(book, cause: $0, loadedBookID: loadedBookID) } }
+    }
+
+    /// The causes that no book of the scope passes on its own.
+    private func causesKeepingNoBook(in scope: [Book], causes: [EmptyListCause], loadedBookID: String?) -> [EmptyListCause] {
+        causes.filter { booksPassing(in: scope, causes: [$0], loadedBookID: loadedBookID).isEmpty }
+    }
+
+    /// The smallest combination of causes that keeps no book of the scope
+    /// together. The active combination itself keeps no book, so a
+    /// combination is always found.
+    private func smallestCombinationKeepingNoBook(in scope: [Book], causes: [EmptyListCause], loadedBookID: String?) -> [EmptyListCause] {
+        combinations(of: causes).first {
+            booksPassing(in: scope, causes: $0, loadedBookID: loadedBookID).isEmpty
+        } ?? causes
+    }
+
+    /// The non-empty combinations of the items, smallest first, each in
+    /// the items' own order.
+    private func combinations<Item>(of items: [Item]) -> [[Item]] {
+        (1..<(1 << items.count))
+            .map { mask in items.indices.filter { mask & (1 << $0) != 0 }.map { items[$0] } }
+            .sorted { $0.count < $1.count }
+    }
+
+    /// Names a combination as the title's subject: "Matching" for the
+    /// search, then the filters' adjectives, before "Books".
+    private func title(for combination: [EmptyListCause]) -> String {
+        let filters = combination.compactMap { cause -> BookFilter? in
+            guard case .filter(let filter) = cause else { return nil }
+            return filter
+        }
+        let hasSearch = combination.contains { cause in
+            guard case .search = cause else { return false }
+            return true
+        }
+        return hasSearch ? String(localized: "Matching \(filters.booksName)") : filters.booksName
     }
 
     // MARK: - Sorting

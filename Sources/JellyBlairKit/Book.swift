@@ -88,6 +88,7 @@ public final class Book: Identifiable {
     public var codec: String? { record.codec }
     public var hasLyrics: Bool { record.hasLyrics == true }
     public var isFavorite: Bool { record.isFavorite }
+    public var isPlayed: Bool { record.isPlayed }
     public var resumePositionSeconds: Double { record.resumePositionSeconds }
 
     /// True when the title, author, narrator, genre, or publisher contains
