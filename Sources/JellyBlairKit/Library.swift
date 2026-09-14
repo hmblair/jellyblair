@@ -204,27 +204,30 @@ public final class Library {
         return personRoleSections(named: group.name, books: visible)
     }
 
-    /// The person's books split by role, keeping the given order within
-    /// each section. Roles with no books are left out.
+    /// The person's books split by role combination, titled by its
+    /// phrase, such as "Written and Read". Books keep the given order
+    /// within each section, and combinations with no books are left out.
     private func personRoleSections(named name: String, books: [Book]) -> [BookListSection] {
-        var written: [Book] = []
-        var read: [Book] = []
-        var both: [Book] = []
+        var groups: [(roles: [PersonRole], books: [Book])] = []
         for book in books {
-            switch (book.authors.contains(name), book.narrators.contains(name)) {
-            case (true, true):
-                both.append(book)
-            case (true, false):
-                written.append(book)
-            case (false, _):
-                read.append(book)
+            let roles = PersonRole.allCases.filter { book.names(for: $0).contains(name) }
+            guard !roles.isEmpty else { continue }
+            if let index = groups.firstIndex(where: { $0.roles == roles }) {
+                groups[index].books.append(book)
+            } else {
+                groups.append((roles, [book]))
             }
         }
-        return [
-            BookListSection(title: String(localized: "Written and Read"), books: both),
-            BookListSection(title: String(localized: "Written"), books: written),
-            BookListSection(title: String(localized: "Read"), books: read),
-        ].filter { !$0.books.isEmpty }
+        return groups
+            .sorted { precedes($0.roles, $1.roles) }
+            .map { BookListSection(title: $0.roles.sectionTitle, books: $0.books) }
+    }
+
+    /// Orders role combinations for the section list: more roles first,
+    /// then display order.
+    private func precedes(_ first: [PersonRole], _ second: [PersonRole]) -> Bool {
+        guard first.count == second.count else { return first.count > second.count }
+        return first.lexicographicallyPrecedes(second)
     }
 
     /// All books in the filters' sort order, matching the query and passing

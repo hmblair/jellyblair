@@ -81,7 +81,7 @@ public final class Book: Identifiable {
     public var name: String { record.name }
     public var authors: [String] { record.authors }
     public var author: String? { record.author }
-    public var narrators: [String] { record.narrators }
+    public var credits: [PersonCredit] { record.credits }
     public var publishers: [String] { record.publishers }
     public var genres: [String] { record.genres ?? [] }
     public var productionYear: Int? { record.productionYear }
@@ -100,6 +100,11 @@ public final class Book: Identifiable {
     /// the query.
     public func matches(_ query: String) -> Bool {
         record.matches(query)
+    }
+
+    /// The names holding one role on the book.
+    public func names(for role: PersonRole) -> [String] {
+        record.names(for: role)
     }
 
     public var coverURL: URL {

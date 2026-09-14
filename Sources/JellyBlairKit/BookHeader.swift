@@ -92,27 +92,17 @@ struct BookTitleBlock: View {
         .multilineTextAlignment(alignment == .center ? .center : .leading)
     }
 
-    /// The author and narrator lines, merged into one "Written and read
-    /// by" line when the same names fill both roles. Every name opens the
-    /// person's shelf, whichever role it appears in.
-    @ViewBuilder
+    /// One credit line per group of roles naming the same people, from
+    /// "Written by" through "Written, translated, and read by". Every
+    /// name opens the person's shelf, whichever roles it holds.
     private var creditLines: some View {
-        let authors = book.authors
-        let narrators = book.narrators
-        if !authors.isEmpty, authors == narrators {
-            creditLine(prefix: "Written and read by", kind: .person, names: authors)
-        } else {
-            if !authors.isEmpty {
-                creditLine(prefix: "Written by", kind: .person, names: authors)
-            }
-            if !narrators.isEmpty {
-                creditLine(prefix: "Read by", kind: .person, names: narrators)
-            }
+        ForEach(book.credits, id: \.self) { credit in
+            creditLine(prefix: credit.roles.creditPrefix, names: credit.names)
         }
     }
 
-    private func creditLine(prefix: LocalizedStringKey, kind: BookGroup.Kind, names: [String]) -> some View {
-        namesLine(prefix: prefix, kind: kind, names: names)
+    private func creditLine(prefix: String, names: [String]) -> some View {
+        namesLine(prefix: prefix, kind: .person, names: names)
             .font(metrics.bookScreen.lineFont)
             .foregroundStyle(.secondary)
     }
@@ -138,14 +128,14 @@ struct BookTitleBlock: View {
     /// and wrap like text; a comma lives with the name before it, so a
     /// wrap never strands one.
     private func namesLine(
-        prefix: LocalizedStringKey? = nil,
+        prefix: String? = nil,
         kind: BookGroup.Kind,
         names: [String],
         suffix: String? = nil
     ) -> some View {
         FlowLine(alignment: alignment) {
             if let prefix {
-                Text(prefix)
+                Text(verbatim: prefix)
             }
             ForEach(Array(names.enumerated()), id: \.offset) { index, name in
                 HStack(spacing: 0) {

@@ -60,9 +60,16 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         return Int((Double(bitrate) / 1000).rounded())
     }
 
-    /// The individual author names: the artists list, or the album artist
-    /// alone when the list is empty.
+    /// The person type that names an author.
+    private static let authorPersonType = "Author"
+
+    /// The individual author names: the Author people when the server
+    /// writes them, then the artists list, then the album artist alone.
     public var authors: [String] {
+        let authorPeople = (people ?? []).filter { $0.type == Self.authorPersonType }.map(\.name)
+        if !authorPeople.isEmpty {
+            return authorPeople
+        }
         if let artists, !artists.isEmpty {
             return artists
         }
@@ -78,11 +85,41 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         return joined.isEmpty ? nil : joined
     }
 
-    /// True when the title, author, narrator, genre, or publisher contains
-    /// the query, by the same matching the book screen's searches use.
+    /// The names holding one role on the book.
+    public func names(for role: PersonRole) -> [String] {
+        switch role {
+        case .author:
+            return authors
+        case .translator:
+            return translators
+        case .narrator:
+            return narrators
+        }
+    }
+
+    /// The book's people grouped for the credit lines: the roles in
+    /// display order, with roles naming the same people merged into one
+    /// credit.
+    public var credits: [PersonCredit] {
+        var credits: [PersonCredit] = []
+        for role in PersonRole.allCases {
+            let names = names(for: role)
+            guard !names.isEmpty else { continue }
+            if let index = credits.firstIndex(where: { $0.names == names }) {
+                credits[index] = PersonCredit(roles: credits[index].roles + [role], names: names)
+            } else {
+                credits.append(PersonCredit(roles: [role], names: names))
+            }
+        }
+        return credits
+    }
+
+    /// True when the title, a person in any role, a genre, or a publisher
+    /// contains the query, by the same matching the book screen's
+    /// searches use.
     public func matches(_ query: String) -> Bool {
-        [name, author, narrator, genre, publisher]
-            .compactMap { $0 }
+        let people = PersonRole.allCases.map { names(for: $0).joined(separator: ", ") }
+        return ([name, genre, publisher].compactMap { $0 } + people)
             .contains { !findOccurrences(of: query, in: $0 as NSString, caseSensitive: false, limit: 1).isEmpty }
     }
 
@@ -114,10 +151,12 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         (people ?? []).filter { Self.narratorPersonTypes.contains($0.type) }.map(\.name)
     }
 
-    /// The narrators joined, as the single string the search matcher checks.
-    public var narrator: String? {
-        let joined = narrators.joined(separator: ", ")
-        return joined.isEmpty ? nil : joined
+    /// The person type that names a translator.
+    private static let translatorPersonType = "Translator"
+
+    /// The translators among the book's people.
+    public var translators: [String] {
+        (people ?? []).filter { $0.type == Self.translatorPersonType }.map(\.name)
     }
 
     public var runTimeSeconds: Double {

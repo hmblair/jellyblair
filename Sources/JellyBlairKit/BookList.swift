@@ -20,13 +20,14 @@ public struct BookGroup: Identifiable {
         }
 
         /// The book's names for this grouping kind. A person's names span
-        /// both roles, so one shelf collects everything a name wrote and
-        /// read; the shelf's sections then split the roles apart.
+        /// every role, so one shelf collects everything a name wrote,
+        /// translated, and read; the shelf's sections then split the roles
+        /// apart.
         @MainActor
         public func names(of book: Book) -> [String] {
             switch self {
             case .person:
-                return uniqueNames(book.authors + book.narrators)
+                return uniqueNames(PersonRole.allCases.flatMap { book.names(for: $0) })
             case .publisher:
                 return book.publishers
             case .genre:
