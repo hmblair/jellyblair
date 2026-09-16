@@ -129,7 +129,7 @@ struct SeekTimeRow<BelowCenter: View>: View {
 
     private var seekBar: some View {
         GeometryReader { geometry in
-            AnimatedProgressBar(anchor: barAnchor)
+            AnimatedProgressBar(anchor: barAnchor, isScrubbing: dragFraction != nil)
                 .allowsHitTesting(false)
                 .overlay {
                     Color.clear

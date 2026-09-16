@@ -14,11 +14,13 @@ struct ProgressAnchor: Equatable {
     var date: Date
 }
 
-/// A track-and-fill progress bar whose motion is a single linear Core
-/// Animation animation to the end of the range. The render server moves the
-/// bar; the app only touches it when the anchor changes.
+/// A track-and-fill progress bar with a knob on the fill's end, whose motion
+/// is a single linear Core Animation animation to the end of the range. The
+/// render server moves the bar; the app only touches it when the anchor
+/// changes. The knob grows while the user scrubs.
 struct AnimatedProgressBar {
     var anchor: ProgressAnchor
+    var isScrubbing: Bool
 }
 
 #if canImport(AppKit)
@@ -29,6 +31,7 @@ extension AnimatedProgressBar: NSViewRepresentable {
 
     func updateNSView(_ view: ProgressBarLayerView, context: Context) {
         view.setAnchor(anchor)
+        view.setScrubbing(isScrubbing)
     }
 }
 #else
@@ -39,6 +42,7 @@ extension AnimatedProgressBar: UIViewRepresentable {
 
     func updateUIView(_ view: ProgressBarLayerView, context: Context) {
         view.setAnchor(anchor)
+        view.setScrubbing(isScrubbing)
     }
 }
 #endif
@@ -46,11 +50,17 @@ extension AnimatedProgressBar: UIViewRepresentable {
 /// The layer-backed platform view behind AnimatedProgressBar.
 final class ProgressBarLayerView: PlatformNativeView {
     private static let barHeight: CGFloat = 9
+    private static let knobDiameter: CGFloat = 14
+    private static let scrubbingKnobDiameter: CGFloat = 18
+    private static let knobShadowRadius: CGFloat = 2
+    private static let knobShadowOpacity: Float = 0.3
     private static let animationKey = "progress"
 
     private let trackLayer = CALayer()
     private let fillLayer = CALayer()
+    private let knobLayer = CALayer()
     private var anchor = ProgressAnchor(fraction: 0, fractionsPerSecond: 0, date: .distantPast)
+    private var isScrubbing = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -73,8 +83,10 @@ final class ProgressBarLayerView: PlatformNativeView {
         trackLayer.cornerRadius = Self.barHeight / 2
         fillLayer.cornerRadius = Self.barHeight / 2
         fillLayer.anchorPoint = CGPoint(x: 0, y: 0.5)
+        setUpKnobLayer()
         backingLayer?.addSublayer(trackLayer)
         backingLayer?.addSublayer(fillLayer)
+        backingLayer?.addSublayer(knobLayer)
         applyColors()
         #if canImport(UIKit)
         registerForTraitChanges(UITraitCollection.systemTraitsAffectingColorAppearance) { (view: ProgressBarLayerView, _: UITraitCollection) in
@@ -106,6 +118,21 @@ final class ProgressBarLayerView: PlatformNativeView {
     }
     #endif
 
+    /// Sets up the knob as a white circle with a soft shadow. White in both
+    /// appearances keeps it distinct from the accent-colored fill under any
+    /// accent, and the shadow separates it from the track in light mode.
+    private func setUpKnobLayer() {
+        let bounds = CGRect(x: 0, y: 0, width: Self.knobDiameter, height: Self.knobDiameter)
+        knobLayer.bounds = bounds
+        knobLayer.cornerRadius = Self.knobDiameter / 2
+        knobLayer.backgroundColor = CGColor(gray: 1, alpha: 1)
+        knobLayer.shadowColor = CGColor(gray: 0, alpha: 1)
+        knobLayer.shadowOpacity = Self.knobShadowOpacity
+        knobLayer.shadowRadius = Self.knobShadowRadius
+        knobLayer.shadowOffset = .zero
+        knobLayer.shadowPath = CGPath(ellipseIn: bounds, transform: nil)
+    }
+
     private func applyColors() {
         #if canImport(AppKit)
         effectiveAppearance.performAsCurrentDrawingAppearance {
@@ -123,6 +150,7 @@ final class ProgressBarLayerView: PlatformNativeView {
         withoutImplicitAnimation {
             trackLayer.frame = CGRect(x: 0, y: barY, width: bounds.width, height: Self.barHeight)
             fillLayer.position = CGPoint(x: 0, y: barY + Self.barHeight / 2)
+            knobLayer.position = CGPoint(x: knobLayer.position.x, y: barY + Self.barHeight / 2)
         }
         applyAnchor()
     }
@@ -133,26 +161,53 @@ final class ProgressBarLayerView: PlatformNativeView {
         applyAnchor()
     }
 
-    /// Places the fill at the anchor's projected fraction and, when moving,
-    /// hands Core Animation one linear animation to the full width.
+    /// Grows the knob to the hit area's height while scrubbing. The change
+    /// takes the layer's implicit animation, so it runs only when the state
+    /// changes.
+    func setScrubbing(_ newValue: Bool) {
+        guard newValue != isScrubbing else { return }
+        isScrubbing = newValue
+        let scale = isScrubbing ? Self.scrubbingKnobDiameter / Self.knobDiameter : 1
+        knobLayer.transform = CATransform3DMakeScale(scale, scale, 1)
+    }
+
+    /// Places the fill's end and the knob at the anchor's projected fraction
+    /// and, when moving, hands Core Animation one linear animation each to
+    /// the full width, so the two stay together.
     private func applyAnchor() {
         let width = bounds.width
         guard width > 0 else { return }
         let elapsed = max(0, Date().timeIntervalSince(anchor.date))
         let fractionNow = min(1, max(0, anchor.fraction + anchor.fractionsPerSecond * elapsed))
+        let fillEnd = width * fractionNow
         fillLayer.removeAnimation(forKey: Self.animationKey)
+        knobLayer.removeAnimation(forKey: Self.animationKey)
         withoutImplicitAnimation {
-            fillLayer.bounds = CGRect(x: 0, y: 0, width: width * fractionNow, height: Self.barHeight)
+            fillLayer.bounds = CGRect(x: 0, y: 0, width: fillEnd, height: Self.barHeight)
+            knobLayer.position.x = fillEnd
         }
         guard anchor.fractionsPerSecond > 0, fractionNow < 1 else { return }
-        let animation = CABasicAnimation(keyPath: "bounds.size.width")
-        animation.fromValue = width * fractionNow
-        animation.toValue = width
-        animation.duration = (1 - fractionNow) / anchor.fractionsPerSecond
+        let duration = (1 - fractionNow) / anchor.fractionsPerSecond
+        fillLayer.add(
+            linearAnimation(keyPath: "bounds.size.width", from: fillEnd, to: width, duration: duration),
+            forKey: Self.animationKey
+        )
+        knobLayer.add(
+            linearAnimation(keyPath: "position.x", from: fillEnd, to: width, duration: duration),
+            forKey: Self.animationKey
+        )
+    }
+
+    /// Builds a linear animation that holds its end value once it finishes.
+    private func linearAnimation(keyPath: String, from: CGFloat, to: CGFloat, duration: TimeInterval) -> CABasicAnimation {
+        let animation = CABasicAnimation(keyPath: keyPath)
+        animation.fromValue = from
+        animation.toValue = to
+        animation.duration = duration
         animation.timingFunction = CAMediaTimingFunction(name: .linear)
         animation.fillMode = .forwards
         animation.isRemovedOnCompletion = false
-        fillLayer.add(animation, forKey: Self.animationKey)
+        return animation
     }
 
     private func withoutImplicitAnimation(_ changes: () -> Void) {
