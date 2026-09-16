@@ -23,6 +23,7 @@ public struct BookView: View {
     @Environment(PlayerController.self) private var player
     @Environment(ConnectionMonitor.self) private var connection
 
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.layoutDensity) private var density
     @Environment(\.layoutMetrics) private var metrics
 
@@ -79,6 +80,18 @@ public struct BookView: View {
             ToolbarItem(placement: .primaryAction) {
                 SettingsToolbarButton()
             }
+        }
+        // The screen readies the book, so the compact layout knows the
+        // chapters before the chapter sheet that lists them opens.
+        .task(id: book.id) {
+            guard !isLoaded else { return }
+            await book.prepareForDisplay(isServerReachable: connection.isServerReachable)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Coming back to a book that is not playing can be much later:
+            // the position may have moved on another device.
+            guard phase == .active, !isLoaded else { return }
+            Task { await book.refreshFromServer() }
         }
         .sheet(isPresented: $isShowingDetails) {
             BookDetailsSheet(book: book)

@@ -136,6 +136,23 @@ public final class Book: Identifiable {
         onRecordChanged?()
     }
 
+    /// Readies the book for its screen: the current record, the chapters,
+    /// and a warm asset so playback starts quickly. Offline, only a
+    /// downloaded file can serve chapters, and there is no server to ask
+    /// or asset to warm.
+    public func prepareForDisplay(isServerReachable: Bool) async {
+        guard isServerReachable else {
+            if isDownloaded {
+                await fetchChaptersIfNeeded()
+            }
+            return
+        }
+        async let recordFetch: Void = refreshFromServer()
+        await fetchChaptersIfNeeded()
+        await prewarmAsset()
+        await recordFetch
+    }
+
     /// Playback records where it has reached, so displays follow without a
     /// fetch. The record changes in memory only, so frequent writes rewrite
     /// no snapshot file. An unchanged position writes nothing.

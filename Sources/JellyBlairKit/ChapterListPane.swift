@@ -11,8 +11,6 @@ struct ChapterListPane: View {
     let canStartPlayback: Bool
 
     @Environment(PlayerController.self) private var player
-    @Environment(ConnectionMonitor.self) private var connection
-    @Environment(\.scenePhase) private var scenePhase
 
     @State private var query = ""
     @State private var isCaseSensitive = false
@@ -93,27 +91,6 @@ struct ChapterListPane: View {
             }
             .onUserScroll {
                 isTracking = false
-            }
-            .task(id: book.id) {
-                guard !isLoaded else { return }
-                // Offline, only a downloaded file can serve chapters, and
-                // there is no server to ask or asset to warm.
-                guard connection.isServerReachable else {
-                    if book.isDownloaded {
-                        await book.fetchChaptersIfNeeded()
-                    }
-                    return
-                }
-                async let recordFetch: Void = book.refreshFromServer()
-                await book.fetchChaptersIfNeeded()
-                await book.prewarmAsset()
-                await recordFetch
-            }
-            .onChange(of: scenePhase) { _, phase in
-                // Coming back to a book that is not playing can be much later:
-                // the position may have moved on another device.
-                guard phase == .active, !isLoaded else { return }
-                Task { await book.refreshFromServer() }
             }
     }
 
