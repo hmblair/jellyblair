@@ -526,8 +526,21 @@ public final class PlayerController {
         syncNowPlaying()
     }
 
+    /// Moves by an offset, stopping at the current chapter's boundaries. A
+    /// backward skip within the first seconds of a chapter crosses into the
+    /// previous chapter instead, so a second press goes further back.
     public func skip(by seconds: Double) async {
-        await seek(to: currentTime + seconds)
+        await seek(to: skipTarget(from: currentTime, by: seconds))
+    }
+
+    /// The position a skip lands on, clamped to the seek range unless the
+    /// skip is a backward one from just after the range's start.
+    private func skipTarget(from position: Double, by seconds: Double) -> Double {
+        let target = position + seconds
+        let range = seekRange
+        let backFromChapterStart = seconds < 0 && position - range.lowerBound < chapterStartGraceSeconds
+        guard !backFromChapterStart else { return target }
+        return min(max(target, range.lowerBound), range.upperBound)
     }
 
     /// Counts one skip, which the transport buttons animate on.
@@ -964,3 +977,7 @@ public final class PlayerController {
     }
     #endif
 }
+
+/// How far into a chapter a backward skip still crosses into the previous
+/// chapter rather than stopping at the chapter start.
+private let chapterStartGraceSeconds: Double = 3
