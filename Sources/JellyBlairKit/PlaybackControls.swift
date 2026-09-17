@@ -80,11 +80,11 @@ struct PlaybackSpeedMenu: View {
     }
 }
 
-/// The seek bar over its times row — the elapsed and total at the ends,
-/// with the caller's content centered between them — scoped to the current
-/// chapter, or to the book when there are no chapters. The bar's motion is
-/// a Core Animation animation projected from the position anchor, and the
-/// elapsed readout ticks once per displayed second, so playback drives no
+/// The seek bar over its times row — the elapsed and remaining times at the
+/// ends, with the caller's content centered between them — scoped to the
+/// current chapter, or to the book when there are no chapters. The bar's
+/// motion is a Core Animation animation projected from the position anchor,
+/// and the readouts tick once per displayed second, so playback drives no
 /// frequent view updates.
 struct SeekTimeRow<BelowCenter: View>: View {
     /// Sizes override for the player screen; the playback bar's metrics
@@ -109,15 +109,11 @@ struct SeekTimeRow<BelowCenter: View>: View {
         VStack(spacing: 6) {
             seekBar
                 .opacity(player.isReady ? 1 : 0.4)
-            HStack {
-                elapsedLabel
-                Spacer()
-                totalLabel
-            }
-            .overlay {
-                belowCenter
-                    .environment(\.scrubPosition, scrubPosition)
-            }
+            timesRow
+                .overlay {
+                    belowCenter
+                        .environment(\.scrubPosition, scrubPosition)
+                }
         }
     }
 
@@ -125,18 +121,17 @@ struct SeekTimeRow<BelowCenter: View>: View {
         (sizes ?? metrics.transport).readoutFont
     }
 
-    private var elapsedLabel: some View {
+    private var timesRow: some View {
         TimelineView(.periodic(from: .now, by: tickInterval)) { context in
-            Text(elapsedText(at: context.date))
+            let elapsed = scopeElapsed(at: context.date)
+            HStack {
+                Text(formatElapsedTime(elapsed.seconds, matching: elapsed.total))
+                Spacer()
+                Text(remainingText(elapsed))
+            }
         }
         .font(readoutFont)
         .foregroundStyle(.secondary)
-    }
-
-    private var totalLabel: some View {
-        Text(totalText)
-            .font(readoutFont)
-            .foregroundStyle(.secondary)
     }
 
     private var seekBar: some View {
@@ -193,25 +188,25 @@ struct SeekTimeRow<BelowCenter: View>: View {
         min(1, max(0, x / max(width, 1)))
     }
 
-    /// One tick per displayed second: the elapsed readout crosses second
-    /// boundaries at the playback speed. Reading the speed keeps it observed.
+    /// One tick per displayed second: the readouts cross second boundaries
+    /// at the playback speed. Reading the speed keeps it observed.
     private var tickInterval: TimeInterval {
         1.0 / max(player.playbackSpeed, 0.25)
     }
 
-    /// The elapsed time within the seek scope.
-    private func elapsedText(at date: Date) -> String {
+    /// The elapsed time within the seek scope, with the scope's total.
+    private func scopeElapsed(at date: Date) -> (seconds: Double, total: Double) {
         let position = displayedPosition(at: date)
         guard let chapter = player.currentChapter else {
-            return formatElapsedTime(position, matching: player.duration)
+            return (max(0, min(position, player.duration)), player.duration)
         }
         let elapsed = max(0, min(position, chapter.endSeconds) - chapter.startSeconds)
-        return formatElapsedTime(elapsed, matching: chapter.durationSeconds)
+        return (elapsed, chapter.durationSeconds)
     }
 
-    /// The total time of the seek scope.
-    private var totalText: String {
-        formatTime(player.currentChapter?.durationSeconds ?? player.duration)
+    /// The time left in the seek scope, with a leading minus sign.
+    private func remainingText(_ elapsed: (seconds: Double, total: Double)) -> String {
+        "-" + formatElapsedTime(max(0, elapsed.total - elapsed.seconds), matching: elapsed.total)
     }
 
     /// The position the elapsed text shows: the scrub target while dragging,
