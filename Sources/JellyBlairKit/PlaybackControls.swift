@@ -6,13 +6,18 @@ extension EnvironmentValues {
     @Entry var scrubPosition: Double?
 }
 
-/// Shows the listening time left in the book at the current speed. The
-/// speed-adjusted readout advances one displayed second per wall second,
-/// so a one-second timeline covers every speed. While the user scrubs, it
-/// shows the time left from the scrub position instead.
+/// Shows the listening time left in the book at the current speed, or the
+/// listening time elapsed. A tap swaps between the two, and the choice
+/// persists. The speed-adjusted readout advances one displayed second per
+/// wall second, so a one-second timeline covers every speed. While the user
+/// scrubs, it reads from the scrub position instead.
 public struct RemainingTimeView: View {
+    static let showsElapsedKey = "bookReadoutShowsElapsed"
+    private static let swapFadeDuration: TimeInterval = 0.15
+
     @Environment(PlayerController.self) private var player
     @Environment(\.scrubPosition) private var scrubPosition
+    @AppStorage(Self.showsElapsedKey) private var showsElapsed = false
 
     public init() {}
 
@@ -20,18 +25,49 @@ public struct RemainingTimeView: View {
         // Inherits the font from its context, so it always matches the
         // total length displayed beside it.
         TimelineView(.periodic(from: .now, by: 1.0)) { context in
-            Text("\(text(at: context.date)) remaining")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+            Button(action: swapReadout) {
+                readouts(at: context.date)
+            }
+            .buttonStyle(.plain)
+            .hoverDim()
         }
+    }
+
+    private func swapReadout() {
+        showsElapsed.toggle()
+    }
+
+    /// Stacks both labels in one frame and shows only the chosen one. Laying
+    /// out both holds the frame steady across the swap, so the crossfade is
+    /// the only motion.
+    private func readouts(at date: Date) -> some View {
+        let position = scrubPosition ?? player.projectedTime(at: date)
+        return ZStack {
+            label(remainingText(position: position))
+                .opacity(showsElapsed ? 0 : 1)
+            label(elapsedText(position: position))
+                .opacity(showsElapsed ? 1 : 0)
+        }
+        .animation(.easeOut(duration: Self.swapFadeDuration), value: showsElapsed)
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text)
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
     }
 
     /// The listening time left at the current speed. The speed itself is not
     /// repeated here; the transport controls already show it.
-    private func text(at date: Date) -> String {
-        let position = scrubPosition ?? player.projectedTime(at: date)
+    private func remainingText(position: Double) -> String {
         let remaining = max(0, player.duration - position) / player.playbackSpeed
-        return formatHoursMinutes(remaining)
+        return "\(formatHoursMinutes(remaining)) remaining"
+    }
+
+    /// The listening time spent at the current speed.
+    private func elapsedText(position: Double) -> String {
+        let elapsed = max(0, min(position, player.duration)) / player.playbackSpeed
+        return "\(formatHoursMinutes(elapsed)) elapsed"
     }
 }
 

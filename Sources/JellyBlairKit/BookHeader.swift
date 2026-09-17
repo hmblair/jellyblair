@@ -195,19 +195,15 @@ private struct GroupNameButton: View {
     let name: String
     let open: OpenBookGroupAction?
 
-    @State private var isHovering = false
-
     var body: some View {
         if let open {
             Button {
                 open(kind, name)
             } label: {
                 Text(name)
-                    .opacity(isHovering ? 0.6 : 1)
-                    .animation(.easeOut(duration: 0.1), value: isHovering)
             }
             .buttonStyle(.plain)
-            .onHover { isHovering = $0 }
+            .hoverDim()
         } else {
             Text(name)
         }
