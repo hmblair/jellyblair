@@ -1,10 +1,18 @@
 import SwiftUI
 
+extension EnvironmentValues {
+    /// The book position under the pointer while the user scrubs the seek
+    /// bar, so readouts near the bar can track the pointer. Nil otherwise.
+    @Entry var scrubPosition: Double?
+}
+
 /// Shows the listening time left in the book at the current speed. The
 /// speed-adjusted readout advances one displayed second per wall second,
-/// so a one-second timeline covers every speed.
+/// so a one-second timeline covers every speed. While the user scrubs, it
+/// shows the time left from the scrub position instead.
 public struct RemainingTimeView: View {
     @Environment(PlayerController.self) private var player
+    @Environment(\.scrubPosition) private var scrubPosition
 
     public init() {}
 
@@ -21,7 +29,8 @@ public struct RemainingTimeView: View {
     /// The listening time left at the current speed. The speed itself is not
     /// repeated here; the transport controls already show it.
     private func text(at date: Date) -> String {
-        let remaining = max(0, player.duration - player.projectedTime(at: date)) / player.playbackSpeed
+        let position = scrubPosition ?? player.projectedTime(at: date)
+        let remaining = max(0, player.duration - position) / player.playbackSpeed
         return formatHoursMinutes(remaining)
     }
 }
@@ -105,7 +114,10 @@ struct SeekTimeRow<BelowCenter: View>: View {
                 Spacer()
                 totalLabel
             }
-            .overlay { belowCenter }
+            .overlay {
+                belowCenter
+                    .environment(\.scrubPosition, scrubPosition)
+            }
         }
     }
 
@@ -205,7 +217,12 @@ struct SeekTimeRow<BelowCenter: View>: View {
     /// The position the elapsed text shows: the scrub target while dragging,
     /// so the readout tracks the pointer, and the playback position otherwise.
     private func displayedPosition(at date: Date) -> Double {
-        guard let dragFraction else { return player.projectedTime(at: date) }
+        scrubPosition ?? player.projectedTime(at: date)
+    }
+
+    /// The book position under the pointer while dragging. Nil otherwise.
+    private var scrubPosition: Double? {
+        guard let dragFraction else { return nil }
         let range = player.seekRange
         return range.lowerBound + dragFraction * (range.upperBound - range.lowerBound)
     }
