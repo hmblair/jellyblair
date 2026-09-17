@@ -100,6 +100,9 @@ struct SeekTimeRow<BelowCenter: View>: View {
     /// seek lands, so the bar does not flash back to the pre-seek time.
     @State private var dragFraction: Double?
 
+    /// How the current drag maps the pointer to a fraction. Nil between drags.
+    @State private var scrubOrigin: ScrubOrigin?
+
     init(sizes: TransportMetrics? = nil, @ViewBuilder belowCenter: () -> BelowCenter) {
         self.sizes = sizes
         self.belowCenter = belowCenter()
@@ -171,21 +174,73 @@ struct SeekTimeRow<BelowCenter: View>: View {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 guard player.isReady else { return }
-                dragFraction = fraction(at: value.location.x, width: width)
+                let origin = scrubOrigin ?? scrubOrigin(for: value, width: width)
+                scrubOrigin = origin
+                dragFraction = scrubFraction(for: value, origin: origin, width: width)
             }
             .onEnded { value in
                 guard player.isReady else { return }
-                let range = player.seekRange
-                let target = range.lowerBound + fraction(at: value.location.x, width: width) * (range.upperBound - range.lowerBound)
-                Task {
-                    await player.seek(to: target)
+                let origin = scrubOrigin ?? scrubOrigin(for: value, width: width)
+                scrubOrigin = nil
+                guard !isStationaryKnobGrab(value, origin: origin) else {
                     dragFraction = nil
+                    return
                 }
+                seek(toFraction: scrubFraction(for: value, origin: origin, width: width))
             }
     }
 
+    /// Decides whether a drag grabs the knob or presses the track, from where
+    /// the pointer went down relative to the knob.
+    private func scrubOrigin(for value: DragGesture.Value, width: CGFloat) -> ScrubOrigin {
+        let knobFraction = projectedBarFraction(at: Date())
+        let knobX = knobFraction * width
+        let radius = AnimatedProgressBar.knobDiameter / 2
+        if abs(value.startLocation.x - knobX) <= radius {
+            return .knob(startFraction: knobFraction)
+        }
+        return .track
+    }
+
+    /// The fraction the pointer maps to: the knob's start fraction plus the
+    /// pointer's travel for a knob grab, the pointer's position for a press.
+    private func scrubFraction(for value: DragGesture.Value, origin: ScrubOrigin, width: CGFloat) -> Double {
+        switch origin {
+        case .knob(let startFraction):
+            return clampFraction(startFraction + value.translation.width / max(width, 1))
+        case .track:
+            return fraction(at: value.location.x, width: width)
+        }
+    }
+
+    /// True when the user pressed the knob and released without moving it.
+    private func isStationaryKnobGrab(_ value: DragGesture.Value, origin: ScrubOrigin) -> Bool {
+        guard case .knob = origin else { return false }
+        return value.translation.width == 0
+    }
+
+    /// The bar's displayed fraction at a date, projected from its anchor.
+    private func projectedBarFraction(at date: Date) -> Double {
+        let anchor = barAnchor
+        let elapsed = max(0, date.timeIntervalSince(anchor.date))
+        return clampFraction(anchor.fraction + anchor.fractionsPerSecond * elapsed)
+    }
+
+    private func seek(toFraction fraction: Double) {
+        let range = player.seekRange
+        let target = range.lowerBound + fraction * (range.upperBound - range.lowerBound)
+        Task {
+            await player.seek(to: target)
+            dragFraction = nil
+        }
+    }
+
     private func fraction(at x: CGFloat, width: CGFloat) -> Double {
-        min(1, max(0, x / max(width, 1)))
+        clampFraction(x / max(width, 1))
+    }
+
+    private func clampFraction(_ fraction: Double) -> Double {
+        min(1, max(0, fraction))
     }
 
     /// One tick per displayed second: the readouts cross second boundaries
@@ -225,6 +280,14 @@ struct SeekTimeRow<BelowCenter: View>: View {
 
 /// Height of the seek bar's hit area.
 private let seekBarHeight: CGFloat = 18
+
+/// How a drag on the seek bar maps the pointer to a fraction. A knob grab
+/// moves the knob by the pointer's travel from where the knob sat. A track
+/// press puts the knob under the pointer.
+private enum ScrubOrigin {
+    case knob(startFraction: Double)
+    case track
+}
 
 /// Which buttons a transport cluster shows.
 public enum TransportLayout {

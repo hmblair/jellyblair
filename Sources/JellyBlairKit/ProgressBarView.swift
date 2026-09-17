@@ -19,6 +19,8 @@ struct ProgressAnchor: Equatable {
 /// render server moves the bar; the app only touches it when the anchor
 /// changes. The knob grows while the user scrubs.
 struct AnimatedProgressBar {
+    static let knobDiameter: CGFloat = 14
+
     var anchor: ProgressAnchor
     var isScrubbing: Bool
 }
@@ -50,7 +52,7 @@ extension AnimatedProgressBar: UIViewRepresentable {
 /// The layer-backed platform view behind AnimatedProgressBar.
 final class ProgressBarLayerView: PlatformNativeView {
     private static let barHeight: CGFloat = 9
-    private static let knobDiameter: CGFloat = 14
+    private static let knobDiameter = AnimatedProgressBar.knobDiameter
     private static let scrubbingKnobDiameter: CGFloat = 18
     private static let knobShadowRadius: CGFloat = 2
     private static let knobShadowOpacity: Float = 0.3
