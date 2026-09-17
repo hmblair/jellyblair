@@ -15,7 +15,11 @@ public struct LibraryList: View {
     @Environment(PlayerController.self) private var player
     @Environment(\.layoutDensity) private var density
 
-    @State private var filters = DefaultLibraryFilters.stored
+    /// The library's own filters, kept while a group is open so they
+    /// stand again on the way back.
+    @State private var libraryFilters = DefaultLibraryFilters.stored
+    /// The open group's filters, which start over for each group.
+    @State private var groupFilters = DefaultLibraryFilters.storedForGroup
 
     public init(selection: Binding<String?>, scope: Binding<BookGroup?>, isShowing: Bool = true) {
         _selection = selection
@@ -23,16 +27,34 @@ public struct LibraryList: View {
         self.isShowing = isShowing
     }
 
+    /// The filters of whichever scope is showing.
+    private var filters: Binding<LibraryFilters> {
+        Binding {
+            scope == nil ? libraryFilters : groupFilters
+        } set: { updated in
+            if scope == nil {
+                libraryFilters = updated
+            } else {
+                groupFilters = updated
+            }
+        }
+    }
+
     private var list: BookList {
-        library.visibleList(in: scope, filters: filters, loadedBookID: player.book?.id)
+        library.visibleList(in: scope, filters: filters.wrappedValue, loadedBookID: player.book?.id)
     }
 
     public var body: some View {
         bookList
-            .libraryListChrome(searchQuery: $filters.searchQuery)
+            .libraryListChrome(searchQuery: filters.searchQuery)
+            .onChange(of: scope?.id) { _, groupID in
+                if groupID != nil {
+                    groupFilters = DefaultLibraryFilters.storedForGroup
+                }
+            }
             .toolbar {
                 if isShowing {
-                    LibraryFilterToolbarButtons(filters: $filters)
+                    LibraryFilterToolbarButtons(filters: filters)
                 }
                 // When regular the book screen carries the settings button,
                 // and there is always a screen beside the list to carry it.
@@ -65,12 +87,12 @@ public struct LibraryList: View {
             }
         }
         .libraryListStyle()
-        .scrolledToTopOnSortChange(filters: filters)
+        .scrolledToTopOnSortChange(filters: filters.wrappedValue)
         .refreshable {
             await library.load()
         }
         .overlay {
-            LibraryEmptyOverlay(list, scope: scope, filters: filters)
+            LibraryEmptyOverlay(list, scope: scope, filters: filters.wrappedValue)
         }
     }
 
@@ -125,7 +147,7 @@ public struct LibraryList: View {
     }
 
     private func exitScope() {
-        filters.searchQuery = ""
+        libraryFilters.searchQuery = ""
         scope = nil
     }
 }

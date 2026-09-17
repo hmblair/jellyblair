@@ -106,6 +106,17 @@ public struct LibraryFilters: Codable, Equatable {
         sortDirection = sortDirection.flipped
     }
 
+    /// A copy with every filter toggle off, keeping the sort order and
+    /// the search query.
+    public func clearingFilters() -> LibraryFilters {
+        var copy = self
+        copy.downloadedOnly = false
+        copy.readingOnly = false
+        copy.playedFilter = nil
+        copy.favoritesOnly = false
+        return copy
+    }
+
     /// Whether at least one filter toggle is on.
     public var hasActiveFilter: Bool {
         !activeFilters.isEmpty

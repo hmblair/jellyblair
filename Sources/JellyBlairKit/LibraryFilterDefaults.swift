@@ -6,9 +6,16 @@ import SwiftUI
 public enum DefaultLibraryFilters {
     public static let key = "defaultLibraryFilters"
 
-    /// The stored filters, read when a list is created.
+    /// The stored filters, which the library list opens with.
     public static var stored: LibraryFilters {
         decode(UserDefaults.standard.data(forKey: key) ?? Data())
+    }
+
+    /// The filters a group's list opens with: the stored sort order with
+    /// no filter toggle, so the defaults hide none of a person's, a
+    /// publisher's, or a genre's books.
+    public static var storedForGroup: LibraryFilters {
+        stored.clearingFilters()
     }
 
     /// The filters the data holds, or a plain set when it holds none.
@@ -22,8 +29,9 @@ public enum DefaultLibraryFilters {
 }
 
 /// The default sort order and filters as two rows, one for each of the
-/// library's menus, for both platforms' settings screens. A choice made
-/// here shows in every list opened afterwards.
+/// library's menus, for both platforms' settings screens. A sort chosen
+/// here shows in every list opened afterwards. A filter chosen here shows
+/// in the library list only; a group's list opens unfiltered.
 public struct DefaultLibraryFilterSettings: View {
     @AppStorage(DefaultLibraryFilters.key) private var storedFilters = Data()
 
