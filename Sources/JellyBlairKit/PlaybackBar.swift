@@ -65,11 +65,14 @@ public struct PlaybackBar: View {
     }
 
     /// The seek bar in the player layout: the times under the bar's ends
-    /// with the remaining time between them.
+    /// with the remaining time and the sleep readout between them.
     private var seekCluster: some View {
         SeekTimeRow {
-            RemainingTimeView()
-                .font(metrics.transport.readoutFont)
+            HStack(spacing: readoutSpacing) {
+                RemainingTimeView()
+                SleepTimerReadout()
+            }
+            .font(metrics.transport.readoutFont)
         }
     }
 
@@ -91,7 +94,7 @@ public struct PlaybackBar: View {
                 .frame(width: metrics.playbackBar.coverSize, height: metrics.playbackBar.coverSize)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 2) {
-                Text(player.currentChapter?.mainTitle ?? book.mainTitle)
+                titleLine(for: book)
                     .font(metrics.playbackBar.titleFont)
                     .lineLimit(1)
                 if player.currentChapter != nil {
@@ -105,6 +108,19 @@ public struct PlaybackBar: View {
         .contentShape(Rectangle())
         .onTapGesture {
             onOpen(book)
+        }
+    }
+
+    /// The chapter title, or the book title before the chapters are known.
+    /// The compact bar has no seek cluster to carry the sleep readout, so
+    /// the moon marks the title there while the timer is set.
+    private func titleLine(for book: Book) -> some View {
+        HStack(spacing: 4) {
+            if !metrics.playbackBar.showsSeekCluster, player.sleepAtSeconds != nil {
+                sleepTimerIcon.plain
+                    .foregroundStyle(Color.accentColor)
+            }
+            Text(player.currentChapter?.mainTitle ?? book.mainTitle)
         }
     }
 

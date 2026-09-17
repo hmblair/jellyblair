@@ -14,8 +14,11 @@ struct BookTransport: View {
         VStack(spacing: 12) {
             chapterLine
             SeekTimeRow(sizes: metrics.playerTransport) {
-                RemainingTimeView()
-                    .font(metrics.playerTransport.readoutFont)
+                HStack(spacing: readoutSpacing) {
+                    RemainingTimeView()
+                    SleepTimerReadout()
+                }
+                .font(metrics.playerTransport.readoutFont)
             }
             TransportControlsView(sizes: metrics.playerTransport)
                 .frame(maxWidth: .infinity)

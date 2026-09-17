@@ -74,8 +74,15 @@ public final class PlayerController {
 
     public private(set) var playbackSpeed: Double
 
+    /// The book position where playback pauses on its own, or nil while no
+    /// sleep timer is set. The timer lives with the loaded book: it clears
+    /// when the book closes, when playback ends, and when a seek lands at
+    /// or past the position.
+    public private(set) var sleepAtSeconds: Double?
+
     private var player: AVPlayer?
     private var boundaryObserver: Any?
+    private var sleepObserver: Any?
     private var statusObservation: NSKeyValueObservation?
     private var timeControlObservation: NSKeyValueObservation?
     private var timebaseRateObserver: NSObjectProtocol?
@@ -122,6 +129,9 @@ public final class PlayerController {
 
     /// Seconds to wait for a new player item before declaring the open failed.
     private static let readyTimeout: TimeInterval = 8
+
+    /// Timescale of the boundary observers' times.
+    private static let boundaryTimescale: Int32 = 600
 
     private static let playbackSpeedDefaultsKey = "playbackSpeed"
 
@@ -309,6 +319,7 @@ public final class PlayerController {
         let hadSession = hasActiveSession
         self.book = nil
         player = nil
+        sleepAtSeconds = nil
         isReady = false
         hasActiveSession = false
         playbackErrorMessage = nil
@@ -505,6 +516,7 @@ public final class PlayerController {
         guard isReady, player != nil else { return }
         let target = max(0, min(seconds, duration))
         requestedSeconds = target
+        cancelSleepTimerIfPassed(by: target)
         // The displays sit at the target while the seek lands.
         setAnchor(position: target, rate: 0)
         seeksInFlight += 1
@@ -557,6 +569,63 @@ public final class PlayerController {
     public func jump(toSeconds seconds: Double) async {
         await seek(to: seconds)
         play()
+    }
+
+    // MARK: - Sleep timer
+
+    /// Pauses playback on its own when it reaches the chapter's end.
+    public func setSleepAfter(_ chapter: Chapter) {
+        setSleepTimer(atSeconds: chapter.endSeconds)
+    }
+
+    /// True when the sleep timer sits at the chapter's end.
+    public func sleepsAfter(_ chapter: Chapter) -> Bool {
+        sleepAtSeconds == chapter.endSeconds
+    }
+
+    /// True when the chapter's end is still ahead of playback, so a timer
+    /// there would fire.
+    public func canSleepAfter(_ chapter: Chapter) -> Bool {
+        book != nil && chapter.endSeconds > currentTime
+    }
+
+    /// The listening time from a position until the sleep timer fires, at
+    /// the current speed, or nil while no timer is set.
+    public func secondsUntilSleep(from position: Double) -> Double? {
+        guard let sleepAtSeconds else { return nil }
+        return max(0, sleepAtSeconds - position) / playbackSpeed
+    }
+
+    public func cancelSleepTimer() {
+        guard sleepAtSeconds != nil else { return }
+        Log.playback.notice("Cancelled the sleep timer")
+        clearSleepTimer()
+    }
+
+    private func clearSleepTimer() {
+        sleepAtSeconds = nil
+        removeSleepObserver()
+    }
+
+    private func setSleepTimer(atSeconds seconds: Double) {
+        guard book != nil else { return }
+        Log.playback.notice("Sleeping at \(seconds, format: .fixed(precision: 1))s")
+        sleepAtSeconds = seconds
+        installSleepObserver()
+    }
+
+    /// A seek that lands at or past the sleep position means the listener
+    /// is awake, so the timer clears instead of pausing on the way.
+    private func cancelSleepTimerIfPassed(by position: Double) {
+        guard let sleepAtSeconds, position >= sleepAtSeconds else { return }
+        cancelSleepTimer()
+    }
+
+    private func handleSleepReached() {
+        guard sleepAtSeconds != nil else { return }
+        Log.playback.notice("Sleep timer reached; pausing")
+        clearSleepTimer()
+        pause()
     }
 
     // MARK: - Time and chapter tracking
@@ -632,22 +701,48 @@ public final class PlayerController {
     /// content on a seeked network stream.
     private func installChapterBoundaryObserver() {
         removeChapterBoundaryObserver()
-        guard let player else { return }
         let starts = chapters.map(\.startSeconds).filter { $0 > 0 }
-        guard !starts.isEmpty else { return }
-        let times = starts.map { NSValue(time: CMTime(seconds: $0, preferredTimescale: 600)) }
-        boundaryObserver = player.addBoundaryTimeObserver(forTimes: times, queue: .main) { [weak self] in
-            MainActor.assumeIsolated {
-                self?.refreshCurrentChapterIndex()
-            }
+        boundaryObserver = addBoundaryObserver(at: starts) { player in
+            player.refreshCurrentChapterIndex()
         }
     }
 
     private func removeChapterBoundaryObserver() {
-        if let boundaryObserver, let player {
-            player.removeTimeObserver(boundaryObserver)
+        removeTimeObserver(&boundaryObserver)
+    }
+
+    /// Fires exactly when playback crosses the sleep position.
+    private func installSleepObserver() {
+        removeSleepObserver()
+        guard let sleepAtSeconds else { return }
+        sleepObserver = addBoundaryObserver(at: [sleepAtSeconds]) { player in
+            player.handleSleepReached()
         }
-        boundaryObserver = nil
+    }
+
+    private func removeSleepObserver() {
+        removeTimeObserver(&sleepObserver)
+    }
+
+    /// Adds a boundary observer on the player at the given positions,
+    /// running the action on the main actor. Nil without a player or
+    /// without positions.
+    private func addBoundaryObserver(at positions: [Double], action: @escaping @MainActor (PlayerController) -> Void) -> Any? {
+        guard let player, !positions.isEmpty else { return nil }
+        let times = positions.map { NSValue(time: CMTime(seconds: $0, preferredTimescale: Self.boundaryTimescale)) }
+        return player.addBoundaryTimeObserver(forTimes: times, queue: .main) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                action(self)
+            }
+        }
+    }
+
+    private func removeTimeObserver(_ observer: inout Any?) {
+        if let observer, let player {
+            player.removeTimeObserver(observer)
+        }
+        observer = nil
     }
 
     /// Observes a notification the media subsystem posts from its own
@@ -767,6 +862,7 @@ public final class PlayerController {
 
     private func removeObservers() {
         removeChapterBoundaryObserver()
+        removeSleepObserver()
         timeControlObservation?.invalidate()
         timeControlObservation = nil
         removeItemObservers()
@@ -797,6 +893,7 @@ public final class PlayerController {
         guard playbackErrorMessage == nil else { return }
         Log.playback.error("Playback failed at \(self.currentTime, format: .fixed(precision: 1))s: \(message, privacy: .public)")
         playbackErrorMessage = message
+        cancelSleepTimer()
         updatePlayingState(false)
         isReady = false
         removeObservers()
@@ -811,6 +908,7 @@ public final class PlayerController {
     private func handlePlaybackEnded() {
         guard let book else { return }
         Log.playback.notice("Played \(book.name, privacy: .public) to its end")
+        cancelSleepTimer()
         updatePlayingState(false)
         setAnchor(position: duration, rate: 0)
         book.recordSettledPosition(duration)

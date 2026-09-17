@@ -20,24 +20,27 @@ public enum ChapterRowState: Equatable {
 public struct ChapterRow: View {
     let chapter: Chapter
     let state: ChapterRowState
+    /// True when the sleep timer sits at this chapter's end.
+    let sleepsAfter: Bool
     let meter: AudioLevelMeter
     /// The phrase whose occurrences in the title color as search matches.
     let searchQuery: String
     let searchIsCaseSensitive: Bool
 
-    public init(chapter: Chapter, state: ChapterRowState, meter: AudioLevelMeter, searchQuery: String, searchIsCaseSensitive: Bool) {
+    public init(chapter: Chapter, state: ChapterRowState, sleepsAfter: Bool, meter: AudioLevelMeter, searchQuery: String, searchIsCaseSensitive: Bool) {
         self.chapter = chapter
         self.state = state
+        self.sleepsAfter = sleepsAfter
         self.meter = meter
         self.searchQuery = searchQuery
         self.searchIsCaseSensitive = searchIsCaseSensitive
     }
 
-    /// Width of the gutter on each side of the content. The marker icon
+    /// Width of the gutter on each side of the content. The position marker
     /// centers in the leading one, so it sits midway between the row's edge
-    /// and the content; the empty trailing one mirrors it, so the content
-    /// stays centered whatever the marker shows. The separators span only
-    /// the content between the gutters.
+    /// and the content; the trailing one mirrors it and holds the sleep
+    /// marker, so the content stays centered whatever the markers show.
+    /// The separators span only the content between the gutters.
     private static let gutterWidth: CGFloat = 32
 
     private var isCurrent: Bool {
@@ -58,7 +61,7 @@ public struct ChapterRow: View {
             Text(formatTime(chapter.durationSeconds))
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
-            Color.clear
+            sleepMarker
                 .frame(width: Self.gutterWidth)
         }
         .padding(.vertical, 6)
@@ -71,9 +74,9 @@ public struct ChapterRow: View {
                 .opacity(isHovering ? 1 : 0)
                 .animation(.easeOut(duration: 0.1), value: isHovering)
                 // The pill overhangs the content's ends slightly; a marked
-                // row's pill reaches over the icon too.
+                // row's pill reaches over its markers too.
                 .padding(.leading, state == .upcoming ? Self.gutterWidth - 8 : 0)
-                .padding(.trailing, Self.gutterWidth - 8)
+                .padding(.trailing, sleepsAfter ? 0 : Self.gutterWidth - 8)
         )
         .onHover { isHovering = $0 }
         // Zero side insets: the gutters are the row's whole margin, so the
@@ -117,6 +120,17 @@ public struct ChapterRow: View {
                 .font(.caption)
                 .foregroundStyle(Color.accentColor)
         case .upcoming:
+            Color.clear
+        }
+    }
+
+    @ViewBuilder
+    private var sleepMarker: some View {
+        if sleepsAfter {
+            sleepTimerIcon.plain
+                .font(.caption)
+                .foregroundStyle(Color.accentColor)
+        } else {
             Color.clear
         }
     }
