@@ -271,6 +271,14 @@ public final class JellyfinClient {
         _ = try await send(makeRequest(path: "UserPlayedItems/\(bookID)", method: isPlayed ? "POST" : "DELETE"))
     }
 
+    /// Clears the user's playback state for the book: the played mark, the
+    /// play count, the resume position, and the last-played date. The
+    /// unplayed route is the one server call that clears all four. Throws
+    /// when the server does not confirm.
+    func resetPlayback(bookID: String) async throws {
+        try await setPlayed(false, bookID: bookID)
+    }
+
     func reportPlaybackStarted(bookID: String, positionSeconds: Double) async {
         let request = makeStartedReportRequest(bookID: bookID, positionSeconds: positionSeconds)
         await sendPlaybackReport(request, bookID: bookID, positionSeconds: positionSeconds)

@@ -208,6 +208,14 @@ public final class Book: Identifiable {
         onRecordChanged?()
     }
 
+    /// Clears the playback state, on the server first so the two never
+    /// disagree. A failed call changes nothing.
+    public func resetPlayback() async {
+        guard (try? await client.resetPlayback(bookID: id)) != nil else { return }
+        record = record.withPlaybackReset()
+        onRecordChanged?()
+    }
+
     // MARK: - Stream asset
 
     /// The stream asset: the downloaded file when present, the server

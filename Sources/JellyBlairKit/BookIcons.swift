@@ -63,3 +63,7 @@ public let notFavoriteIcon = Icon("heart")
 
 /// The symbol for refreshing a book's metadata, in the book actions menu.
 public let refreshMetadataIcon = Icon("arrow.trianglehead.2.clockwise.rotate.90")
+
+/// The symbol for resetting a book's playback state, on the details
+/// sheet's reset row and in the book actions menu.
+public let resetPlaybackIcon = Icon("exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")

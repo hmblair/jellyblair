@@ -10,8 +10,10 @@ public struct BookDetailsSheet: View {
     @Environment(PlayerController.self) private var player
     @Environment(ConnectionMonitor.self) private var connection
 
-    @State private var isConfirmingRemoval = false
-    @State private var removalConfirmationTimeout: Task<Void, Never>?
+    /// Each destructive row's action while its dialog asks about it. The
+    /// dialog anchors to the row that opened it, so each row keeps its own.
+    @State private var pendingRemoval: DestructiveAction?
+    @State private var pendingReset: DestructiveAction?
 
     public init(book: Book) {
         self.book = book
@@ -52,6 +54,7 @@ public struct BookDetailsSheet: View {
             }
             Section {
                 syncRow
+                resetRow
             }
         }
         #if os(macOS)
@@ -106,40 +109,15 @@ public struct BookDetailsSheet: View {
                 book.cancelDownload()
             }
         case .downloaded:
-            if isConfirmingRemoval {
-                toggleRow(
-                    title: Text("Confirm"),
-                    icon: removeDownloadIcon,
-                    isOn: false,
-                    isEnabled: true,
-                    tint: .red
-                ) {
-                    removalConfirmationTimeout?.cancel()
-                    isConfirmingRemoval = false
-                    book.removeDownload()
-                }
-            } else {
-                toggleRow(
-                    title: Text("Downloaded"),
-                    icon: downloadedIcon,
-                    isOn: true,
-                    isEnabled: true
-                ) {
-                    beginRemovalConfirmation()
-                }
+            toggleRow(
+                title: Text("Downloaded"),
+                icon: downloadedIcon,
+                isOn: true,
+                isEnabled: true
+            ) {
+                pendingRemoval = actions.removeDownloadAction
             }
-        }
-    }
-
-    /// Arms the removal confirmation, and reverts it after the shared
-    /// confirmation window passes without the second tap.
-    private func beginRemovalConfirmation() {
-        removalConfirmationTimeout?.cancel()
-        isConfirmingRemoval = true
-        removalConfirmationTimeout = Task { @MainActor in
-            try? await Task.sleep(for: confirmationWindow)
-            guard !Task.isCancelled else { return }
-            isConfirmingRemoval = false
+            .confirmsDestructiveAction($pendingRemoval)
         }
     }
 
@@ -154,9 +132,8 @@ public struct BookDetailsSheet: View {
     /// shows the accent while the state is on, like the filter menu's
     /// choices. The plain button style keeps the row looking like the
     /// detail rows on both platforms, and the optional value reads on the
-    /// trailing side like theirs. A tint colors the whole row, for the
-    /// confirming state of a destructive tap. A busy row spins its icon
-    /// while its action runs.
+    /// trailing side like theirs. A tint colors the whole row, for a
+    /// destructive row. A busy row spins its icon while its action runs.
     private func toggleRow(title: Text, value: Text? = nil, icon: Icon, isOn: Bool, isEnabled: Bool, tint: Color? = nil, isBusy: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             LabeledContent {
@@ -253,6 +230,21 @@ public struct BookDetailsSheet: View {
         ) {
             actions.refreshMetadata()
         }
+    }
+
+    /// Clears the book's playback state on the server, as a row under the
+    /// sync row. The tap opens the reset question.
+    private var resetRow: some View {
+        toggleRow(
+            title: Text("Reset"),
+            icon: resetPlaybackIcon,
+            isOn: false,
+            isEnabled: actions.canResetPlayback,
+            tint: .red
+        ) {
+            pendingReset = actions.resetPlaybackAction
+        }
+        .confirmsDestructiveAction($pendingReset)
     }
 
     /// The last download failure, until a retry starts.

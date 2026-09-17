@@ -44,6 +44,14 @@ public struct Icon {
         return Image(platformImage: image)
     }
 
+    /// The icon in red, as a ready-made image for the native menus'
+    /// destructive items. The Mac's menus draw the destructive role in
+    /// the plain menu color, so the red is baked into the image.
+    public var destructiveImage: Image {
+        guard let image = paletteSymbol(name, colors: [.systemRed]) else { return plain }
+        return Image(platformImage: image)
+    }
+
     /// The accent palette: white over the accent for a layered symbol,
     /// and the accent alone for a plain glyph.
     private func accentPalette(in environment: EnvironmentValues) -> [PlatformColor] {

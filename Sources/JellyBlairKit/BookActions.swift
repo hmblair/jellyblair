@@ -34,6 +34,10 @@ public struct BookActions {
         connection.isServerReachable
     }
 
+    public var canResetPlayback: Bool {
+        connection.isServerReachable
+    }
+
     /// Flips the favorite mark on the server.
     public func toggleFavorite() {
         Task {
@@ -49,6 +53,18 @@ public struct BookActions {
                 await player.close()
             }
             await book.togglePlayed()
+        }
+    }
+
+    /// Clears the played mark, the resume position, and the play history on
+    /// the server. The loaded book closes first, so playback stops and no
+    /// later progress report restores the position.
+    public func resetPlayback() {
+        Task {
+            if isLoaded {
+                await player.close()
+            }
+            await book.resetPlayback()
         }
     }
 
@@ -73,16 +89,76 @@ public struct BookActions {
     }
 }
 
+extension BookActions {
+    /// The reset, with the question asked before it runs. The explanation
+    /// names only the state the book holds now.
+    public var resetPlaybackAction: DestructiveAction {
+        DestructiveAction(
+            question: Text("Reset this book?"),
+            explanation: resetExplanation,
+            buttonTitle: Text("Reset")
+        ) {
+            resetPlayback()
+        }
+    }
+
+    private var resetExplanation: Text {
+        if book.isPlayed {
+            Text("The resume position is cleared and the book is marked unread.")
+        } else {
+            Text("The resume position is cleared.")
+        }
+    }
+
+    /// The download removal, with the question asked before it runs.
+    public var removeDownloadAction: DestructiveAction {
+        DestructiveAction(
+            question: Text("Remove this download?"),
+            explanation: Text("The file is deleted from this device."),
+            buttonTitle: Text("Remove Download")
+        ) {
+            book.removeDownload()
+        }
+    }
+}
+
+/// Attaches the book actions as a context menu on a library row, with the
+/// confirmation dialog that the menu's destructive items open. A menu
+/// closes on its first tap, so the question is a dialog on the row.
+public struct BookActionsContextMenu: ViewModifier {
+    let book: Book
+
+    @State private var pendingAction: DestructiveAction?
+
+    public func body(content: Content) -> some View {
+        content
+            .contextMenu {
+                BookActionsMenuItems(book: book, pendingAction: $pendingAction)
+            }
+            .confirmsDestructiveAction($pendingAction)
+    }
+}
+
+extension View {
+    /// Gives a library row the book actions as its context menu.
+    public func bookActionsContextMenu(for book: Book) -> some View {
+        modifier(BookActionsContextMenu(book: book))
+    }
+}
+
 /// The actions on one book as menu items, for the library rows' context
-/// menus. They mirror the details sheet's rows.
+/// menus. They mirror the details sheet's rows. The destructive items
+/// hand their action to the binding, and the row's dialog asks about it.
 public struct BookActionsMenuItems: View {
     let book: Book
+    @Binding var pendingAction: DestructiveAction?
 
     @Environment(PlayerController.self) private var player
     @Environment(ConnectionMonitor.self) private var connection
 
-    public init(book: Book) {
+    public init(book: Book, pendingAction: Binding<DestructiveAction?>) {
         self.book = book
+        _pendingAction = pendingAction
     }
 
     private var actions: BookActions {
@@ -94,6 +170,7 @@ public struct BookActionsMenuItems: View {
         favoriteItem
         downloadItem
         syncItem
+        resetItem
     }
 
     /// Flips the read mark, named and pictured by the state it moves to.
@@ -138,6 +215,36 @@ public struct BookActionsMenuItems: View {
         .disabled(!actions.canRefreshMetadata)
     }
 
+    /// Opens the reset question.
+    private var resetItem: some View {
+        Button(role: .destructive) {
+            pendingAction = actions.resetPlaybackAction
+        } label: {
+            destructiveLabel(Text("Reset"), icon: resetPlaybackIcon)
+        }
+        .disabled(!actions.canResetPlayback)
+    }
+
+    /// A menu label in red on both platforms. The phone's menus color the
+    /// destructive role themselves, while the Mac's menus keep the plain
+    /// menu color and drop view styles, so the red goes into the text and
+    /// the image directly.
+    private func destructiveLabel(_ title: Text, icon: Icon) -> some View {
+        Label {
+            #if os(macOS)
+            title.foregroundStyle(.red)
+            #else
+            title
+            #endif
+        } icon: {
+            #if os(macOS)
+            icon.destructiveImage
+            #else
+            icon.plain
+            #endif
+        }
+    }
+
     @ViewBuilder
     private var downloadItem: some View {
         switch book.downloadState {
@@ -163,14 +270,10 @@ public struct BookActionsMenuItems: View {
                 }
             }
         case .downloaded:
-            Button {
-                book.removeDownload()
+            Button(role: .destructive) {
+                pendingAction = actions.removeDownloadAction
             } label: {
-                Label {
-                    Text("Remove Download")
-                } icon: {
-                    removeDownloadIcon.plain
-                }
+                destructiveLabel(Text("Remove Download"), icon: removeDownloadIcon)
             }
         }
     }

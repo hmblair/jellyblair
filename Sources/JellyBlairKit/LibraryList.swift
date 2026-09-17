@@ -81,9 +81,7 @@ public struct LibraryList: View {
             }
             ForEach(section.books) { book in
                 row(for: book)
-                    .contextMenu {
-                        BookActionsMenuItems(book: book)
-                    }
+                    .bookActionsContextMenu(for: book)
             }
         }
     }

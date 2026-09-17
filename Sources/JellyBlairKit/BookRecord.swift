@@ -245,6 +245,20 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         return copy
     }
 
+    /// Returns a copy of the book with its playback state cleared, as the
+    /// server leaves it after a reset: at the start, unplayed, and with no
+    /// last-played date.
+    public func withPlaybackReset() -> BookRecord {
+        var copy = self
+        copy.userData = BookUserData(
+            playbackPositionTicks: 0,
+            lastPlayedTimestamp: nil,
+            isFavorite: userData?.isFavorite,
+            played: false
+        )
+        return copy
+    }
+
     /// Returns a copy of the book at a different favorite state.
     public func withFavorite(_ isFavorite: Bool) -> BookRecord {
         var copy = self
