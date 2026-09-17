@@ -59,9 +59,7 @@ public struct BookView: View {
                 listSection
             }
         }
-        .padding(.horizontal, metrics.bookScreen.pageHorizontalPadding)
-        .padding(.top, metrics.bookScreen.pageTopPadding)
-        .padding(.bottom, metrics.bookScreen.pageBottomPadding)
+        .padding(metrics.bookScreen.pagePadding)
         .toolbar {
             #if os(macOS)
             // The hidden-title window packs items at the leading edge; the

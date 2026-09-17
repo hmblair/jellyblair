@@ -23,10 +23,6 @@ public struct MainView: View {
     /// The compact layout's stack of pushed screens.
     @State private var path: [LibraryRoute] = []
 
-    /// The window's bottom safe-area inset, measured at the root; the
-    /// playback bar sinks halfway into it.
-    @State private var bottomSafeAreaInset: CGFloat = 0
-
     public init(scope: SessionScope) {
         self.scope = scope
     }
@@ -43,11 +39,6 @@ public struct MainView: View {
             .onChange(of: scope.connection.isServerReachable) { _, reachable in
                 guard reachable, scope.library.errorMessage != nil else { return }
                 Task { await scope.library.load() }
-            }
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.safeAreaInsets.bottom
-            } action: { inset in
-                bottomSafeAreaInset = inset
             }
             .environment(\.openBookGroup, OpenBookGroupAction { openGroup(ofKind: $0, named: $1) })
             .environment(scope.library)
@@ -67,7 +58,9 @@ public struct MainView: View {
 
     // MARK: - Regular
 
-    /// The library in a sidebar beside the selected book's screen. The
+    /// The library in a sidebar beside the selected book's screen, over the
+    /// playback bar. The bar is a stack sibling, so the library and the
+    /// book screen's panes end above it instead of running beneath it. The
     /// offline indicator sits under the sidebar, where it does not crowd
     /// the book screen.
     private var regularLayout: some View {
@@ -86,7 +79,6 @@ public struct MainView: View {
             .navigationSplitViewStyle(.balanced)
 
             playbackBar
-                .padding(.bottom, -bottomSafeAreaInset / 2)
         }
     }
 
@@ -139,24 +131,24 @@ public struct MainView: View {
 
     // MARK: - Compact
 
-    /// One screen at a time. The offline indicator sits below the playback
+    /// One screen at a time, with the playback bar floating in the bottom
+    /// safe area: the library scrolls beneath it, and the book screen, a
+    /// fixed stack, ends above it. The offline indicator sits below the
     /// bar, since there is no second column to put it under.
     private var compactLayout: some View {
-        VStack(spacing: 0) {
-            NavigationStack(path: $path) {
-                rootList
-                    .navigationDestination(for: LibraryRoute.self) { route in
-                        destination(for: route)
-                    }
-            }
+        NavigationStack(path: $path) {
+            rootList
+                .navigationDestination(for: LibraryRoute.self) { route in
+                    destination(for: route)
+                }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
                 if !isShowingLoadedBookScreen {
                     playbackBar
                 }
                 OfflineIndicator()
-                    .background(.bar)
             }
-            .padding(.bottom, -bottomSafeAreaInset / 2)
         }
     }
 
@@ -207,9 +199,6 @@ public struct MainView: View {
         return id == scope.player.book?.id
     }
 
-    /// The bar is a stack sibling, not a safe-area inset: an inset lets
-    /// scrollable screens extend their frames beneath it, which would put
-    /// the panes' fades and centering at the screen bottom instead of the bar.
     private var playbackBar: some View {
         PlaybackBar { book in
             openBook(book)

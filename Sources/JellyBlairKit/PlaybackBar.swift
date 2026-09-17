@@ -1,7 +1,9 @@
 import SwiftUI
 
 /// The app-wide playback bar, shown at the bottom whenever a book is
-/// loaded. Tapping the info area navigates to the book's screen.
+/// loaded: the controls in a rounded glass container that floats inside
+/// the window's edges. Tapping the info area navigates to the book's
+/// screen.
 public struct PlaybackBar: View {
     let onOpen: (Book) -> Void
 
@@ -24,13 +26,10 @@ public struct PlaybackBar: View {
                 }
                 controls(for: book)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, metrics.playbackBar.topPadding)
-            .padding(.bottom, metrics.playbackBar.bottomPadding)
-            .background(.bar)
-            .overlay(alignment: .top) {
-                Divider()
-            }
+            .padding(.horizontal, metrics.playbackBar.horizontalPadding)
+            .padding(.vertical, metrics.playbackBar.verticalPadding)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: metrics.playbackBar.cornerRadius))
+            .padding(metrics.playbackBar.margin)
         }
     }
 
@@ -54,16 +53,15 @@ public struct PlaybackBar: View {
         }
     }
 
-    /// The info with the transport, inset a step from the bar's edges.
-    /// This bar carries neither the seek cluster nor the speed menu; the
-    /// book screen's own transport does both.
+    /// The info with the transport. This bar carries neither the seek
+    /// cluster nor the speed menu; the book screen's own transport does
+    /// both.
     private func infoTransportControls(for book: Book) -> some View {
         HStack(spacing: 12) {
             info(for: book)
             Spacer(minLength: 12)
-            TransportControlsView()
+            TransportControlsView(layout: metrics.playbackBar.transportLayout)
         }
-        .padding(.horizontal, 8)
     }
 
     /// The seek bar in the player layout: the times under the bar's ends
@@ -80,7 +78,7 @@ public struct PlaybackBar: View {
     private var transportWithSpeed: some View {
         HStack(spacing: metrics.transport.buttonSpacing) {
             PlaybackSpeedMenu()
-            TransportControlsView()
+            TransportControlsView(layout: metrics.playbackBar.transportLayout)
         }
     }
 

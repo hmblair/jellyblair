@@ -15,12 +15,10 @@ public struct LayoutMetrics {
 
 /// The book screen's page padding and player header measurements.
 public struct BookScreenMetrics {
-    /// Side padding of the whole page. The compact layout pads its upper
-    /// content instead, so its list runs edge to edge.
-    public let pageHorizontalPadding: CGFloat
-    public let pageTopPadding: CGFloat
-    /// Clearance under the page's last element.
-    public let pageBottomPadding: CGFloat
+    /// Padding of the whole page from the sidebar and the window edges.
+    /// The compact layout pads its upper content instead, so its list
+    /// runs edge to edge.
+    public let pagePadding: EdgeInsets
     /// Side padding of the player header.
     public let contentHorizontalPadding: CGFloat
     public let coverCornerRadius: CGFloat
@@ -35,19 +33,25 @@ public struct BookScreenMetrics {
     public let playButtonControlSize: ControlSize
 }
 
-/// The playback bar's arrangement and the size of its info block.
+/// The playback bar's arrangement, the size of its info block, and the
+/// shape of the glass container it floats in.
 public struct PlaybackBarMetrics {
     /// True where the bar has the width for the seek cluster between the
     /// info and the transport. The compact bar leaves seeking to the book
     /// screen's own transport.
     public let showsSeekCluster: Bool
+    /// Which buttons the bar's transport shows.
+    public let transportLayout: TransportLayout
     public let coverSize: CGFloat
     public let titleFont: Font
     public let subtitleFont: Font
-    public let topPadding: CGFloat
-    /// The Mac window edge needs clearance below. The phone's safe area
-    /// already provides it.
-    public let bottomPadding: CGFloat
+    /// Padding between the container's edges and the controls.
+    public let horizontalPadding: CGFloat
+    public let verticalPadding: CGFloat
+    public let cornerRadius: CGFloat
+    /// The gap between the container and the window's edges, and between
+    /// the container and the content above it.
+    public let margin: EdgeInsets
 }
 
 /// The transport controls' button sizes and readout font.
@@ -124,9 +128,7 @@ public extension LayoutMetrics {
         )
         return LayoutMetrics(
             bookScreen: BookScreenMetrics(
-                pageHorizontalPadding: 0,
-                pageTopPadding: 8,
-                pageBottomPadding: 12,
+                pagePadding: EdgeInsets(top: 8, leading: 0, bottom: 12, trailing: 0),
                 contentHorizontalPadding: 20,
                 coverCornerRadius: 12,
                 playerCoverSize: 280,
@@ -140,11 +142,16 @@ public extension LayoutMetrics {
             ),
             playbackBar: PlaybackBarMetrics(
                 showsSeekCluster: false,
+                // The compact bar keeps skipping back to the book screen's
+                // own transport, which has the room for it.
+                transportLayout: .brief,
                 coverSize: 40,
                 titleFont: .callout.weight(.semibold),
                 subtitleFont: .caption,
-                topPadding: 8,
-                bottomPadding: 0
+                horizontalPadding: 12,
+                verticalPadding: 8,
+                cornerRadius: PaneLayout.cornerRadius,
+                margin: EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12)
             ),
             transport: baseTransport.scaled(by: 1.25),
             // The player screen's buttons spread wider than the bars',
@@ -175,9 +182,16 @@ public extension LayoutMetrics {
         #endif
         return LayoutMetrics(
             bookScreen: BookScreenMetrics(
-                pageHorizontalPadding: 20,
-                pageTopPadding: 20,
-                pageBottomPadding: 20,
+                // One gap from the sidebar, whose edge is the column
+                // boundary, and the pane inset from the window's other
+                // edges, so the pane card ends level with the sidebar
+                // above the playback bar.
+                pagePadding: EdgeInsets(
+                    top: 20,
+                    leading: PaneLayout.gap,
+                    bottom: PaneLayout.windowInset,
+                    trailing: PaneLayout.windowInset
+                ),
                 contentHorizontalPadding: 0,
                 coverCornerRadius: 10,
                 playerCoverSize: regularPlayerCoverSize,
@@ -189,11 +203,21 @@ public extension LayoutMetrics {
             ),
             playbackBar: PlaybackBarMetrics(
                 showsSeekCluster: true,
+                transportLayout: .full,
                 coverSize: 48,
                 titleFont: .body.weight(.semibold),
                 subtitleFont: .subheadline,
-                topPadding: 10,
-                bottomPadding: 10
+                horizontalPadding: 16,
+                verticalPadding: 10,
+                cornerRadius: PaneLayout.cornerRadius,
+                // One gap under the sidebar and the pane card, and the
+                // pane inset from the window's edges.
+                margin: EdgeInsets(
+                    top: PaneLayout.belowSplitViewPadding,
+                    leading: PaneLayout.windowInset,
+                    bottom: PaneLayout.windowInset,
+                    trailing: PaneLayout.windowInset
+                )
             ),
             transport: transport,
             playerTransport: transport.scaled(by: 1.25),

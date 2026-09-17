@@ -231,9 +231,22 @@ struct SeekTimeRow<BelowCenter: View>: View {
 /// Height of the seek bar's hit area.
 private let seekBarHeight: CGFloat = 18
 
+/// Which buttons a transport cluster shows.
+public enum TransportLayout {
+    /// Skip back, the play button at its own size, and skip forward.
+    case full
+    /// The play button at the skip buttons' size, then skip forward.
+    case brief
+
+    var showsSkipBack: Bool {
+        self == .full
+    }
+}
+
 /// The skip and play/pause buttons, driving the loaded book. The skips
 /// come from the shared transport skips.
 struct TransportControlsView: View {
+    var layout: TransportLayout = .full
     /// Sizes override for the player screen; the playback bar's metrics
     /// otherwise.
     var sizes: TransportMetrics?
@@ -247,7 +260,9 @@ struct TransportControlsView: View {
 
     var body: some View {
         HStack(spacing: resolvedSizes.buttonSpacing) {
-            SkipButton(skip: .back, size: resolvedSizes.skipButtonSize)
+            if layout.showsSkipBack {
+                SkipButton(skip: .back, size: resolvedSizes.skipButtonSize)
+            }
             playPauseButton
             SkipButton(skip: .forward, size: resolvedSizes.skipButtonSize)
         }
@@ -259,11 +274,25 @@ struct TransportControlsView: View {
         Button {
             player.togglePlayback()
         } label: {
-            Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                .font(.system(size: resolvedSizes.playButtonSize))
+            playPauseGlyph
                 .contentTransition(.symbolEffect(.replace, options: .speed(2)))
         }
         .buttonStyle(HoverDimButtonStyle())
+    }
+
+    /// The play and pause glyphs differ in width, so a fixed frame keeps
+    /// the skip buttons still when the glyph swaps.
+    private var playPauseGlyph: some View {
+        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+            .font(.system(size: playGlyphSize))
+            .frame(width: playGlyphSize)
+    }
+
+    private var playGlyphSize: CGFloat {
+        switch layout {
+        case .full: return resolvedSizes.playButtonSize
+        case .brief: return resolvedSizes.skipButtonSize
+        }
     }
 }
 

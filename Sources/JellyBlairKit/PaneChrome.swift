@@ -1,10 +1,24 @@
 import SwiftUI
 
-/// Layout shared by the book screen's chapter and transcript panes.
+/// Layout shared by the regular window's glass panes: the book screen's
+/// pane card and the playback bar. The system draws the sidebar with its
+/// own inset and corner radius and exposes neither, so the panes here
+/// copy the sidebar's values and every pane in the window matches.
 enum PaneLayout {
+    /// The sidebar's corner radius on macOS 26.
+    static let cornerRadius: CGFloat = 10
+    /// The sidebar's inset from the window's edges on macOS 26. Each pane
+    /// keeps this inset from the edges it touches, so the panes' outer
+    /// edges line up with the sidebar's.
+    static let windowInset: CGFloat = 8
+    /// Clearance between neighboring panes, the same as the inset from
+    /// the window's edges, so every clearance in the window reads alike.
+    static let gap: CGFloat = windowInset
+    /// Padding that puts a pane one gap under the split view, whose
+    /// bottom edge already sits one window inset below the sidebar.
+    static let belowSplitViewPadding: CGFloat = gap - windowInset
     /// Resting clearance for the last row, past the bottom fade.
     static let bottomRestingInset: CGFloat = 16
-    static let cardCornerRadius: CGFloat = 12
     /// Clearance between the card's top edge and the floating search bar.
     static let cardTopInset: CGFloat = 12
 }
@@ -21,7 +35,7 @@ private struct PaneBackdropModifier: ViewModifier {
             content
                 .padding(.top, PaneLayout.cardTopInset)
                 .scrollContentBackground(.hidden)
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: PaneLayout.cardCornerRadius))
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: PaneLayout.cornerRadius))
         case .clear:
             content
                 .scrollContentBackground(.hidden)
