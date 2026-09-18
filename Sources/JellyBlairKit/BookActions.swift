@@ -70,7 +70,8 @@ public struct BookActions {
 
     /// Re-reads everything the server and the file know about this book: the
     /// cover, the chapter list, the transcript, and the record with its
-    /// resume position. The book shows as syncing throughout.
+    /// resume position. A loaded book seeks to the server's position. The
+    /// book shows as syncing throughout.
     public func refreshMetadata() {
         guard !book.isSyncing else { return }
         book.isSyncing = true
@@ -84,7 +85,11 @@ public struct BookActions {
                 await book.refreshChapters()
             }
             await book.refreshLyrics()
-            await book.refreshFromServer()
+            if isLoaded {
+                await player.refreshFromServer()
+            } else {
+                await book.refreshFromServer()
+            }
         }
     }
 }

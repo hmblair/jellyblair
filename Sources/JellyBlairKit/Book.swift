@@ -44,9 +44,10 @@ public final class Book: Identifiable {
     public private(set) var downloadErrorMessage: String?
     @ObservationIgnored private var downloader: Downloader?
 
-    /// True while the player holds the book's live position. Adopting a
-    /// server record then keeps the local position, because the player
-    /// writes the settled one back when the book closes.
+    /// True while the player holds the book's live position. A routine
+    /// record refresh then keeps the local position, because the player
+    /// writes the settled one back when the book closes. An explicit sync
+    /// takes the server's position instead; see refreshFromServerTakingPosition.
     @ObservationIgnored var isPositionHeldByPlayer = false
 
     /// The library's hook for a changed record, so the record reaches the
@@ -119,13 +120,18 @@ public final class Book: Identifiable {
     // MARK: - Record updates
 
     /// Adopts a fresh server record, keeping the local position while the
-    /// player holds it. Returns whether anything changed; an unchanged
-    /// record writes nothing, so a no-op refresh invalidates no observers.
+    /// player holds it. Returns whether anything changed.
     @discardableResult
     func adoptRecord(_ fresh: BookRecord) -> Bool {
-        let adopted = isPositionHeldByPlayer ? fresh.withResumePosition(resumePositionSeconds) : fresh
-        guard adopted != record else { return false }
-        record = adopted
+        adoptWholeRecord(isPositionHeldByPlayer ? fresh.withResumePosition(resumePositionSeconds) : fresh)
+    }
+
+    /// Adopts a server record as it is, position included. Returns whether
+    /// anything changed; an unchanged record writes nothing, so a no-op
+    /// refresh invalidates no observers.
+    private func adoptWholeRecord(_ fresh: BookRecord) -> Bool {
+        guard fresh != record else { return false }
+        record = fresh
         return true
     }
 
@@ -134,6 +140,17 @@ public final class Book: Identifiable {
     public func refreshFromServer() async {
         guard let fresh = await client.fetchBook(id: id), adoptRecord(fresh) else { return }
         onRecordChanged?()
+    }
+
+    /// Fetches the book's current server record and adopts it whole, so the
+    /// server's position replaces the local one even while the player holds
+    /// it. Returns the server's position, or nil when the fetch fails.
+    func refreshFromServerTakingPosition() async -> Double? {
+        guard let fresh = await client.fetchBook(id: id) else { return nil }
+        if adoptWholeRecord(fresh) {
+            onRecordChanged?()
+        }
+        return fresh.resumePositionSeconds
     }
 
     /// Readies the book for its screen: the current record, the chapters,

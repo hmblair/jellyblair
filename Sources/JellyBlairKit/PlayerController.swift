@@ -213,7 +213,8 @@ public final class PlayerController {
 
         book = newBook
         // From here the player writes the live position into the book, and
-        // a server record cannot move it; see adoptRecord.
+        // a routine record refresh cannot move it; see adoptRecord. Only an
+        // explicit sync does, through refreshFromServer.
         newBook.isPositionHeldByPlayer = true
         newBook.onDownloadCompleted = { [weak self] in
             Task { await self?.adoptDownloadedFile() }
@@ -441,6 +442,16 @@ public final class PlayerController {
         await book.refreshChapters()
         guard self.book === book else { return }
         setChapters(book.chapters)
+    }
+
+    // MARK: - Server record
+
+    /// Re-reads the loaded book's server record and moves playback to the
+    /// server's position. A failed fetch leaves the position where it is.
+    public func refreshFromServer() async {
+        guard let book, let position = await book.refreshFromServerTakingPosition() else { return }
+        guard self.book === book else { return }
+        await seek(to: position)
     }
 
     // MARK: - Transport
