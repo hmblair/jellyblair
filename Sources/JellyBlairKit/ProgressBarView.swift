@@ -17,7 +17,8 @@ struct ProgressAnchor: Equatable {
 /// A track-and-fill progress bar with a knob on the fill's end, whose motion
 /// is a single linear Core Animation animation to the end of the range. The
 /// render server moves the bar; the app only touches it when the anchor
-/// changes. The knob grows while the user scrubs.
+/// changes. The knob grows while the user scrubs. On the Mac the fill
+/// follows the window's focus like the accent on any SwiftUI control.
 struct AnimatedProgressBar {
     static let knobDiameter: CGFloat = 14
 
@@ -34,6 +35,7 @@ extension AnimatedProgressBar: NSViewRepresentable {
     func updateNSView(_ view: ProgressBarLayerView, context: Context) {
         view.setAnchor(anchor)
         view.setScrubbing(isScrubbing)
+        view.setWindowActive(context.environment.controlActiveState != .inactive)
     }
 }
 #else
@@ -63,6 +65,9 @@ final class ProgressBarLayerView: PlatformNativeView {
     private let knobLayer = CALayer()
     private var anchor = ProgressAnchor(fraction: 0, fractionsPerSecond: 0, date: .distantPast)
     private var isScrubbing = false
+    #if canImport(AppKit)
+    private var isWindowActive = true
+    #endif
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -108,6 +113,14 @@ final class ProgressBarLayerView: PlatformNativeView {
         super.viewDidChangeEffectiveAppearance()
         applyColors()
     }
+
+    /// Grays the fill while the window is inactive, as the system does to
+    /// the accent on its own controls.
+    func setWindowActive(_ newValue: Bool) {
+        guard newValue != isWindowActive else { return }
+        isWindowActive = newValue
+        applyColors()
+    }
     #else
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -135,16 +148,20 @@ final class ProgressBarLayerView: PlatformNativeView {
         knobLayer.shadowPath = CGPath(ellipseIn: bounds, transform: nil)
     }
 
+    /// Applies the colors without the layers' implicit fade, so the bar
+    /// snaps with the system's controls when the window or appearance changes.
     private func applyColors() {
-        #if canImport(AppKit)
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            trackLayer.backgroundColor = NSColor.labelColor.withAlphaComponent(0.15).cgColor
-            fillLayer.backgroundColor = NSColor.controlAccentColor.cgColor
+        withoutImplicitAnimation {
+            #if canImport(AppKit)
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                trackLayer.backgroundColor = NSColor.labelColor.withAlphaComponent(0.15).cgColor
+                fillLayer.backgroundColor = NSColor.accent(windowActive: isWindowActive).cgColor
+            }
+            #else
+            trackLayer.backgroundColor = UIColor.label.withAlphaComponent(0.15).cgColor
+            fillLayer.backgroundColor = tintColor.cgColor
+            #endif
         }
-        #else
-        trackLayer.backgroundColor = UIColor.label.withAlphaComponent(0.15).cgColor
-        fillLayer.backgroundColor = tintColor.cgColor
-        #endif
     }
 
     private func layoutLayers() {

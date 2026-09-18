@@ -22,6 +22,13 @@ extension NSColor {
     static var accent: NSColor { .controlAccentColor }
     /// The color of search matches, everywhere search highlights text.
     static var matchHighlight: NSColor { .systemGreen }
+
+    /// The accent in an active window; the unemphasized selection gray in
+    /// an inactive one, as the system's own controls draw it. Layer-backed
+    /// views paint concrete colors, so they pick this per window state.
+    static func accent(windowActive: Bool) -> NSColor {
+        windowActive ? .controlAccentColor : .unemphasizedSelectedContentBackgroundColor
+    }
 }
 #else
 import UIKit

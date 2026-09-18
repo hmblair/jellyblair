@@ -19,6 +19,15 @@ public struct AudioBarsView: View {
     /// screen during background playback.
     @Environment(\.scenePhase) private var scenePhase
 
+    /// On the Mac the bars gray with the window's focus, like the accent on
+    /// any SwiftUI control.
+    #if canImport(AppKit)
+    @Environment(\.controlActiveState) private var controlActiveState
+    private var isWindowActive: Bool { controlActiveState != .inactive }
+    #else
+    private var isWindowActive: Bool { true }
+    #endif
+
     public init(meter: AudioLevelMeter, isPlaying: Bool) {
         self.meter = meter
         self.isPlaying = isPlaying
@@ -29,7 +38,8 @@ public struct AudioBarsView: View {
             meter: meter,
             isPlaying: isPlaying,
             isSceneActive: scenePhase == .active,
-            isProminent: backgroundProminence == .increased
+            isProminent: backgroundProminence == .increased,
+            isWindowActive: isWindowActive
         )
             .frame(width: AudioBarsLayerView.totalWidth, height: AudioBarsLayerView.barMaxHeight)
     }
@@ -41,6 +51,7 @@ private struct AudioBarsHost {
     let isPlaying: Bool
     let isSceneActive: Bool
     let isProminent: Bool
+    let isWindowActive: Bool
 }
 
 #if canImport(AppKit)
@@ -50,7 +61,7 @@ extension AudioBarsHost: NSViewRepresentable {
     }
 
     func updateNSView(_ view: AudioBarsLayerView, context: Context) {
-        view.configure(meter: meter, isPlaying: isPlaying, isSceneActive: isSceneActive, isProminent: isProminent)
+        view.configure(meter: meter, isPlaying: isPlaying, isSceneActive: isSceneActive, isProminent: isProminent, isWindowActive: isWindowActive)
     }
 }
 #else
@@ -60,7 +71,7 @@ extension AudioBarsHost: UIViewRepresentable {
     }
 
     func updateUIView(_ view: AudioBarsLayerView, context: Context) {
-        view.configure(meter: meter, isPlaying: isPlaying, isSceneActive: isSceneActive, isProminent: isProminent)
+        view.configure(meter: meter, isPlaying: isPlaying, isSceneActive: isSceneActive, isProminent: isProminent, isWindowActive: isWindowActive)
     }
 }
 #endif
@@ -80,6 +91,7 @@ final class AudioBarsLayerView: PlatformNativeView {
     private var meter: AudioLevelMeter?
     private var isPlaying = false
     private var isProminent = false
+    private var isWindowActive = true
     private var barsDisplayLink: CADisplayLink?
 
     private var isSceneActive = true
@@ -151,12 +163,13 @@ final class AudioBarsLayerView: PlatformNativeView {
     }
     #endif
 
-    func configure(meter: AudioLevelMeter, isPlaying: Bool, isSceneActive: Bool, isProminent: Bool) {
+    func configure(meter: AudioLevelMeter, isPlaying: Bool, isSceneActive: Bool, isProminent: Bool, isWindowActive: Bool) {
         self.meter = meter
         self.isPlaying = isPlaying
         self.isSceneActive = isSceneActive
-        if isProminent != self.isProminent {
+        if isProminent != self.isProminent || isWindowActive != self.isWindowActive {
             self.isProminent = isProminent
+            self.isWindowActive = isWindowActive
             applyColors()
         }
         syncDisplayLink()
@@ -212,10 +225,14 @@ final class AudioBarsLayerView: PlatformNativeView {
         CATransaction.commit()
     }
 
+    /// Applies the bar color without the layers' implicit fade, so the bars
+    /// snap with the system's controls when the window or appearance changes.
     private func applyColors() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         #if canImport(AppKit)
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let color = isProminent ? NSColor.white : NSColor.controlAccentColor
+            let color = isProminent ? NSColor.white : NSColor.accent(windowActive: isWindowActive)
             for bar in barLayers {
                 bar.backgroundColor = color.cgColor
             }
@@ -226,5 +243,6 @@ final class AudioBarsLayerView: PlatformNativeView {
             bar.backgroundColor = color.cgColor
         }
         #endif
+        CATransaction.commit()
     }
 }
