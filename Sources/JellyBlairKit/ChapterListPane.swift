@@ -62,7 +62,7 @@ struct ChapterListPane: View {
                         player.open(book, playWhenReady: true, startAtSeconds: chapter.startSeconds)
                     }
                 }
-                .sleepTimerContextMenu(for: chapter, isLoaded: isLoaded)
+                .chapterContextMenu(for: chapter, in: book, isCurrent: chapter.index == marked, isLoaded: isLoaded, canStartPlayback: canStartPlayback)
             }
             .listStyle(.plain)
             // Keeps the resting rows clear of the floating filter bar.

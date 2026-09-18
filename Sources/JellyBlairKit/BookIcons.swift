@@ -68,6 +68,10 @@ public let refreshMetadataIcon = Icon("arrow.trianglehead.2.clockwise.rotate.90"
 /// sheet's reset row and in the book actions menu.
 public let resetPlaybackIcon = Icon("exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
 
+/// The symbol for playing or resuming a book, shared by the book screen's
+/// play button and the current chapter's resume item.
+public let playIcon = Icon("play.fill")
+
 /// The symbol for the sleep timer, shared by the chapter menu, the chapter
 /// row's marker, and the transport readout.
 public let sleepTimerIcon = Icon("moon.zzz.fill")

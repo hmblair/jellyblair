@@ -31,7 +31,7 @@ struct BookPlayButton: View {
             player.open(book, playWhenReady: true)
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "play.fill")
+                playIcon.plain
                 if book.isStarted {
                     Text("Resume")
                 } else {

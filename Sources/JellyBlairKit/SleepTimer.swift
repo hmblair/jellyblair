@@ -1,27 +1,5 @@
 import SwiftUI
 
-/// Attaches the sleep timer item as a context menu on a chapter row. A
-/// right click on the Mac and a long press on the phone open it. The item
-/// acts only on the loaded book's chapters.
-struct SleepTimerContextMenu: ViewModifier {
-    let chapter: Chapter
-    let isLoaded: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .contextMenu {
-                SleepTimerMenuItem(chapter: chapter, isLoaded: isLoaded)
-            }
-    }
-}
-
-extension View {
-    /// Gives a chapter row the sleep timer item as its context menu.
-    func sleepTimerContextMenu(for chapter: Chapter, isLoaded: Bool) -> some View {
-        modifier(SleepTimerContextMenu(chapter: chapter, isLoaded: isLoaded))
-    }
-}
-
 /// One menu item that sets the sleep timer at the chapter's end, or
 /// cancels the timer when it already sits there.
 struct SleepTimerMenuItem: View {
