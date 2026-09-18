@@ -1,15 +1,11 @@
 import SwiftUI
 
-/// A sidebar or list row for one book, with level bars on the loaded one.
+/// A sidebar or list row for one book.
 public struct BookRow: View {
     let book: Book
-    let isLoaded: Bool
 
-    @Environment(PlayerController.self) private var player
-
-    public init(book: Book, isLoaded: Bool) {
+    public init(book: Book) {
         self.book = book
-        self.isLoaded = isLoaded
     }
 
     @State private var isHovering = false
@@ -28,10 +24,6 @@ public struct BookRow: View {
             }
 
             Spacer()
-
-            if isLoaded {
-                AudioBarsView(meter: player.audioMeter, isPlaying: player.isPlaying)
-            }
         }
         .padding(.vertical, 2)
         // The row stretches to the full cell width, so hover responds

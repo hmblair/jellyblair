@@ -143,7 +143,7 @@ public struct LibraryList: View {
     }
 
     private func bookRow(_ book: Book) -> some View {
-        BookRow(book: book, isLoaded: book.id == player.book?.id)
+        BookRow(book: book)
     }
 
     private func exitScope() {
