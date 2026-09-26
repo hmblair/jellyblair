@@ -210,6 +210,9 @@ struct SeekTimeRow<BelowCenter: View>: View {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 guard player.isReady else { return }
+                if scrubOrigin == nil {
+                    player.beginScrub()
+                }
                 let origin = scrubOrigin ?? scrubOrigin(for: value, width: width)
                 scrubOrigin = origin
                 dragFraction = scrubFraction(for: value, origin: origin, width: width)
@@ -220,6 +223,7 @@ struct SeekTimeRow<BelowCenter: View>: View {
                 scrubOrigin = nil
                 guard !isStationaryKnobGrab(value, origin: origin) else {
                     dragFraction = nil
+                    player.endScrub()
                     return
                 }
                 seek(toFraction: scrubFraction(for: value, origin: origin, width: width))

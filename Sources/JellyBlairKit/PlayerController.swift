@@ -120,6 +120,11 @@ public final class PlayerController {
     /// The position the listener last asked for. Every anchor carries it.
     private var requestedSeconds: Double = 0
 
+    /// True while the player is stopped for a seek: a scrub in progress or
+    /// a seek landing. The listener still intends to play, so the playing
+    /// flag holds and playback resumes when the hold ends.
+    private var isHeldForSeek = false
+
     /// Seconds between progress reports to the server.
     private static let progressReportInterval: TimeInterval = 10
 
@@ -477,6 +482,11 @@ public final class PlayerController {
     }
 
     public func pause() {
+        // The player is already still during a seek hold, so its own state
+        // cannot report this pause.
+        if isHeldForSeek {
+            updatePlayingState(false)
+        }
         player?.pause()
     }
 
@@ -499,6 +509,7 @@ public final class PlayerController {
             }
             startProgressReports()
         } else {
+            isHeldForSeek = false
             reanchorFromPlayer()
             audioMeter.reset()
             // The timer stops with playback: one final report below carries
@@ -523,6 +534,39 @@ public final class PlayerController {
         isPlaying ? pause() : play()
     }
 
+    // MARK: - Seeking
+
+    /// Stops the audio while the listener scrubs the seek bar. The seek
+    /// that ends the scrub resumes playback once it lands; a scrub that
+    /// ends without a seek must call endScrub.
+    public func beginScrub() {
+        guard isReady else { return }
+        holdForSeek()
+    }
+
+    /// Resumes playback after a scrub that ended without a seek.
+    public func endScrub() {
+        releaseSeekHold()
+    }
+
+    /// Stops the player while the playing flag holds, so the transport,
+    /// the reporting session, and Now Playing stay as they are. The
+    /// player's own pause report is ignored while the hold stands; see
+    /// handlePlayerStateChange.
+    private func holdForSeek() {
+        guard isPlaying, !isHeldForSeek else { return }
+        isHeldForSeek = true
+        player?.pause()
+        audioMeter.reset()
+    }
+
+    /// Ends the hold and sets the player moving again.
+    private func releaseSeekHold() {
+        guard isHeldForSeek else { return }
+        isHeldForSeek = false
+        startPlayback()
+    }
+
     public func seek(to seconds: Double) async {
         guard isReady, player != nil else { return }
         let target = max(0, min(seconds, duration))
@@ -530,16 +574,19 @@ public final class PlayerController {
         cancelSleepTimerIfPassed(by: target)
         // The displays sit at the target while the seek lands.
         setAnchor(position: target, rate: 0)
+        holdForSeek()
         seeksInFlight += 1
         let time = CMTime(seconds: target, preferredTimescale: Int32(ticksPerSecond))
         await player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         seeksInFlight -= 1
         // A superseded seek leaves the rest to the newest one.
         guard seeksInFlight == 0 else { return }
-        // Playing to the end zeroes the player's rate, so a seek away from the
-        // end must re-assert it to keep the playing state truthful.
+        // Playback starts again with or without a hold: playing to the end
+        // zeroes the player's rate, so a seek away from the end must
+        // re-assert it to keep the playing state truthful.
         if isPlaying {
-            player?.rate = Float(playbackSpeed)
+            isHeldForSeek = false
+            startPlayback()
         } else {
             // No timer runs while paused, so a paused seek reports its new
             // position itself.
@@ -800,9 +847,16 @@ public final class PlayerController {
         timeControlObservation = player.observe(\.timeControlStatus) { [weak self] player, _ in
             let playing = player.timeControlStatus != .paused
             Task { @MainActor in
-                self?.updatePlayingState(playing)
+                self?.handlePlayerStateChange(playing)
             }
         }
+    }
+
+    /// Mirrors the player's state, except the pause of a seek hold, which
+    /// the listener did not ask for.
+    private func handlePlayerStateChange(_ playing: Bool) {
+        guard playing || !isHeldForSeek else { return }
+        updatePlayingState(playing)
     }
 
     private func observeFailure(of item: AVPlayerItem) {
