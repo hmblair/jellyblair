@@ -91,6 +91,14 @@ struct ChapterListPane: View {
             .onChange(of: marked, initial: true) { oldIndex, newIndex in
                 centerOnMarked(proxy, animated: oldIndex != newIndex)
             }
+            // A resize, such as a sheet detent change or a window resize,
+            // keeps the marked row's old offset in a viewport of a new
+            // height, so tracking recenters on the new geometry.
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { _ in
+                centerOnMarked(proxy, animated: false)
+            }
             .onUserScroll {
                 isTracking = false
             }

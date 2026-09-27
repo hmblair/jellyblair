@@ -214,8 +214,9 @@ public final class TranscriptTextCoordinator: NSObject {
             self?.handleTap(atUTF16Index: index)
         }
         // The first real width and every width change re-lay the visible
-        // lines; tracking recenters on the new geometry.
-        viewport.onWidthChange = { [weak self] in
+        // lines, and a height change resizes the viewport around them;
+        // tracking recenters on the new geometry.
+        viewport.onSizeChange = { [weak self] in
             self?.followPosition(recentered: true)
         }
     }

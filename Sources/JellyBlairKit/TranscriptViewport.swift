@@ -96,13 +96,16 @@ final class TranscriptViewport: NSObject {
     var onUserScroll: (() -> Void)?
     /// Called with the tapped character's UTF-16 storage index.
     var onTap: ((Int) -> Void)?
-    /// Called after a width change has re-laid the visible lines.
-    var onWidthChange: (() -> Void)?
+    /// Called after a width change has re-laid the visible lines, and
+    /// after a height change has left the same lines in a taller or
+    /// shorter viewport.
+    var onSizeChange: (() -> Void)?
 
     private var baseLines: [TranscriptRenderLine] = []
     private var lineRanges: [NSRange] = []
     private var horizontalPadding: CGFloat = 0
     private var lastWidth: CGFloat = 0
+    private var lastHeight: CGFloat = 0
 
     private var pool: [Int: TranscriptLineView] = [:]
     private var spare: [TranscriptLineView] = []
@@ -244,8 +247,17 @@ final class TranscriptViewport: NSObject {
         guard width > 0 else { return }
         if width != lastWidth {
             adoptWidth(width)
+        } else if viewportHeight() != lastHeight {
+            adoptHeight()
         }
         reconcileVisible()
+    }
+
+    /// Adopts a new viewport height. The lines keep their layout, so only
+    /// the centering needs the new geometry.
+    private func adoptHeight() {
+        lastHeight = viewportHeight()
+        onSizeChange?()
     }
 
     /// Adopts a new viewport width, keeping the line at the top of the
@@ -263,7 +275,8 @@ final class TranscriptViewport: NSObject {
             updateContentHeight()
             setScrollY(metrics.top(of: anchor.line) - anchor.offsetFromViewportTop)
         }
-        onWidthChange?()
+        lastHeight = viewportHeight()
+        onSizeChange?()
     }
 
     /// The line at the viewport's top and its screen offset, the pair that
@@ -410,6 +423,14 @@ final class TranscriptViewport: NSObject {
         scrollView.contentView.bounds.width
         #else
         scrollView.bounds.width
+        #endif
+    }
+
+    private func viewportHeight() -> CGFloat {
+        #if canImport(AppKit)
+        scrollView.contentView.bounds.height
+        #else
+        scrollView.bounds.height
         #endif
     }
 
