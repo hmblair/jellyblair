@@ -140,20 +140,26 @@ public struct MainView: View {
             rootList
                 .navigationDestination(for: LibraryRoute.self) { route in
                     destination(for: route)
+                        .compactBottomInset { compactBottomBar }
                 }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                if !isShowingLoadedBookScreen {
-                    playbackBar
-                }
-                OfflineIndicator()
-            }
         }
     }
 
     private var rootList: some View {
         LibraryList(selection: pushingSelection, scope: .constant(nil))
+            .compactBottomInset { compactBottomBar }
+    }
+
+    /// The bar and the indicator under each compact screen. Each screen
+    /// carries the inset itself, so a scrolling screen extends its content
+    /// by it and its last row rests above the bar.
+    private var compactBottomBar: some View {
+        VStack(spacing: 0) {
+            if !isShowingLoadedBookScreen {
+                playbackBar
+            }
+            OfflineIndicator()
+        }
     }
 
     /// A compact layout has no detail pane to fill, so a chosen book is
@@ -237,6 +243,11 @@ enum LibraryRoute: Hashable {
 }
 
 extension View {
+    /// The compact layout's bottom bar as a safe-area inset of this screen.
+    fileprivate func compactBottomInset<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        safeAreaInset(edge: .bottom, spacing: 0, content: bar)
+    }
+
     /// An inline title bar, which iOS alone has.
     func inlineNavigationTitle() -> some View {
         #if os(iOS)
