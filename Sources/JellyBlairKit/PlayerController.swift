@@ -146,12 +146,16 @@ public final class PlayerController {
     /// Live band levels of the playing audio, for the now-playing bars.
     public let audioMeter = AudioLevelMeter()
 
+    /// Feeds the playing audio through the limiter and into the meter.
+    private let audioTap: AudioTap
+
     /// The audio track of the item the meter taps, kept so the tap can
     /// re-attach when the app returns to the foreground.
     private var meterTrack: AVAssetTrack?
 
     public init(client: JellyfinClient) {
         self.client = client
+        audioTap = AudioTap(limiter: PeakLimiter(), meter: audioMeter)
         let storedSpeed = UserDefaults.standard.double(forKey: Self.playbackSpeedDefaultsKey)
         playbackSpeed = storedSpeed > 0 ? storedSpeed : 1.0
         observeAppTermination()
@@ -429,7 +433,7 @@ public final class PlayerController {
     /// playback, so only the capture flag changes with visibility.
     private func syncAudioMeterTap() {
         guard let item = player?.currentItem else { return }
-        if item.audioMix == nil, let meterTrack, let audioMix = audioMeter.makeAudioMix(for: meterTrack) {
+        if item.audioMix == nil, let meterTrack, let audioMix = audioTap.makeAudioMix(for: meterTrack) {
             item.audioMix = audioMix
         }
         audioMeter.setCapturing(canShowMeter)

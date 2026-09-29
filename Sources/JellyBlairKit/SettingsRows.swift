@@ -36,6 +36,7 @@ public struct SettingsRows: View {
         }
         Section("Playback") {
             SkipIntervalSettings()
+            LoudnessLimitSettings()
         }
         SettingsInfoSection()
     }

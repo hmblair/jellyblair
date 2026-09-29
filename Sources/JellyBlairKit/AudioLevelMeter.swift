@@ -1,12 +1,12 @@
 import Accelerate
 import AVFoundation
 import Foundation
-import MediaToolbox
 import QuartzCore
 
-/// Measures per-band levels of the playing audio through an MTAudioProcessingTap.
-/// The tap only captures samples, on the audio render thread. The transform
-/// runs in currentBands(), so audio that nothing displays costs nothing.
+/// Measures per-band levels of the playing audio from the buffers the audio
+/// tap hands it. The capture only copies samples, on the audio render
+/// thread. The transform runs in currentBands(), so audio that nothing
+/// displays costs nothing.
 public final class AudioLevelMeter {
     public static let bandCount = bandLowerFrequencies.count
 
@@ -23,8 +23,8 @@ public final class AudioLevelMeter {
     /// the last band runs up to the Nyquist frequency.
     private static let bandLowerFrequencies: [Float] = [86, 500, 2500]
 
-    /// Stands in for the stream's sample rate if a read ever races the tap's
-    /// prepare callback, so the bin math never divides by zero.
+    /// Stands in for the stream's sample rate until the tap's prepare
+    /// callback reports one, so the bin math never divides by zero.
     private static let fallbackSampleRate: Float = 44100
 
     /// The FFT bin range of each band at the given sample rate, so the bands
@@ -44,7 +44,8 @@ public final class AudioLevelMeter {
     private static let fallRemainderPerSecond: Float = 0.0002
 
     /// Guards the captured samples, which the audio thread writes and the
-    /// reader takes, and the format fields, which the tap's callbacks write.
+    /// reader takes, and the sample rate, which the tap's prepare callback
+    /// writes.
     private let lock = NSLock()
     private var capturedSamples = [Float](repeating: 0, count: AudioLevelMeter.fftSize)
     private var hasCapturedSamples = false
@@ -53,12 +54,7 @@ public final class AudioLevelMeter {
     /// at once.
     private var isCapturing = true
 
-    /// True while the prepared stream is 32-bit float PCM, the only format
-    /// the tap can read. The tap's prepare callback writes it.
-    private var formatIsFloat32 = false
-
-    /// The sample rate of the prepared stream. The tap's prepare callback
-    /// writes it.
+    /// The sample rate of the prepared stream.
     private var sampleRate: Float = 0
 
     /// Buffers the reader alone touches, held so that no read allocates.
@@ -117,69 +113,19 @@ public final class AudioLevelMeter {
         lock.unlock()
     }
 
-    // MARK: - Tap plumbing
-
-    /// Builds an audio mix whose processing tap feeds this meter.
-    func makeAudioMix(for track: AVAssetTrack) -> AVAudioMix? {
-        // The tap retains the meter and releases it in finalize, so the audio
-        // thread can never call into a deallocated meter.
-        var callbacks = MTAudioProcessingTapCallbacks(
-            version: kMTAudioProcessingTapCallbacksVersion_0,
-            clientInfo: UnsafeMutableRawPointer(Unmanaged.passRetained(self).toOpaque()),
-            init: { _, clientInfo, tapStorageOut in
-                tapStorageOut.pointee = clientInfo!
-            },
-            finalize: { tap in
-                Unmanaged<AudioLevelMeter>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).release()
-            },
-            prepare: { tap, _, format in
-                let meter = Unmanaged<AudioLevelMeter>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
-                meter.noteFormat(format.pointee)
-            },
-            unprepare: { tap in
-                let meter = Unmanaged<AudioLevelMeter>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
-                meter.forgetFormat()
-            },
-            process: { tap, numberFrames, _, bufferListInOut, numberFramesOut, flagsOut in
-                let status = MTAudioProcessingTapGetSourceAudio(tap, numberFrames, bufferListInOut, flagsOut, nil, numberFramesOut)
-                guard status == noErr else { return }
-                let meter = Unmanaged<AudioLevelMeter>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
-                meter.capture(bufferList: bufferListInOut, frameCount: Int(numberFramesOut.pointee))
-            }
-        )
-        var tap: MTAudioProcessingTap?
-        let status = MTAudioProcessingTapCreate(kCFAllocatorDefault, &callbacks, kMTAudioProcessingTapCreationFlag_PostEffects, &tap)
-        guard status == noErr, let tap else { return nil }
-        let parameters = AVMutableAudioMixInputParameters(track: track)
-        parameters.audioTapProcessor = tap
-        let mix = AVMutableAudioMix()
-        mix.inputParameters = [parameters]
-        return mix
-    }
-
     // MARK: - Capture
 
-    private func noteFormat(_ format: AudioStreamBasicDescription) {
-        let isFloat32 = format.mFormatID == kAudioFormatLinearPCM
-            && format.mFormatFlags & kAudioFormatFlagIsFloat != 0
-            && format.mBitsPerChannel == 32
+    func setSampleRate(_ rate: Float) {
         lock.lock()
-        formatIsFloat32 = isFloat32
-        sampleRate = Float(format.mSampleRate)
-        lock.unlock()
-    }
-
-    private func forgetFormat() {
-        lock.lock()
-        formatIsFloat32 = false
+        sampleRate = rate
         lock.unlock()
     }
 
     /// Copies one buffer of audio aside for the next read. Runs on the audio
     /// render thread, so it checks the buffer and copies it, nothing more.
-    private func capture(bufferList: UnsafeMutablePointer<AudioBufferList>, frameCount: Int) {
+    func capture(bufferList: UnsafeMutablePointer<AudioBufferList>, frameCount: Int) {
         lock.lock()
-        let readable = formatIsFloat32 && isCapturing
+        let readable = isCapturing
         lock.unlock()
         guard readable else { return }
         let buffers = UnsafeMutableAudioBufferListPointer(bufferList)
