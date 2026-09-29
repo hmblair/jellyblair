@@ -587,12 +587,11 @@ public final class PlayerController {
         if isPlaying {
             isHeldForSeek = false
             startPlayback()
-        } else {
-            // No timer runs while paused, so a paused seek reports its new
-            // position itself.
-            reportProgressNow()
         }
         reanchorFromPlayer()
+        // The timer would carry the jump only at its next fire, and no
+        // timer runs while paused, so the landed seek reports itself.
+        reportProgressNow()
         syncNowPlaying()
     }
 
