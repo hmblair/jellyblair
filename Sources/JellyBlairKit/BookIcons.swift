@@ -5,9 +5,8 @@ public let durationIcon = Icon("clock.fill")
 /// The symbol for a book's remaining listening time, in the sort menu.
 public let remainingSortIcon = Icon("hourglass")
 
-/// The symbol for a book's year, shared by the book screen's metadata lines
-/// and the sort menu.
-public let yearIcon = Icon("calendar")
+/// The symbol for a book's publish date, in the sort menu.
+public let datePublishedSortIcon = Icon("calendar")
 
 /// The symbol for a book's bitrate and codec, on the file info sheet's
 /// lines.

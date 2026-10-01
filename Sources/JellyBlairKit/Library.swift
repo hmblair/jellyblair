@@ -361,8 +361,8 @@ public final class Library {
             return sortedByName(books, direction: direction)
         case .lastPlayed:
             return sortedByValue(books, direction: direction) { $0.record.lastPlayedDate }
-        case .year:
-            return sortedByValue(books, direction: direction) { $0.record.productionYear }
+        case .datePublished:
+            return sortedByValue(books, direction: direction) { $0.record.publishedDate }
         case .duration:
             return sortedByValue(books, direction: direction) { $0.record.runTimeTicks }
         case .remaining:

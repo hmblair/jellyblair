@@ -195,7 +195,7 @@ struct BookTitleBlock: View {
     private var catalogEntries: [(kind: BookGroup.Kind?, text: String)] {
         var entries: [(kind: BookGroup.Kind?, text: String)] = []
         entries += BookGroup.Kind.publisher.names(of: book).map { (.publisher, $0) }
-        if let year = book.productionYear {
+        if let year = book.publishedYear {
             entries.append((nil, String(year)))
         }
         entries += BookGroup.Kind.genre.names(of: book).map { (.genre, $0) }

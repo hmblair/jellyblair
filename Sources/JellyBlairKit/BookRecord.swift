@@ -15,8 +15,10 @@ public struct BookRecord: Codable, Identifiable, Hashable {
     public let genres: [String]?
     public let studios: [Studio]?
     public let hasLyrics: Bool?
-    /// The year of the audiobook edition, from the file's year tag.
-    public let productionYear: Int?
+    /// When the audiobook edition was published, as the server writes it,
+    /// from the file's date tag. A file that carries only a year reads as
+    /// the first day of that year.
+    public let publishedTimestamp: String?
     /// The series the book belongs to, when it belongs to one.
     public private(set) var series: String?
     /// When the client fetched this record from the server. The client
@@ -36,7 +38,7 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         case genres = "Genres"
         case studios = "Studios"
         case hasLyrics = "HasLyrics"
-        case productionYear = "ProductionYear"
+        case publishedTimestamp = "PremiereDate"
         case series = "SeriesName"
         case lastSyncedTimestamp = "LastSyncedDate"
     }
@@ -179,6 +181,16 @@ public struct BookRecord: Codable, Identifiable, Hashable {
     /// The listening time left from the resume position to the end.
     public var remainingSeconds: Double {
         max(0, runTimeSeconds - resumePositionSeconds)
+    }
+
+    /// When the audiobook edition was published.
+    public var publishedDate: Date? {
+        publishedTimestamp.flatMap(parseServerDate)
+    }
+
+    /// The year the audiobook edition was published.
+    public var publishedYear: Int? {
+        publishedDate.map(serverYear)
     }
 
     /// When the book was last played, or nil when the server has never seen

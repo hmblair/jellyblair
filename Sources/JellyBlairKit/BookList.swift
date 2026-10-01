@@ -28,7 +28,7 @@ public struct BookGroup: Identifiable {
         public var suitedSort: BookSort? {
             switch self {
             case .series:
-                return BookSort(.year, direction: .ascending)
+                return BookSort(.datePublished, direction: .ascending)
             case .person, .publisher, .genre:
                 return nil
             }

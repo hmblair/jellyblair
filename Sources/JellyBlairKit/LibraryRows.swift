@@ -63,7 +63,7 @@ public struct BookRow: View {
     /// with a leading separator when an author precedes them.
     private var fixedDetailText: String {
         var parts: [String] = []
-        if let year = book.productionYear {
+        if let year = book.publishedYear {
             parts.append(String(year))
         }
         parts.append(formatHoursMinutes(book.runTimeSeconds))

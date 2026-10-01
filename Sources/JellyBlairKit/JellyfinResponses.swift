@@ -135,6 +135,17 @@ func parseServerDate(_ text: String) -> Date? {
     serverDateFormatter.date(from: withoutFractionalSeconds(text))
 }
 
+/// The year of a date as the server writes it, which is the year in UTC.
+func serverYear(of date: Date) -> Int {
+    serverCalendar.component(.year, from: date)
+}
+
+private let serverCalendar: Calendar = {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .gmt
+    return calendar
+}()
+
 /// Writes a timestamp in the server's format.
 func formatServerDate(_ date: Date) -> String {
     serverDateFormatter.string(from: date)
