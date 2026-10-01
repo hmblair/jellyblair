@@ -13,11 +13,11 @@ public enum DefaultLibraryFilters {
 
     /// The filters the list of a group of the kind opens with. No filter
     /// toggle is on, so the defaults hide none of the books of a person, a
-    /// series, a publisher, or a genre. The sort order is the one that
-    /// suits the kind, or the stored one when the kind has none.
+    /// series, a publisher, or a genre. The sort is the one that suits the
+    /// kind, or the stored one when the kind has none.
     public static func storedForGroup(ofKind kind: BookGroup.Kind?) -> LibraryFilters {
         var filters = stored.clearingFilters()
-        filters.setSortOrder(suiting: kind)
+        filters.setSort(suiting: kind)
         return filters
     }
 

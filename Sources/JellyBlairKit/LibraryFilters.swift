@@ -75,6 +75,19 @@ public enum BookSortOrder: CaseIterable, Codable, Hashable, Identifiable {
     }
 }
 
+/// A sort order with the direction it runs in.
+public struct BookSort: Codable, Equatable {
+    public var order: BookSortOrder
+    public var direction: SortDirection
+
+    /// The order in the given direction, or in its default direction when
+    /// none is given.
+    public init(_ order: BookSortOrder, direction: SortDirection? = nil) {
+        self.order = order
+        self.direction = direction ?? order.defaultDirection
+    }
+}
+
 /// The library list's filters and sort order, threaded whole from the filter
 /// bar to the visibility functions, so a new filter touches neither
 /// platform's screen.
@@ -82,7 +95,13 @@ public struct LibraryFilters: Codable, Equatable {
     /// The stored choices, leaving out the search query, which a list
     /// always opens without.
     private enum CodingKeys: String, CodingKey {
-        case downloadedOnly, readingOnly, playedFilter, favoritesOnly, sortOrder, sortDirection
+        case downloadedOnly, readingOnly, playedFilter, favoritesOnly, baseSort, filterSorts
+    }
+
+    /// The sort a filter brought with it.
+    private struct FilterSort: Codable, Equatable {
+        let filter: BookFilter
+        let sort: BookSort
     }
 
     public var searchQuery = ""
@@ -90,36 +109,63 @@ public struct LibraryFilters: Codable, Equatable {
     public private(set) var readingOnly = false
     public private(set) var playedFilter: PlayedFilter?
     public var favoritesOnly = false
-    public private(set) var sortOrder = BookSortOrder.name
-    public private(set) var sortDirection = BookSortOrder.name.defaultDirection
+    /// The sort the list shows while no filter brings a sort.
+    private var baseSort = BookSort(.name)
+    /// The sorts of the filters that are on and bring one, in the order
+    /// the filters turned on. The list shows the last.
+    private var filterSorts: [FilterSort] = []
 
     public init() {}
 
-    /// Chooses the order and starts it in the given direction, or in its
-    /// default direction when none is given.
-    public mutating func setSortOrder(_ order: BookSortOrder, direction: SortDirection? = nil) {
-        sortOrder = order
-        sortDirection = direction ?? order.defaultDirection
+    /// The sort the list shows: the last filter's sort, or the base sort
+    /// when no filter brings one. A new value becomes the base sort and
+    /// removes the filters' sorts, so a chosen sort stays when a filter
+    /// turns off.
+    private var sort: BookSort {
+        get {
+            filterSorts.last?.sort ?? baseSort
+        }
+        set {
+            baseSort = newValue
+            filterSorts = []
+        }
     }
 
-    /// Puts the list in the order that suits a group of the kind, when the
+    public var sortOrder: BookSortOrder { sort.order }
+    public var sortDirection: SortDirection { sort.direction }
+
+    /// Chooses the order and starts it in its default direction.
+    public mutating func setSortOrder(_ order: BookSortOrder) {
+        sort = BookSort(order)
+    }
+
+    /// Puts the list in the sort that suits a group of the kind, when the
     /// kind has one. The sort menu can then choose another order.
-    public mutating func setSortOrder(suiting kind: BookGroup.Kind?) {
-        guard let sort = kind?.suitedSort else { return }
-        setSortOrder(sort.order, direction: sort.direction)
+    public mutating func setSort(suiting kind: BookGroup.Kind?) {
+        guard let suited = kind?.suitedSort else { return }
+        sort = suited
     }
 
     /// Flips the current order's direction.
     public mutating func toggleSortDirection() {
-        sortDirection = sortDirection.flipped
+        sort.direction = sort.direction.flipped
     }
 
-    /// A copy with every filter toggle off, keeping the sort order and
-    /// the search query.
+    /// Adds a filter's sort, which the list then shows, or removes the
+    /// filter's sort when given none.
+    private mutating func setSort(_ sort: BookSort?, of filter: BookFilter) {
+        filterSorts.removeAll { $0.filter == filter }
+        if let sort {
+            filterSorts.append(FilterSort(filter: filter, sort: sort))
+        }
+    }
+
+    /// A copy with every filter toggle off, keeping the search query and
+    /// the base sort.
     public func clearingFilters() -> LibraryFilters {
         var copy = self
         copy.downloadedOnly = false
-        copy.readingOnly = false
+        copy.setReadingOnly(false)
         copy.playedFilter = nil
         copy.favoritesOnly = false
         return copy
@@ -135,13 +181,16 @@ public struct LibraryFilters: Codable, Equatable {
         BookFilter.allCases.filter { $0.isOn(in: self) }
     }
 
-    /// Turns the reading filter on or off, and puts the list in the order
-    /// that suits it: the books being read most recently played first, and
-    /// the whole library reads by title. The sort menu can then choose
-    /// another order.
+    /// The sort the reading filter brings: the most recently played first.
+    private static let readingSort = BookSort(.lastPlayed)
+
+    /// Turns the reading filter on or off. Turned on, it adds its sort,
+    /// which the list then shows. Turned off, it removes its sort, so the
+    /// list shows the sort from before, or the sort the sort menu chose in
+    /// between.
     public mutating func setReadingOnly(_ isOn: Bool) {
         readingOnly = isOn
-        setSortOrder(isOn ? .lastPlayed : .name)
+        setSort(isOn ? Self.readingSort : nil, of: .reading)
     }
 
     /// Turns a played filter on, or off when it is already on. Read and
@@ -160,7 +209,7 @@ public enum PlayedFilter: Codable {
 
 /// One of the library's filter toggles: it reads its state from the
 /// filters, tests one book, and names its books in the empty state.
-public enum BookFilter: CaseIterable {
+public enum BookFilter: CaseIterable, Codable {
     case unread
     case read
     case reading

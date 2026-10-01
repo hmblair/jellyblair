@@ -23,12 +23,12 @@ public struct BookGroup: Identifiable {
             }
         }
 
-        /// The order that suits the kind's shelf, or nil when the kind has
+        /// The sort that suits the kind's shelf, or nil when the kind has
         /// none. A series reads from its oldest book to its newest.
-        public var suitedSort: (order: BookSortOrder, direction: SortDirection)? {
+        public var suitedSort: BookSort? {
             switch self {
             case .series:
-                return (.year, .ascending)
+                return BookSort(.year, direction: .ascending)
             case .person, .publisher, .genre:
                 return nil
             }
