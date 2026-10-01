@@ -12,8 +12,8 @@ public enum DefaultLibraryFilters {
     }
 
     /// The filters a group's list opens with: the stored sort order with
-    /// no filter toggle, so the defaults hide none of a person's, a
-    /// publisher's, or a genre's books.
+    /// no filter toggle, so the defaults hide none of the books of a
+    /// person, a series, a publisher, or a genre.
     public static var storedForGroup: LibraryFilters {
         stored.clearingFilters()
     }

@@ -73,8 +73,9 @@ struct BookPlaybackCaption: View {
 }
 
 /// The title block as three groups — the title with its subtitle, the
-/// credit lines, and one catalog line — spaced apart so each reads at a
-/// glance. The lines wrap, following the given alignment.
+/// credit lines with the series line, and one catalog line — spaced apart
+/// so each reads at a glance. The lines wrap, following the given
+/// alignment.
 struct BookTitleBlock: View {
     let book: Book
     let alignment: HorizontalAlignment
@@ -110,16 +111,32 @@ struct BookTitleBlock: View {
     }
 
     /// One credit line per group of roles naming the same people, from
-    /// "Written by" through "Written, translated, and read by". Every
-    /// name opens the person's shelf, whichever roles it holds.
+    /// "Written by" through "Written, translated, and read by", then the
+    /// series line. Every person's name opens the person's shelf,
+    /// whichever roles it holds.
     @ViewBuilder
     private var creditsGroup: some View {
-        if !book.credits.isEmpty {
+        if !book.credits.isEmpty || book.series != nil {
             VStack(alignment: alignment, spacing: 3) {
                 ForEach(book.credits, id: \.self) { credit in
                     creditLine(prefix: credit.roles.creditPrefix, names: credit.names)
                 }
+                if let series = book.series {
+                    seriesLine(series)
+                }
             }
+            .font(metrics.bookScreen.lineFont)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    /// One line reading "Part of the x series", with the name opening the
+    /// shelf of the series.
+    private func seriesLine(_ series: String) -> some View {
+        FlowLine(alignment: alignment) {
+            Text("Part of the")
+            GroupNameButton(kind: .series, name: series, open: openBookGroup)
+            Text("series")
         }
     }
 
@@ -142,8 +159,6 @@ struct BookTitleBlock: View {
                 }
             }
         }
-        .font(metrics.bookScreen.lineFont)
-        .foregroundStyle(.secondary)
     }
 
     /// The publisher names, the year, and the genres joined by dots on

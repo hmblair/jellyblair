@@ -19,11 +19,47 @@ struct PublicSystemInfo: Decodable {
     }
 }
 
-struct ItemsResponse: Decodable {
-    let items: [BookRecord]
+struct ItemsResponse<Item: Decodable>: Decodable {
+    let items: [Item]
 
     enum CodingKeys: String, CodingKey {
         case items = "Items"
+    }
+}
+
+/// One audiobook item of a response: the book's record, and the identifier
+/// of the folder that holds the book.
+struct BookItem: Decodable {
+    let record: BookRecord
+    let parentID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case parentID = "ParentId"
+    }
+
+    init(from decoder: Decoder) throws {
+        record = try BookRecord(from: decoder)
+        parentID = try decoder.container(keyedBy: CodingKeys.self).decodeIfPresent(String.self, forKey: .parentID)
+    }
+}
+
+struct FolderRecord: Decodable {
+    let id: String
+    let name: String
+    let type: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "Id"
+        case name = "Name"
+        case type = "Type"
+    }
+
+    /// The type of a folder inside a library. A library carries another
+    /// type.
+    private static let plainFolderType = "Folder"
+
+    var isPlainFolder: Bool {
+        type == Self.plainFolderType
     }
 }
 

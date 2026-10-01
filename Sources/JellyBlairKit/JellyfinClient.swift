@@ -187,30 +187,65 @@ public final class JellyfinClient {
     // MARK: - Library
 
     func fetchAudiobooks() async throws -> [BookRecord] {
-        let query = [
-            URLQueryItem(name: "IncludeItemTypes", value: "AudioBook"),
-            URLQueryItem(name: "Recursive", value: "true"),
-            URLQueryItem(name: "SortBy", value: "SortName"),
-            URLQueryItem(name: "Fields", value: "People,MediaSources,Genres,Studios"),
-        ]
-        let request = makeRequest(path: "Items", query: query)
-        let data = try await send(request)
-        return try decode(ItemsResponse.self, from: data).items.map(stampedWithSyncTime)
+        let items = try await fetchAudiobookItems()
+        let folders = try await fetchFoldersByID()
+        return items.map { record(of: $0, parentFolder: $0.parentFolder(in: folders)) }
     }
 
     /// Fetches a single book's record with fresh user data, such as the
     /// resume position.
     public func fetchBook(id: String) async -> BookRecord? {
-        let request = makeRequest(path: "Items/\(id)")
-        guard let data = try? await send(request) else { return nil }
-        return (try? decode(BookRecord.self, from: data)).map(stampedWithSyncTime)
+        try? await fetchBookRecord(id: id)
     }
 
-    /// Stamps a fetched record with the current time as its sync time.
-    /// Every record enters the app through this stamp, so each book always
-    /// knows when the server last confirmed it.
-    private func stampedWithSyncTime(_ record: BookRecord) -> BookRecord {
-        record.withSyncTimestamp(formatServerDate(Date()))
+    /// Fetches a single book's item and its parent folder, and returns the
+    /// book's record.
+    private func fetchBookRecord(id: String) async throws -> BookRecord {
+        let item: BookItem = try await fetchItem(id: id)
+        return record(of: item, parentFolder: try await fetchParentFolder(of: item))
+    }
+
+    private func fetchAudiobookItems() async throws -> [BookItem] {
+        try await fetchItems(ofType: "AudioBook", query: [
+            URLQueryItem(name: "SortBy", value: "SortName"),
+            URLQueryItem(name: "Fields", value: "People,MediaSources,Genres,Studios,ParentId"),
+        ])
+    }
+
+    /// Fetches every folder inside the libraries, keyed by identifier.
+    private func fetchFoldersByID() async throws -> [String: FolderRecord] {
+        let folders: [FolderRecord] = try await fetchItems(ofType: "Folder")
+        return Dictionary(folders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// Fetches the folder that holds a book, or nil for a book that
+    /// reports none.
+    private func fetchParentFolder(of item: BookItem) async throws -> FolderRecord? {
+        guard let parentID = item.parentID else { return nil }
+        return try await fetchItem(id: parentID) as FolderRecord
+    }
+
+    /// Fetches every item of one type, at any depth in the libraries.
+    private func fetchItems<Item: Decodable>(ofType type: String, query: [URLQueryItem] = []) async throws -> [Item] {
+        let typeQuery = [
+            URLQueryItem(name: "IncludeItemTypes", value: type),
+            URLQueryItem(name: "Recursive", value: "true"),
+        ]
+        let data = try await send(makeRequest(path: "Items", query: typeQuery + query))
+        return try decode(ItemsResponse<Item>.self, from: data).items
+    }
+
+    private func fetchItem<Item: Decodable>(id: String) async throws -> Item {
+        let data = try await send(makeRequest(path: "Items/\(id)"))
+        return try decode(Item.self, from: data)
+    }
+
+    /// Makes the record the app keeps from a fetched item: in its series,
+    /// and stamped with the current time as its sync time. Every record
+    /// enters the app through here, so each book always knows when the
+    /// server last confirmed it.
+    private func record(of item: BookItem, parentFolder: FolderRecord?) -> BookRecord {
+        item.recordWithSeries(fromParentFolder: parentFolder).withSyncTimestamp(formatServerDate(Date()))
     }
 
     /// Fetches a book's lyric sidecar, parsed by the server into transcript

@@ -1,9 +1,11 @@
 import Foundation
 
-/// A named shelf of books: one person's, one publisher's, or one genre's.
+/// A named shelf of books: the books of one person, one series, one
+/// publisher, or one genre.
 public struct BookGroup: Identifiable {
     public enum Kind: Hashable {
         case person
+        case series
         case publisher
         case genre
 
@@ -12,6 +14,8 @@ public struct BookGroup: Identifiable {
             switch self {
             case .person:
                 return String(localized: "Person")
+            case .series:
+                return String(localized: "Series")
             case .publisher:
                 return String(localized: "Publisher")
             case .genre:
@@ -28,6 +32,8 @@ public struct BookGroup: Identifiable {
             switch self {
             case .person:
                 return uniqueNames(PersonRole.allCases.flatMap { book.names(for: $0) })
+            case .series:
+                return book.series.map { [$0] } ?? []
             case .publisher:
                 return book.publishers
             case .genre:

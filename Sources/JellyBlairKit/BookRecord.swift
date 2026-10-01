@@ -17,6 +17,8 @@ public struct BookRecord: Codable, Identifiable, Hashable {
     public let hasLyrics: Bool?
     /// The year of the audiobook edition, from the file's year tag.
     public let productionYear: Int?
+    /// The series the book belongs to, when it belongs to one.
+    public private(set) var series: String?
     /// When the client fetched this record from the server. The client
     /// stamps every fetched record, so it is nil only in snapshots written
     /// before the stamp existed.
@@ -35,6 +37,7 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         case studios = "Studios"
         case hasLyrics = "HasLyrics"
         case productionYear = "ProductionYear"
+        case series = "SeriesName"
         case lastSyncedTimestamp = "LastSyncedDate"
     }
 
@@ -120,12 +123,12 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         splitTitle(name)
     }
 
-    /// True when the title, a person in any role, a genre, or a publisher
-    /// contains the query, by the same matching the book screen's
-    /// searches use.
+    /// True when the title, a person in any role, the series, a genre, or
+    /// a publisher contains the query, by the same matching the book
+    /// screen's searches use.
     public func matches(_ query: String) -> Bool {
         let people = PersonRole.allCases.map { names(for: $0).joined(separator: ", ") }
-        return ([name, genre, publisher].compactMap { $0 } + people)
+        return ([name, series, genre, publisher].compactMap { $0 } + people)
             .contains { !findOccurrences(of: query, in: $0 as NSString, caseSensitive: false, limit: 1).isEmpty }
     }
 
@@ -205,6 +208,13 @@ public struct BookRecord: Codable, Identifiable, Hashable {
     public func withSyncTimestamp(_ timestamp: String) -> BookRecord {
         var copy = self
         copy.lastSyncedTimestamp = timestamp
+        return copy
+    }
+
+    /// Returns a copy of the record in a series.
+    public func withSeries(_ series: String) -> BookRecord {
+        var copy = self
+        copy.series = series
         return copy
     }
 
