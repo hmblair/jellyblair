@@ -23,6 +23,17 @@ public struct BookGroup: Identifiable {
             }
         }
 
+        /// The order that suits the kind's shelf, or nil when the kind has
+        /// none. A series reads from its oldest book to its newest.
+        public var suitedSort: (order: BookSortOrder, direction: SortDirection)? {
+            switch self {
+            case .series:
+                return (.year, .ascending)
+            case .person, .publisher, .genre:
+                return nil
+            }
+        }
+
         /// The book's names for this grouping kind. A person's names span
         /// every role, so one shelf collects everything a name wrote,
         /// translated, and read; the shelf's sections then split the roles

@@ -50,7 +50,7 @@ public enum BookSortOrder: CaseIterable, Codable, Hashable, Identifiable {
         case .lastPlayed:
             return "Last Played"
         case .year:
-            return "Year"
+            return "Date Published"
         case .duration:
             return "Duration"
         case .remaining:
@@ -95,10 +95,18 @@ public struct LibraryFilters: Codable, Equatable {
 
     public init() {}
 
-    /// Chooses the order and starts it in its default direction.
-    public mutating func setSortOrder(_ order: BookSortOrder) {
+    /// Chooses the order and starts it in the given direction, or in its
+    /// default direction when none is given.
+    public mutating func setSortOrder(_ order: BookSortOrder, direction: SortDirection? = nil) {
         sortOrder = order
-        sortDirection = order.defaultDirection
+        sortDirection = direction ?? order.defaultDirection
+    }
+
+    /// Puts the list in the order that suits a group of the kind, when the
+    /// kind has one. The sort menu can then choose another order.
+    public mutating func setSortOrder(suiting kind: BookGroup.Kind?) {
+        guard let sort = kind?.suitedSort else { return }
+        setSortOrder(sort.order, direction: sort.direction)
     }
 
     /// Flips the current order's direction.

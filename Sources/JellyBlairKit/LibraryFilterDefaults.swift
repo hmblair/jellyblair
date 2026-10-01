@@ -11,11 +11,14 @@ public enum DefaultLibraryFilters {
         decode(UserDefaults.standard.data(forKey: key) ?? Data())
     }
 
-    /// The filters a group's list opens with: the stored sort order with
-    /// no filter toggle, so the defaults hide none of the books of a
-    /// person, a series, a publisher, or a genre.
-    public static var storedForGroup: LibraryFilters {
-        stored.clearingFilters()
+    /// The filters the list of a group of the kind opens with. No filter
+    /// toggle is on, so the defaults hide none of the books of a person, a
+    /// series, a publisher, or a genre. The sort order is the one that
+    /// suits the kind, or the stored one when the kind has none.
+    public static func storedForGroup(ofKind kind: BookGroup.Kind?) -> LibraryFilters {
+        var filters = stored.clearingFilters()
+        filters.setSortOrder(suiting: kind)
+        return filters
     }
 
     /// The filters the data holds, or a plain set when it holds none.
@@ -30,8 +33,9 @@ public enum DefaultLibraryFilters {
 
 /// The default sort order and filters as two rows, one for each of the
 /// library's menus, for both platforms' settings screens. A sort chosen
-/// here shows in every list opened afterwards. A filter chosen here shows
-/// in the library list only; a group's list opens unfiltered.
+/// here shows in every list opened afterwards, except the list of a
+/// series, which opens in its own order. A filter chosen here shows in
+/// the library list only; a group's list opens unfiltered.
 public struct DefaultLibraryFilterSettings: View {
     @AppStorage(DefaultLibraryFilters.key) private var storedFilters = Data()
 

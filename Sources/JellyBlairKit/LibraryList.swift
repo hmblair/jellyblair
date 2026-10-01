@@ -19,12 +19,13 @@ public struct LibraryList: View {
     /// stand again on the way back.
     @State private var libraryFilters = DefaultLibraryFilters.stored
     /// The open group's filters, which start over for each group.
-    @State private var groupFilters = DefaultLibraryFilters.storedForGroup
+    @State private var groupFilters: LibraryFilters
 
     public init(selection: Binding<String?>, scope: Binding<BookGroup?>, isShowing: Bool = true) {
         _selection = selection
         _scope = scope
         self.isShowing = isShowing
+        _groupFilters = State(initialValue: DefaultLibraryFilters.storedForGroup(ofKind: scope.wrappedValue?.kind))
     }
 
     /// The filters of whichever scope is showing.
@@ -49,7 +50,7 @@ public struct LibraryList: View {
             .libraryListChrome(searchQuery: filters.searchQuery)
             .onChange(of: scope?.id) { _, groupID in
                 if groupID != nil {
-                    groupFilters = DefaultLibraryFilters.storedForGroup
+                    groupFilters = DefaultLibraryFilters.storedForGroup(ofKind: scope?.kind)
                 }
             }
             .toolbar {
