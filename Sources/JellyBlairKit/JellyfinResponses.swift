@@ -140,9 +140,12 @@ func serverYear(of date: Date) -> Int {
     serverCalendar.component(.year, from: date)
 }
 
+/// The time zone the server writes its dates in.
+let serverTimeZone = TimeZone.gmt
+
 private let serverCalendar: Calendar = {
     var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = .gmt
+    calendar.timeZone = serverTimeZone
     return calendar
 }()
 

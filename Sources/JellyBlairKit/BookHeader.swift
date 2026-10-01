@@ -161,10 +161,10 @@ struct BookTitleBlock: View {
         }
     }
 
-    /// The publisher names, the year, and the genres joined by dots on
-    /// one line, the block's quietest. Publisher and genre names open
-    /// their shelves; dots instead of commas, since the entries read as
-    /// tags rather than a sentence. A dot lives with the entry before
+    /// The publisher names, the publish date, and the genres joined by
+    /// dots on one line, the block's quietest. Publisher and genre names
+    /// open their shelves; dots instead of commas, since the entries read
+    /// as tags rather than a sentence. A dot lives with the entry before
     /// it, so a wrap never strands one.
     @ViewBuilder
     private var catalogLine: some View {
@@ -189,14 +189,14 @@ struct BookTitleBlock: View {
         }
     }
 
-    /// The catalog line's entries in order: publishers, the year, then
-    /// genres. Each entry carries the shelf kind it opens, or none for
-    /// the year.
+    /// The catalog line's entries in order: publishers, the publish date,
+    /// then genres. Each entry carries the shelf kind it opens, or none
+    /// for the date.
     private var catalogEntries: [(kind: BookGroup.Kind?, text: String)] {
         var entries: [(kind: BookGroup.Kind?, text: String)] = []
         entries += BookGroup.Kind.publisher.names(of: book).map { (.publisher, $0) }
-        if let year = book.publishedYear {
-            entries.append((nil, String(year)))
+        if let date = book.publishedDate {
+            entries.append((nil, formatPublishDate(date)))
         }
         entries += BookGroup.Kind.genre.names(of: book).map { (.genre, $0) }
         return entries

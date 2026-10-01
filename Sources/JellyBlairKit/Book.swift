@@ -90,6 +90,7 @@ public final class Book: Identifiable {
     public var series: String? { record.series }
     public var publishers: [String] { record.publishers }
     public var genres: [String] { record.genres ?? [] }
+    public var publishedDate: Date? { record.publishedDate }
     public var publishedYear: Int? { record.publishedYear }
     public var runTimeSeconds: Double { record.runTimeSeconds }
     public var fileSizeBytes: Int64? { record.fileSizeBytes }

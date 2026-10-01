@@ -28,7 +28,7 @@ public struct BookScreenMetrics {
     /// The font of the title's subtitle line, one step under the title.
     public let subtitleFont: Font
     public let lineFont: Font
-    /// The font of the header's quietest line, the publisher and year.
+    /// The font of the header's quietest line, the publisher and publish date.
     public let detailFont: Font
     public let playButtonControlSize: ControlSize
 }

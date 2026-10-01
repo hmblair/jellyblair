@@ -37,6 +37,11 @@ public func formatHoursMinutes(_ seconds: Double) -> String {
     Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes], width: .narrow))
 }
 
+/// Formats a publish date as its month and year, such as "January 2001".
+public func formatPublishDate(_ date: Date) -> String {
+    date.formatted(Date.FormatStyle(timeZone: serverTimeZone).year().month(.wide))
+}
+
 /// Formats a byte count in the locale's units, keeping at most three
 /// digits, such as "63.5 MB", "147 MB", or "2.38 GB".
 public func formatFileSize(_ bytes: Int64) -> String {
