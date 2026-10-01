@@ -2,27 +2,11 @@ import Foundation
 
 /// Formats a duration in seconds as H:MM:SS, or MM:SS under one hour.
 public func formatTime(_ seconds: Double) -> String {
-    formatTime(seconds, showZeroHour: false)
-}
-
-/// Formats an elapsed time with the total's digit count, so the readout
-/// keeps one width throughout playback: the hour shows exactly when the
-/// total's does, and zeros pad the leading field to the total's width.
-public func formatElapsedTime(_ elapsed: Double, matching total: Double) -> String {
-    let text = formatTime(elapsed, showZeroHour: Int(total.rounded()) >= 3600)
-    // With the hour matched, both strings have the same shape, so any
-    // length difference is missing digits in the leading field.
-    let missing = formatTime(total).count - text.count
-    guard missing > 0 else { return text }
-    return String(repeating: "0", count: missing) + text
-}
-
-private func formatTime(_ seconds: Double, showZeroHour: Bool) -> String {
     let total = Int(seconds.rounded())
     let hours = total / 3600
     let minutes = (total % 3600) / 60
     let secs = total % 60
-    guard hours >= 1 || showZeroHour else { return String(format: "%d:%02d", minutes, secs) }
+    guard hours >= 1 else { return String(format: "%d:%02d", minutes, secs) }
     return String(format: "%d:%02d:%02d", hours, minutes, secs)
 }
 

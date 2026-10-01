@@ -164,7 +164,7 @@ struct SeekTimeRow<BelowCenter: View>: View {
         TimelineView(.periodic(from: .now, by: tickInterval)) { context in
             let elapsed = scopeElapsed(at: context.date)
             HStack {
-                Text(formatElapsedTime(elapsed.seconds, matching: elapsed.total))
+                Text(formatTime(elapsed.seconds))
                 Spacer()
                 Text(remainingText(elapsed))
             }
@@ -301,7 +301,7 @@ struct SeekTimeRow<BelowCenter: View>: View {
 
     /// The time left in the seek scope, with a leading minus sign.
     private func remainingText(_ elapsed: (seconds: Double, total: Double)) -> String {
-        "-" + formatElapsedTime(max(0, elapsed.total - elapsed.seconds), matching: elapsed.total)
+        "-" + formatTime(max(0, elapsed.total - elapsed.seconds))
     }
 
     /// The position the elapsed text shows: the scrub target while dragging,
