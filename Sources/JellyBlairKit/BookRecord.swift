@@ -125,12 +125,12 @@ public struct BookRecord: Codable, Identifiable, Hashable {
         splitTitle(name)
     }
 
-    /// True when the title, a person in any role, the series, a genre, or
-    /// a publisher contains the query, by the same matching the book
-    /// screen's searches use.
+    /// True when the title, a person in any role, the series, a genre, a
+    /// publisher, or the publish date contains the query, by the same
+    /// matching the book screen's searches use.
     public func matches(_ query: String) -> Bool {
         let people = PersonRole.allCases.map { names(for: $0).joined(separator: ", ") }
-        return ([name, series, genre, publisher].compactMap { $0 } + people)
+        return ([name, series, genre, publisher, publishedDateText].compactMap { $0 } + people)
             .contains { !findOccurrences(of: query, in: $0 as NSString, caseSensitive: false, limit: 1).isEmpty }
     }
 
@@ -186,6 +186,11 @@ public struct BookRecord: Codable, Identifiable, Hashable {
     /// When the audiobook edition was published.
     public var publishedDate: Date? {
         publishedTimestamp.flatMap(parseServerDate)
+    }
+
+    /// The publish date as the book screen shows it, such as "January 2001".
+    public var publishedDateText: String? {
+        publishedDate.map(formatPublishDate)
     }
 
     /// The year the audiobook edition was published.

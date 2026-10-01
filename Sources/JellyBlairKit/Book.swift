@@ -90,7 +90,7 @@ public final class Book: Identifiable {
     public var series: String? { record.series }
     public var publishers: [String] { record.publishers }
     public var genres: [String] { record.genres ?? [] }
-    public var publishedDate: Date? { record.publishedDate }
+    public var publishedDateText: String? { record.publishedDateText }
     public var publishedYear: Int? { record.publishedYear }
     public var runTimeSeconds: Double { record.runTimeSeconds }
     public var fileSizeBytes: Int64? { record.fileSizeBytes }
@@ -104,8 +104,8 @@ public final class Book: Identifiable {
     public var resumePositionSeconds: Double { record.resumePositionSeconds }
     public var remainingSeconds: Double { record.remainingSeconds }
 
-    /// True when the title, a person in any role, the series, a genre, or
-    /// a publisher contains the query.
+    /// True when the title, a person in any role, the series, a genre, a
+    /// publisher, or the publish date contains the query.
     public func matches(_ query: String) -> Bool {
         record.matches(query)
     }
