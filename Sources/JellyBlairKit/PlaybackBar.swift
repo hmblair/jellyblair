@@ -2,8 +2,8 @@ import SwiftUI
 
 /// The app-wide playback bar, shown at the bottom whenever a book is
 /// loaded: the controls in a rounded glass container that floats inside
-/// the window's edges. Tapping the info area navigates to the book's
-/// screen.
+/// the window's edges. Tapping the container anywhere outside its
+/// controls navigates to the book's screen.
 public struct PlaybackBar: View {
     let onOpen: (Book) -> Void
 
@@ -28,9 +28,18 @@ public struct PlaybackBar: View {
             }
             .padding(.horizontal, metrics.playbackBar.horizontalPadding)
             .padding(.vertical, metrics.playbackBar.verticalPadding)
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: metrics.playbackBar.cornerRadius))
+            .glassEffect(.regular, in: container)
+            .contentShape(container)
+            .onTapGesture {
+                onOpen(book)
+            }
             .padding(metrics.playbackBar.margin)
         }
+    }
+
+    /// The glass container's shape, which is also the bar's tap target.
+    private var container: RoundedRectangle {
+        RoundedRectangle(cornerRadius: metrics.playbackBar.cornerRadius)
     }
 
     @ViewBuilder
@@ -104,10 +113,6 @@ public struct PlaybackBar: View {
                         .lineLimit(1)
                 }
             }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onOpen(book)
         }
     }
 
