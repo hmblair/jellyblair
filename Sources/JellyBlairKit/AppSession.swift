@@ -35,16 +35,16 @@ public final class AppSession {
             return
         }
         let client = JellyfinClient(serverURL: stored.serverURL, accessToken: stored.token)
-        switch await client.verifyStoredToken() {
-        case .valid, .unreachable:
-            Log.session.notice("Restored the session for \(stored.serverURL.host() ?? "?", privacy: .public)")
-            activate(client)
-        case .invalid:
-            Log.session.warning("The server rejected the stored token; sign-in required")
-            store.clearCredentials()
-            loginErrorMessage = String(localized: "Your session expired. Sign in again.")
-            state = .needsLogin
-        }
+        Log.session.notice("Restored the session for \(stored.serverURL.host() ?? "?", privacy: .public)")
+        activate(client)
+        await verifyRestoredToken(of: client)
+    }
+
+    /// Checks a restored client's token against the server while the library
+    /// is already open, and signs out if the server rejects it.
+    private func verifyRestoredToken(of client: JellyfinClient) async {
+        guard await client.verifyStoredToken() == .invalid else { return }
+        handleUnauthorized(from: client)
     }
 
     public func login(serverURLString: String, username: String, password: String) async {
@@ -98,7 +98,7 @@ public final class AppSession {
         guard case .signedIn(let current) = state, current === client else { return }
         Log.session.warning("The server rejected the session token; signing out")
         store.clearCredentials()
-        loginErrorMessage = "Your session expired. Sign in again."
+        loginErrorMessage = String(localized: "Your session expired. Sign in again.")
         state = .needsLogin
     }
 
