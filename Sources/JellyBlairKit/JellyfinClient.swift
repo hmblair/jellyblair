@@ -15,11 +15,13 @@ public final class JellyfinClient {
     /// bundle version.
     private static let clientVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
 
-    /// The device name the server shows in its sessions list.
+    /// The device name the server shows in its sessions list: the Mac's
+    /// computer name, or the phone's model name until the app holds the
+    /// entitlement that unlocks the user's own name.
     #if os(macOS)
-    private static let deviceName = "Mac"
+    private static let deviceName = Host.current().localizedName ?? "Mac"
     #else
-    private static let deviceName = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+    private static let deviceName = UIDevice.current.name
     #endif
 
     private static var deviceID: String { DeviceIdentifier.value }
