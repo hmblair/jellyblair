@@ -24,6 +24,17 @@ public final class JellyfinClient {
     private static let deviceName = UIDevice.current.name
     #endif
 
+    /// The device name as it travels in the header. The server decodes
+    /// each header value as a URL component, so encoding everything outside
+    /// the unreserved characters carries any name, including one with a
+    /// curly apostrophe or a quote, through the ASCII-only header intact.
+    private static let encodedDeviceName = deviceName.addingPercentEncoding(withAllowedCharacters: unreservedCharacters) ?? ""
+
+    /// The characters a URL component leaves unencoded. Spelled out as
+    /// ASCII, since the alphanumerics set also holds accented letters, which
+    /// the header cannot carry.
+    private static let unreservedCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+
     private static var deviceID: String { DeviceIdentifier.value }
 
     private var accessToken: String?
@@ -56,7 +67,7 @@ public final class JellyfinClient {
     private var authorizationHeader: String {
         var fields = [
             "Client=\"\(Self.clientName)\"",
-            "Device=\"\(Self.deviceName)\"",
+            "Device=\"\(Self.encodedDeviceName)\"",
             "DeviceId=\"\(Self.deviceID)\"",
             "Version=\"\(Self.clientVersion)\"",
         ]
