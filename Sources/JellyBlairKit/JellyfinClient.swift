@@ -1,5 +1,8 @@
 import AVFoundation
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Talks to the Jellyfin server: authentication, library queries, and playback reports.
 public final class JellyfinClient {
@@ -12,10 +15,11 @@ public final class JellyfinClient {
     /// bundle version.
     private static let clientVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
 
+    /// The device name the server shows in its sessions list.
     #if os(macOS)
     private static let deviceName = "Mac"
     #else
-    private static let deviceName = "iPhone"
+    private static let deviceName = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
     #endif
 
     private static var deviceID: String { DeviceIdentifier.value }
